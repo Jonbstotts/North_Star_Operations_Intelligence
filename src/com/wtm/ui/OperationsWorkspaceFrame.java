@@ -1,0 +1,2907 @@
+package com.wtm.ui;
+
+import com.wtm.alerts.NwsAlertService;
+import com.wtm.config.AppConfig;
+import com.wtm.map.TileMapPanel;
+import com.wtm.media.MediaCategory;
+import com.wtm.media.MediaService;
+import com.wtm.model.*;
+import com.wtm.net.HttpService;
+import com.wtm.radar.RainViewerService;
+import com.wtm.security.*;
+import com.wtm.traffic.TomTomService;
+import com.wtm.weather.OpenMeteoService;
+import com.wtm.sports.TheSportsDbService;
+
+import javax.swing.*;
+import javax.swing.border.EmptyBorder;
+import javax.imageio.ImageIO;
+import java.awt.*;
+import java.awt.geom.Ellipse2D;
+import java.awt.image.BufferedImage;
+import java.io.ByteArrayInputStream;
+import java.nio.file.Path;
+import java.time.*;
+import java.time.format.DateTimeFormatter;
+import java.time.temporal.ChronoUnit;
+import java.util.List;
+import java.util.*;
+import java.util.concurrent.*;
+
+/**
+ * North Star Operations Intelligence modular workspace.
+ *
+ * This is the sole dashboard/runtime experience in the standalone product.
+ */
+public final class OperationsWorkspaceFrame extends JFrame {
+    private static final DateTimeFormatter DAY_FORMAT=
+            DateTimeFormatter.ofPattern("EEE, MMM d");
+    private static final DateTimeFormatter TIME_FORMAT=
+            DateTimeFormatter.ofPattern("h:mm a");
+
+    private AppConfig config;
+    private final HttpService http=new HttpService();
+    private final OpenMeteoService weatherService=new OpenMeteoService(http);
+    private final NwsAlertService alertService=new NwsAlertService(http);
+    private final RainViewerService radarService=new RainViewerService(http);
+    private final TomTomService trafficService=new TomTomService(http);
+    private final TheSportsDbService sportsService=new TheSportsDbService(http);
+
+    private ScheduledExecutorService refreshExecutor;
+    private TileMapPanel map;
+    private MainShowcasePanel mainShowcase;
+    private OverlayEffectsPanel overlayEffects;
+
+    private javax.swing.Timer informationRotationTimer;
+    private javax.swing.Timer informationTickerTimer;
+    private JViewport informationTickerViewport;
+    private JPanel informationTickerTrack;
+    private int informationTickerCycleWidth=0;
+    private int informationPageStart=0;
+
+    private volatile WeatherSnapshot weather;
+    private volatile List<WeatherAlert> alerts=List.of();
+    private final Map<Integer,RouteStatus> routeStatuses=
+            new ConcurrentHashMap<>();
+    private final Map<Integer,List<SportsGame>> sportsSchedules=
+            new ConcurrentHashMap<>();
+    private final Map<Integer,ImageIcon> sportsLogos=
+            new ConcurrentHashMap<>();
+
+    private JPanel root;
+    private JPanel dashboardBody;
+    private JPanel workspaceContentHost;
+    private SettingsDialog embeddedSettingsSession;
+    private String activeWorkspaceRoute="Dashboard";
+    private JLabel dateTimeLabel;
+    private JLabel topWeatherLabel;
+    private JLabel topTrafficLabel;
+    private JLabel alertBadge;
+
+    private JPanel weatherModule;
+    private JPanel eventsModule;
+    private JPanel celebrationsModule;
+    private JPanel infoStripModule;
+    private JPanel operationsModule;
+
+    private final javax.swing.Timer clockTimer;
+
+    public OperationsWorkspaceFrame(AppConfig config){
+        super("NORTH STAR • Operations Intelligence");
+        this.config=Objects.requireNonNull(config);
+
+        Theme.setActive(config.themeId);
+        config.darkMode=Theme.active().dark();
+        setTitle(BrandIdentity.product()+" • Operations Workspace");
+
+        setDefaultCloseOperation(WindowConstants.EXIT_ON_CLOSE);
+        setMinimumSize(new Dimension(1180,720));
+        setSize(1540,920);
+        setLocationRelativeTo(null);
+        ApplicationBrand.applyWindowIcon(this);
+
+        overlayEffects=new OverlayEffectsPanel();
+        setGlassPane(overlayEffects);
+        overlayEffects.setVisible(true);
+
+        buildUi();
+        startRefreshers();
+
+        clockTimer=new javax.swing.Timer(1000,e->updateClock());
+        clockTimer.start();
+        updateClock();
+
+        if(config.fullscreen)
+            setExtendedState(JFrame.MAXIMIZED_BOTH);
+    }
+
+    private void buildUi(){
+        if(map!=null){
+            map.shutdown();
+            map=null;
+        }
+
+        stopInformationMovement();
+
+        /*
+         * Workspace branding and decorative holiday animation are independent.
+         * North Star remains the application identity, while the overlay engine
+         * receives the effective seasonal theme so snow/fog/fireworks/etc.
+         * continue to function in the modern workspace.
+         */
+        AppTheme configuredTheme=AppTheme.fromId(config.themeId);
+        Theme.setActive(configuredTheme.id());
+        config.darkMode=configuredTheme.dark();
+
+        AppTheme overlayTheme=HolidayThemeService.effectiveTheme(
+                config,
+                LocalDate.now()
+        );
+
+        if(overlayEffects!=null){
+            overlayEffects.configure(
+                    overlayTheme,
+                    config.themeOverlayEffects,
+                    config.overlayIntensity,
+                    config.overlayPerformanceMode
+            );
+            overlayEffects.setSevereSuppressed(
+                    hasSevereAutomaticPriority()
+            );
+        }
+
+        getContentPane().removeAll();
+
+        root=new JPanel(new BorderLayout());
+        root.setBackground(Theme.bg());
+        root.add(buildTopBar(),BorderLayout.NORTH);
+        root.add(buildWorkspace(),BorderLayout.CENTER);
+        setContentPane(root);
+
+        refreshVisibleModules();
+        revalidate();
+        repaint();
+    }
+
+    private boolean hasSevereAutomaticPriority(){
+        return config.severeWeatherMapPriority
+                &&alerts!=null
+                &&alerts.stream().anyMatch(alert->
+                        alert.severity()!=null
+                        &&(
+                            alert.severity().equalsIgnoreCase("Extreme")
+                            ||alert.severity().equalsIgnoreCase("Severe")
+                        )
+                );
+    }
+
+    private JComponent buildTopBar(){
+        JPanel bar=new JPanel(new BorderLayout(18,0));
+        bar.setBackground(Theme.panel());
+        bar.setBorder(BorderFactory.createCompoundBorder(
+                BorderFactory.createMatteBorder(
+                        0,0,1,0,Theme.border()),
+                new EmptyBorder(10,16,10,16)
+        ));
+        bar.setPreferredSize(new Dimension(100,62));
+
+        ApplicationBrand.applyWindowIcon(this);
+        ApplicationBrand.applyApplicationIcon();
+
+        NorthStarBrandLockup lockup=new NorthStarBrandLockup(
+                NorthStarBrandLockup.Layout.HORIZONTAL,42,16,true);
+        lockup.setToolTipText(
+                BrandIdentity.product()+" • "+BrandIdentity.tagline());
+        bar.add(lockup,BorderLayout.WEST);
+
+        JPanel right=new JPanel(new FlowLayout(FlowLayout.RIGHT,12,0));
+        right.setOpaque(false);
+
+        alertBadge=new JLabel("●  0 alerts");
+        alertBadge.setForeground(Theme.muted());
+        alertBadge.setFont(new Font(Font.SANS_SERIF,Font.PLAIN,12));
+        right.add(alertBadge);
+
+        JSeparator divider=new JSeparator(SwingConstants.VERTICAL);
+        divider.setPreferredSize(new Dimension(1,30));
+        divider.setForeground(Theme.border());
+        right.add(divider);
+
+        UserAccount user=SessionManager.currentUser();
+        JPanel identity=new JPanel();
+        identity.setOpaque(false);
+        identity.setLayout(new BoxLayout(identity,BoxLayout.Y_AXIS));
+        JLabel name=new JLabel(
+                user==null?BrandIdentity.product()+" Display":user.friendlyName());
+        name.setForeground(Theme.text());
+        name.setFont(new Font(Font.SANS_SERIF,Font.BOLD,12));
+        JLabel role=new JLabel(user==null?"Display Session":user.role().display());
+        role.setForeground(Theme.muted());
+        role.setFont(new Font(Font.SANS_SERIF,Font.PLAIN,10));
+        identity.add(name);identity.add(role);
+        right.add(identity);
+
+        JButton settings=navUtilityButton("⚙");
+        settings.setToolTipText("Settings");
+        settings.addActionListener(e->openWorkspaceSettingsPage(
+                "General",
+                "General",
+                Permission.GENERAL_SETTINGS
+        ));
+        right.add(settings);
+
+        bar.add(right,BorderLayout.EAST);
+        return bar;
+    }
+
+    private JComponent buildWorkspace(){
+        JPanel workspace=new JPanel(new BorderLayout());
+        workspace.setBackground(Theme.bg());
+        workspace.add(buildSidebar(),BorderLayout.WEST);
+
+        workspaceContentHost=new JPanel(new BorderLayout());
+        workspaceContentHost.setBackground(Theme.bg());
+        workspace.add(workspaceContentHost,BorderLayout.CENTER);
+
+        SwingUtilities.invokeLater(this::showDashboardRoute);
+        return workspace;
+    }
+
+    private JComponent createDashboardView(){
+        dashboardBody=new JPanel();
+        dashboardBody.setLayout(new BoxLayout(dashboardBody,BoxLayout.Y_AXIS));
+        dashboardBody.setBackground(Theme.bg());
+        dashboardBody.setBorder(new EmptyBorder(18,18,18,18));
+
+        JComponent summary=buildSummaryStrip();
+        summary.setAlignmentX(Component.LEFT_ALIGNMENT);
+        summary.setMaximumSize(new Dimension(Integer.MAX_VALUE,68));
+
+        JComponent modules=buildModuleGrid();
+        modules.setAlignmentX(Component.LEFT_ALIGNMENT);
+
+        dashboardBody.add(summary);
+        dashboardBody.add(Box.createVerticalStrut(14));
+        dashboardBody.add(modules);
+        dashboardBody.add(Box.createVerticalGlue());
+
+        JScrollPane scroll=new JScrollPane(dashboardBody);
+        scroll.setBorder(null);
+        scroll.getViewport().setBackground(Theme.bg());
+        scroll.getVerticalScrollBar().setUnitIncrement(20);
+        return scroll;
+    }
+
+    private void showDashboardRoute(){
+        activeWorkspaceRoute="Dashboard";
+        closeEmbeddedSettingsSession();
+        releaseDashboardModules();
+
+        if(workspaceContentHost==null)return;
+        workspaceContentHost.removeAll();
+        workspaceContentHost.add(createDashboardView(),BorderLayout.CENTER);
+        workspaceContentHost.revalidate();
+        workspaceContentHost.repaint();
+
+        refreshVisibleModules();
+    }
+
+    private JComponent buildSidebar(){
+        JPanel side=new JPanel();
+        side.setBackground(Theme.panel());
+        side.setLayout(new BoxLayout(side,BoxLayout.Y_AXIS));
+        side.setBorder(new EmptyBorder(14,10,16,10));
+
+        side.add(sideDashboardButton());
+        side.add(Box.createVerticalStrut(12));
+        side.add(sideSectionLabel("OPERATIONS"));
+
+        addPermittedSidePage(
+                side,"☀  Weather","Weather","Data & Refresh",
+                Permission.DATA_REFRESH);
+        addPermittedSidePage(
+                side,"▰  Traffic","Traffic & Routes","Routes",
+                Permission.ROUTES);
+        addPermittedSidePage(
+                side,"▣  Operations Calendar","Operations Calendar",
+                "Operations Calendar",Permission.OPERATIONS_CALENDAR);
+        addPermittedSidePage(
+                side,"▦  Employees","Employee Operations",
+                "Employees",Permission.EMPLOYEE_OPERATIONS);
+        addPermittedSidePage(
+                side,"●  Pinned Locations","Pinned Locations",
+                "Pinned Locations",Permission.PINNED_LOCATIONS);
+        addPermittedSidePage(
+                side,"⇢  Routes","Routes","Routes",Permission.ROUTES);
+        addPermittedSidePage(
+                side,"◉  Sports","Sports","Sports",Permission.SPORTS);
+        addPermittedSidePage(
+                side,"▤  Main Showcase","Main Showcase",
+                "Main Showcase",Permission.MAIN_SHOWCASE);
+
+        side.add(Box.createVerticalStrut(12));
+        side.add(sideSectionLabel("ADMINISTRATION"));
+
+        addPermittedSidePage(
+                side,"⚙  Workspace Setup","Operations Workspace",
+                "Operations Workspace",Permission.DASHBOARD_LAYOUT);
+        addPermittedSidePage(
+                side,"▦  Information Blocks","Information Blocks",
+                "Dashboard Blocks",Permission.DASHBOARD_LAYOUT);
+        addPermittedSidePage(
+                side,"▧  Media Library","Media Library",
+                "Media Library",Permission.MEDIA_LIBRARY);
+        addPermittedSidePage(
+                side,"♜  Users & Access","Users & Access",
+                "Users & Access",Permission.MANAGE_USERS);
+        addPermittedSidePage(
+                side,"⌁  General","General","General",
+                Permission.GENERAL_SETTINGS);
+        addPermittedSidePage(
+                side,"↻  Data & Refresh","Data & Refresh",
+                "Data & Refresh",Permission.DATA_REFRESH);
+        addPermittedSidePage(
+                side,"◈  API Providers","API Providers",
+                "API Providers",Permission.API_ADMINISTRATION);
+        addPermittedSidePage(
+                side,"▥  API Usage","API Usage",
+                "API Usage",Permission.API_USAGE);
+
+        // Every authenticated user can reach their own account page.
+        side.add(sideSettingsButton(
+                "♙  My Account","My Account","My Account",null));
+
+        JScrollPane scroll=new JScrollPane(
+                side,
+                ScrollPaneConstants.VERTICAL_SCROLLBAR_AS_NEEDED,
+                ScrollPaneConstants.HORIZONTAL_SCROLLBAR_NEVER
+        );
+        scroll.setBorder(BorderFactory.createMatteBorder(
+                0,0,0,1,Theme.border()));
+        scroll.getViewport().setBackground(Theme.panel());
+        scroll.getVerticalScrollBar().setUnitIncrement(16);
+        scroll.setPreferredSize(new Dimension(212,100));
+        return scroll;
+    }
+
+    private JLabel sideSectionLabel(String text){
+        JLabel label=new JLabel(text);
+        label.setForeground(Theme.muted());
+        label.setFont(new Font(Font.SANS_SERIF,Font.BOLD,9));
+        label.setBorder(new EmptyBorder(0,10,6,0));
+        label.setAlignmentX(Component.LEFT_ALIGNMENT);
+        return label;
+    }
+
+    private JButton sideDashboardButton(){
+        JButton button=new JButton("▦  Dashboard");
+        button.setHorizontalAlignment(SwingConstants.LEFT);
+        button.setFont(new Font(Font.SANS_SERIF,Font.BOLD,12));
+        button.setForeground(Color.WHITE);
+        button.setBackground(Theme.panel2());
+        button.setOpaque(true);
+        button.setContentAreaFilled(true);
+        button.setFocusPainted(false);
+        button.setBorder(new EmptyBorder(10,10,10,10));
+        button.setMaximumSize(new Dimension(Integer.MAX_VALUE,42));
+        button.addActionListener(e->showDashboardRoute());
+        return button;
+    }
+
+    private void addPermittedSidePage(
+            JPanel parent,
+            String label,
+            String routeTitle,
+            String settingsTab,
+            Permission permission
+    ){
+        if(permission==null||AuthorizationService.allowed(permission))
+            parent.add(sideSettingsButton(
+                    label,routeTitle,settingsTab,permission));
+    }
+
+    private JButton sideSettingsButton(
+            String text,
+            String routeTitle,
+            String settingsTab,
+            Permission permission
+    ){
+        JButton button=new JButton(text);
+        button.setHorizontalAlignment(SwingConstants.LEFT);
+        button.setFont(new Font(Font.SANS_SERIF,Font.PLAIN,12));
+        button.setForeground(Theme.muted());
+        button.setBackground(new Color(0,0,0,0));
+        button.setOpaque(false);
+        button.setContentAreaFilled(false);
+        button.setFocusPainted(false);
+        button.setBorder(new EmptyBorder(9,10,9,10));
+        button.setMaximumSize(new Dimension(Integer.MAX_VALUE,40));
+        button.addActionListener(e->openWorkspaceSettingsPage(
+                routeTitle,settingsTab,permission));
+        return button;
+    }
+
+    private JComponent buildSummaryStrip(){
+        JPanel strip=new JPanel(new BorderLayout(20,0));
+        strip.setOpaque(false);
+
+        JPanel greeting=new JPanel();
+        greeting.setOpaque(false);
+        greeting.setLayout(new BoxLayout(greeting,BoxLayout.Y_AXIS));
+        UserAccount user=SessionManager.currentUser();
+        String first=user==null?"Team":firstName(user.friendlyName());
+        JLabel hello=new JLabel(greeting()+", "+first);
+        hello.setForeground(Theme.text());
+        hello.setFont(new Font(Font.SANS_SERIF,Font.BOLD,19));
+        dateTimeLabel=new JLabel();
+        dateTimeLabel.setForeground(Theme.muted());
+        dateTimeLabel.setFont(new Font(Font.SANS_SERIF,Font.PLAIN,11));
+        greeting.add(hello);greeting.add(Box.createVerticalStrut(3));greeting.add(dateTimeLabel);
+        strip.add(greeting,BorderLayout.WEST);
+
+        JPanel quick=new JPanel(new GridLayout(1,2,16,0));
+        quick.setOpaque(false);
+        topWeatherLabel=quickSummary("WEATHER","--°F","Loading weather...");
+        topTrafficLabel=quickSummary("TRAFFIC","Checking routes...","Live traffic");
+        quick.add(topWeatherLabel.getParent());
+        quick.add(topTrafficLabel.getParent());
+        strip.add(quick,BorderLayout.EAST);
+        return strip;
+    }
+
+    private JLabel quickSummary(String title,String value,String detail){
+        JPanel box=new JPanel();
+        box.setOpaque(false);
+        box.setBorder(BorderFactory.createMatteBorder(
+                0,1,0,0,Theme.border()));
+        box.setLayout(new BoxLayout(box,BoxLayout.Y_AXIS));
+        JLabel titleLabel=new JLabel(title);
+        titleLabel.setForeground(Theme.muted());
+        titleLabel.setFont(new Font(Font.SANS_SERIF,Font.BOLD,9));
+        JLabel valueLabel=new JLabel(value);
+        valueLabel.setForeground(Theme.text());
+        valueLabel.setFont(new Font(Font.SANS_SERIF,Font.BOLD,14));
+        JLabel detailLabel=new JLabel(detail);
+        detailLabel.setForeground(Theme.muted());
+        detailLabel.setFont(new Font(Font.SANS_SERIF,Font.PLAIN,10));
+        box.add(titleLabel);box.add(valueLabel);box.add(detailLabel);
+        box.setBorder(BorderFactory.createCompoundBorder(
+                box.getBorder(),new EmptyBorder(0,14,0,22)));
+        valueLabel.putClientProperty("detailLabel",detailLabel);
+        return valueLabel;
+    }
+
+    private JComponent buildModuleGrid(){
+        JPanel container=new JPanel();
+        container.setOpaque(false);
+        container.setLayout(new BoxLayout(container,BoxLayout.Y_AXIS));
+
+        boolean showWeather=moduleEnabled("WEATHER");
+        boolean showMap=moduleEnabled("TRAFFIC_MAP");
+        boolean showEvents=moduleEnabled("UPCOMING_EVENTS");
+        boolean showCelebrations=moduleEnabled("TEAM_CELEBRATIONS");
+        boolean showOps=moduleEnabled("OPERATIONS_SNAPSHOT");
+
+        JPanel primaryRow=new JPanel(new GridBagLayout());
+        primaryRow.setOpaque(false);
+        primaryRow.setAlignmentX(Component.LEFT_ALIGNMENT);
+
+        GridBagConstraints c=new GridBagConstraints();
+        c.gridy=0;
+        c.weighty=1;
+        c.fill=GridBagConstraints.BOTH;
+        c.insets=new Insets(0,0,0,12);
+
+        int x=0;
+        if(showWeather){
+            weatherModule=weatherCard();
+
+            JPanel weatherHolder=new JPanel(new BorderLayout());
+            weatherHolder.setOpaque(false);
+            weatherHolder.add(weatherModule,BorderLayout.NORTH);
+
+            c.gridx=x++;
+            c.weightx=.20;
+            primaryRow.add(weatherHolder,c);
+        }
+
+        if(showMap){
+            c.gridx=x++;
+            c.weightx=.56;
+            primaryRow.add(mapCard(),c);
+        }
+
+        if(showEvents||showCelebrations){
+            JPanel right=new JPanel(new GridBagLayout());
+            right.setOpaque(false);
+
+            GridBagConstraints r=new GridBagConstraints();
+            r.gridx=0;
+            r.weightx=1;
+            r.fill=GridBagConstraints.BOTH;
+
+            int row=0;
+            if(showEvents){
+                eventsModule=eventsCard();
+                r.gridy=row++;
+                r.weighty=showCelebrations?.53:1;
+                r.insets=new Insets(0,0,showCelebrations?6:0,0);
+                right.add(eventsModule,r);
+            }
+
+            if(showCelebrations){
+                celebrationsModule=celebrationsCard();
+                r.gridy=row;
+                r.weighty=showEvents?.47:1;
+                r.insets=new Insets(showEvents?6:0,0,0,0);
+                right.add(celebrationsModule,r);
+            }
+
+            c.gridx=x++;
+            c.weightx=.24;
+            c.insets=new Insets(0,0,0,0);
+            primaryRow.add(right,c);
+        }
+
+        /*
+         * Reference-scale primary dashboard band. This intentionally occupies
+         * much more of a 1080p/4K workspace than the earlier 430px treatment
+         * while still remaining bounded and scrollable on smaller screens.
+         */
+        primaryRow.setPreferredSize(new Dimension(1100,580));
+        primaryRow.setMinimumSize(new Dimension(800,520));
+        primaryRow.setMaximumSize(new Dimension(Integer.MAX_VALUE,580));
+        container.add(primaryRow);
+
+        if(config.workspaceInfoStripEnabled){
+            container.add(Box.createVerticalStrut(12));
+            infoStripModule=informationStripCard();
+            infoStripModule.setAlignmentX(Component.LEFT_ALIGNMENT);
+            infoStripModule.setPreferredSize(new Dimension(1000,108));
+            infoStripModule.setMaximumSize(new Dimension(Integer.MAX_VALUE,108));
+            container.add(infoStripModule);
+        }
+
+        if(showOps){
+            container.add(Box.createVerticalStrut(12));
+            operationsModule=operationsSnapshotCard();
+            operationsModule.setAlignmentX(Component.LEFT_ALIGNMENT);
+            operationsModule.setPreferredSize(new Dimension(1000,132));
+            operationsModule.setMaximumSize(new Dimension(Integer.MAX_VALUE,132));
+            container.add(operationsModule);
+        }
+
+        int totalHeight=580
+                +(config.workspaceInfoStripEnabled?120:0)
+                +(showOps?144:0);
+        container.setPreferredSize(new Dimension(1100,totalHeight));
+        container.setMaximumSize(new Dimension(Integer.MAX_VALUE,totalHeight));
+
+        return container;
+    }
+
+    private JPanel card(String title){
+        RoundedPanel card=new RoundedPanel(14);
+        card.setBackground(Theme.panel());
+        card.putClientProperty("outlineColor",Theme.border());
+        card.setLayout(new BorderLayout(0,10));
+        card.setBorder(new EmptyBorder(12,12,12,12));
+        JLabel heading=new JLabel(title.toUpperCase(Locale.ROOT));
+        heading.setForeground(Theme.text());
+        heading.setFont(new Font(Font.SANS_SERIF,Font.BOLD,10));
+        card.add(heading,BorderLayout.NORTH);
+        return card;
+    }
+
+    private JPanel weatherCard(){
+        JPanel card=card("Local Weather");
+        card.setPreferredSize(new Dimension(340,340));
+        card.setMinimumSize(new Dimension(300,300));
+        card.setMaximumSize(new Dimension(430,340));
+        renderWeatherCard(card);
+        return card;
+    }
+
+    private void renderWeatherCard(JPanel card){
+        Component north=((BorderLayout)card.getLayout())
+                .getLayoutComponent(BorderLayout.NORTH);
+        card.removeAll();
+        if(north!=null)card.add(north,BorderLayout.NORTH);
+
+        if(weather==null){
+            JPanel loading=new JPanel(new GridBagLayout());
+            loading.setOpaque(false);
+            JLabel label=new JLabel("Loading current conditions...");
+            label.setForeground(Theme.muted());
+            loading.add(label);
+            card.add(loading,BorderLayout.CENTER);
+            card.revalidate();
+            card.repaint();
+            return;
+        }
+
+        JPanel body=new JPanel();
+        body.setOpaque(false);
+        body.setLayout(new BoxLayout(body,BoxLayout.Y_AXIS));
+
+        JPanel current=new JPanel(new BorderLayout(12,0));
+        current.setOpaque(false);
+        current.setAlignmentX(Component.LEFT_ALIGNMENT);
+        current.setMaximumSize(new Dimension(Integer.MAX_VALUE,94));
+
+        JPanel words=new JPanel();
+        words.setOpaque(false);
+        words.setLayout(new BoxLayout(words,BoxLayout.Y_AXIS));
+
+        JLabel temp=new JLabel(Math.round(weather.temperatureF())+"°F");
+        temp.setForeground(Theme.text());
+        temp.setFont(new Font(Font.SANS_SERIF,Font.BOLD,38));
+
+        JLabel condition=new JLabel(weather.condition());
+        condition.setForeground(Theme.text());
+        condition.setFont(new Font(Font.SANS_SERIF,Font.BOLD,13));
+
+        JLabel feels=new JLabel(
+                "Feels like "+Math.round(weather.apparentTemperatureF())+"°");
+        feels.setForeground(Theme.muted());
+        feels.setFont(new Font(Font.SANS_SERIF,Font.PLAIN,10));
+
+        words.add(temp);
+        words.add(condition);
+        words.add(Box.createVerticalStrut(2));
+        words.add(feels);
+
+        JLabel weatherIcon=new JLabel(
+                new DashboardIcon(
+                        DashboardIcon.weatherKind(weather.condition()),
+                        62,
+                        Theme.accent()
+                ),
+                SwingConstants.CENTER
+        );
+        weatherIcon.setPreferredSize(new Dimension(74,74));
+
+        current.add(words,BorderLayout.CENTER);
+        current.add(weatherIcon,BorderLayout.EAST);
+        body.add(current);
+        body.add(Box.createVerticalStrut(10));
+        body.add(horizontalRule());
+        body.add(Box.createVerticalStrut(10));
+
+        JPanel stats=new JPanel(new GridLayout(2,2,18,7));
+        stats.setOpaque(false);
+        stats.setAlignmentX(Component.LEFT_ALIGNMENT);
+        stats.setMaximumSize(new Dimension(Integer.MAX_VALUE,44));
+        stats.add(stat("High",Math.round(weather.highF())+"°"));
+        stats.add(stat(
+                "Humidity",
+                Double.isFinite(weather.humidityPercent())
+                        ?Math.round(weather.humidityPercent())+"%"
+                        :"—"
+        ));
+        stats.add(stat("Low",Math.round(weather.lowF())+"°"));
+        stats.add(stat("Wind",Math.round(weather.windMph())+" mph"));
+        body.add(stats);
+
+        body.add(Box.createVerticalStrut(10));
+        body.add(horizontalRule());
+        body.add(Box.createVerticalStrut(10));
+
+        JPanel forecast=new JPanel(new BorderLayout(0,7));
+        forecast.setOpaque(false);
+        forecast.setAlignmentX(Component.LEFT_ALIGNMENT);
+        forecast.setMaximumSize(new Dimension(Integer.MAX_VALUE,92));
+
+        JPanel days=new JPanel(new GridLayout(1,5,6,0));
+        days.setOpaque(false);
+
+        List<WeatherSnapshot.DailyPoint> daily=weather.daily();
+        int count=Math.min(5,daily==null?0:daily.size());
+
+        if(count==0){
+            forecast.add(empty("Forecast unavailable"),BorderLayout.CENTER);
+        }else{
+            for(int i=0;i<count;i++)
+                days.add(dailyForecastCell(daily.get(i)));
+
+            forecast.add(days,BorderLayout.CENTER);
+        }
+
+        body.add(forecast);
+        body.add(Box.createVerticalGlue());
+
+        card.add(body,BorderLayout.CENTER);
+        card.revalidate();
+        card.repaint();
+    }
+
+    private JComponent horizontalRule(){
+        JSeparator separator=new JSeparator();
+        separator.setForeground(Theme.border());
+        separator.setMaximumSize(new Dimension(Integer.MAX_VALUE,1));
+        return separator;
+    }
+
+    private JPanel stat(String label,String value){
+        JPanel p=new JPanel(new BorderLayout(8,0));
+        p.setOpaque(false);
+
+        JLabel l=new JLabel(label);
+        l.setForeground(Theme.muted());
+        l.setFont(new Font(Font.SANS_SERIF,Font.PLAIN,11));
+
+        JLabel v=new JLabel(value);
+        v.setForeground(Theme.text());
+        v.setFont(new Font(Font.SANS_SERIF,Font.BOLD,12));
+
+        p.add(l,BorderLayout.WEST);
+        p.add(v,BorderLayout.EAST);
+        return p;
+    }
+
+    private JComponent dailyForecastCell(WeatherSnapshot.DailyPoint point){
+        JPanel day=new JPanel();
+        day.setOpaque(false);
+        day.setLayout(new BoxLayout(day,BoxLayout.Y_AXIS));
+
+        LocalDate date;
+        try{date=LocalDate.parse(point.date());}
+        catch(Exception ex){date=LocalDate.now();}
+
+        JLabel weekday=new JLabel(
+                date.format(DateTimeFormatter.ofPattern("EEE")).toUpperCase(),
+                SwingConstants.CENTER
+        );
+        weekday.setForeground(Theme.muted());
+        weekday.setFont(new Font(Font.SANS_SERIF,Font.BOLD,9));
+        weekday.setAlignmentX(Component.CENTER_ALIGNMENT);
+
+        JLabel icon=new JLabel(
+                new DashboardIcon(
+                        DashboardIcon.weatherKind(
+                                OpenMeteoService.condition(point.weatherCode())),
+                        34,
+                        Theme.accent()
+                )
+        );
+        icon.setAlignmentX(Component.CENTER_ALIGNMENT);
+
+        JLabel high=new JLabel(Math.round(point.highF())+"°");
+        high.setForeground(Theme.text());
+        high.setFont(new Font(Font.SANS_SERIF,Font.BOLD,10));
+        high.setAlignmentX(Component.CENTER_ALIGNMENT);
+
+        JLabel low=new JLabel(Math.round(point.lowF())+"°");
+        low.setForeground(Theme.muted());
+        low.setFont(new Font(Font.SANS_SERIF,Font.PLAIN,9));
+        low.setAlignmentX(Component.CENTER_ALIGNMENT);
+
+        day.add(weekday);
+        day.add(Box.createVerticalStrut(5));
+        day.add(icon);
+        day.add(Box.createVerticalStrut(4));
+        day.add(high);
+        day.add(low);
+        return day;
+    }
+
+    private JComponent mapCard(){
+        JPanel card=card("Main Showcase");
+
+        map=new TileMapPanel(config,http);
+        map.setPreferredSize(new Dimension(760,500));
+        map.setAlerts(alerts);
+
+        /*
+         * Reuse the proven Classic Main Showcase engine in the larger v4
+         * center region. This preserves announcement/media rotation,
+         * Operations Calendar slides, team-recognition slides and severe-
+         * weather map priority without maintaining a second slideshow engine.
+         */
+        mainShowcase=new MainShowcasePanel(config,map);
+        mainShowcase.setAutomaticSevereWeatherActive(
+                automaticSevereWeatherActive());
+        mainShowcase.setCelebrationListener(active->{
+            if(active&&overlayEffects!=null)
+                overlayEffects.celebrate();
+        });
+
+        card.add(mainShowcase,BorderLayout.CENTER);
+
+        JPanel legend=new JPanel(new BorderLayout());
+        legend.setOpaque(false);
+
+        JLabel text=new JLabel(
+                config.mainShowcaseMediaEnabled
+                        ?"Map + managed media rotate automatically • severe weather can pin the map"
+                        :"Live TomTom traffic • enable Main Showcase media to rotate announcement slides"
+        );
+        text.setForeground(Theme.muted());
+        text.setFont(new Font(Font.SANS_SERIF,Font.PLAIN,9));
+
+        JLabel interval=new JLabel(
+                "Rotation: "+Math.max(5,config.mainShowcaseIntervalSeconds)+" sec"
+        );
+        interval.setForeground(Theme.muted());
+        interval.setFont(new Font(Font.SANS_SERIF,Font.PLAIN,9));
+
+        legend.add(text,BorderLayout.WEST);
+        legend.add(interval,BorderLayout.EAST);
+        card.add(legend,BorderLayout.SOUTH);
+        return card;
+    }
+
+    private JPanel eventsCard(){
+        JPanel card=card("Upcoming Events");
+        renderEvents(card);
+        return card;
+    }
+
+    private void renderEvents(JPanel card){
+        Component north=((BorderLayout)card.getLayout())
+                .getLayoutComponent(BorderLayout.NORTH);
+        card.removeAll();
+        if(north!=null)card.add(north,BorderLayout.NORTH);
+
+        JPanel content=new JPanel(new BorderLayout(0,8));
+        content.setOpaque(false);
+
+        JPanel rows=new JPanel();
+        rows.setOpaque(false);
+        rows.setLayout(new BoxLayout(rows,BoxLayout.Y_AXIS));
+
+        LocalDate today=LocalDate.now();
+        List<OperationEvent> events=config.operationEvents.stream()
+                .filter(OperationEvent::enabled)
+                .filter(e->e.endDate()!=null&&!e.endDate().isBefore(today))
+                .sorted(Comparator.comparing(OperationEvent::startDate))
+                .limit(3)
+                .toList();
+
+        if(events.isEmpty()){
+            rows.add(empty("No upcoming operations events"));
+        }else{
+            for(int i=0;i<events.size();i++){
+                rows.add(eventRow(events.get(i)));
+                if(i<events.size()-1)rows.add(rowSeparator());
+            }
+        }
+
+        JButton fullCalendar=workspaceFooterButton("View Full Calendar");
+        fullCalendar.addActionListener(e->openSettings("Operations Calendar"));
+
+        content.add(rows,BorderLayout.CENTER);
+        content.add(fullCalendar,BorderLayout.SOUTH);
+
+        card.add(content,BorderLayout.CENTER);
+        card.revalidate();
+        card.repaint();
+    }
+
+    private JComponent eventRow(OperationEvent event){
+        JPanel row=new JPanel(new BorderLayout(10,0));
+        row.setOpaque(false);
+        row.setBorder(new EmptyBorder(7,0,7,0));
+        row.setMaximumSize(new Dimension(Integer.MAX_VALUE,92));
+
+        JPanel iconTile=new RoundedPanel(11);
+        iconTile.setBackground(eventTagBackground(event));
+        iconTile.setLayout(new GridBagLayout());
+        iconTile.setPreferredSize(new Dimension(50,50));
+        iconTile.setMaximumSize(new Dimension(50,50));
+
+        JLabel icon=new JLabel(eventTagIcon(event,40),SwingConstants.CENTER);
+        iconTile.add(icon);
+
+        JPanel words=new JPanel();
+        words.setOpaque(false);
+        words.setLayout(new BoxLayout(words,BoxLayout.Y_AXIS));
+
+        JLabel name=new JLabel(event.name());
+        name.setForeground(Theme.text());
+        name.setFont(new Font(Font.SANS_SERIF,Font.BOLD,12));
+
+        JLabel date=new JLabel(
+                event.startDate().format(DAY_FORMAT)
+                +"  •  "+event.type().display()
+        );
+        date.setForeground(Theme.muted());
+        date.setFont(new Font(Font.SANS_SERIF,Font.PLAIN,10));
+
+        words.add(Box.createVerticalGlue());
+        words.add(name);
+        words.add(Box.createVerticalStrut(2));
+        words.add(date);
+        words.add(Box.createVerticalGlue());
+
+        row.add(iconTile,BorderLayout.WEST);
+        row.add(words,BorderLayout.CENTER);
+        return row;
+    }
+
+    private String eventGlyphAssetKey(OperationEvent event){
+        String kind=eventVisualKind(event);
+        return switch(kind){
+            case "CHRISTMAS"->"christmas";
+            case "THANKSGIVING"->"thanksgiving";
+            case "INDEPENDENCE"->"independence_day";
+            case "NEW_YEAR"->"new_year";
+            case "HALLOWEEN"->"halloween";
+            case "VALENTINE"->"valentine";
+            case "ST_PATRICK"->"st_patricks";
+            case "LABOR"->"labor_day";
+            case "PRESIDENTS"->"presidents_day";
+            case "MEMORIAL"->"memorial_day";
+            case "VETERANS"->"veterans_day";
+            case "JUNETEENTH"->"juneteenth";
+            case "MLK"->"mlk_day";
+            case "EASTER"->"easter";
+            default->"calendar_generic";
+        };
+    }
+
+    private Color eventTagBackground(OperationEvent event){
+        /*
+         * Calendar artwork follows the supplied bold glyph-sheet language:
+         * one neutral tile + one strong monochrome silhouette. Holiday color
+         * coding from earlier builds has intentionally been removed.
+         */
+        return Theme.panel2();
+    }
+
+    private Icon eventTagIcon(OperationEvent event,int size){
+        String assetKey=eventGlyphAssetKey(event);
+        Icon approved=WorkspaceGlyphs.icon(assetKey,size,Theme.text());
+        if(approved!=null)return approved;
+
+        BufferedImage image=new BufferedImage(
+                size,size,BufferedImage.TYPE_INT_ARGB);
+        Graphics2D g=image.createGraphics();
+
+        try{
+            g.setRenderingHint(
+                    RenderingHints.KEY_ANTIALIASING,
+                    RenderingHints.VALUE_ANTIALIAS_ON
+            );
+            g.setStroke(new BasicStroke(
+                    Math.max(2f,size/18f),
+                    BasicStroke.CAP_ROUND,
+                    BasicStroke.JOIN_ROUND
+            ));
+
+            String kind=eventVisualKind(event);
+            Color foreground=Theme.text();
+            g.setColor(foreground);
+
+            int c=size/2;
+
+            switch(kind){
+                case "CHRISTMAS"->{
+                    // Stylized evergreen tree.
+                    Polygon top=new Polygon(
+                            new int[]{c,c-size/5,c+size/5},
+                            new int[]{size/7,size/2,size/2},
+                            3
+                    );
+                    Polygon bottom=new Polygon(
+                            new int[]{c,c-size/3,c+size/3},
+                            new int[]{size/3,size*3/4,size*3/4},
+                            3
+                    );
+                    g.fill(top);
+                    g.fill(bottom);
+                    g.fillRoundRect(
+                            c-size/18,size*3/4,
+                            size/9,size/7,2,2
+                    );
+                }
+                case "THANKSGIVING"->drawTurkey(g,size);
+                case "INDEPENDENCE","NEW_YEAR"->{
+                    // Firework burst.
+                    for(int i=0;i<8;i++){
+                        double a=i*Math.PI/4;
+                        int x1=(int)(c+Math.cos(a)*size*.12);
+                        int y1=(int)(c+Math.sin(a)*size*.12);
+                        int x2=(int)(c+Math.cos(a)*size*.34);
+                        int y2=(int)(c+Math.sin(a)*size*.34);
+                        g.drawLine(x1,y1,x2,y2);
+                    }
+                    g.fillOval(c-size/18,c-size/18,size/9,size/9);
+                }
+                case "HALLOWEEN"->{
+                    // Pumpkin.
+                    g.fillOval(size/6,size/4,size*2/3,size/2);
+                    g.setColor(eventTagBackground(event));
+                    g.fillPolygon(
+                            new int[]{size/3,size*2/5,size/2-size/12},
+                            new int[]{size/2,size/2+size/10,size/2},
+                            3
+                    );
+                    g.fillPolygon(
+                            new int[]{size*2/3,size*3/5,size/2+size/12},
+                            new int[]{size/2,size/2+size/10,size/2},
+                            3
+                    );
+                    g.setColor(foreground);
+                    g.fillRect(c-size/20,size/6,size/10,size/8);
+                }
+                case "VALENTINE"->{
+                    // Heart.
+                    java.awt.geom.Path2D heart=new java.awt.geom.Path2D.Double();
+                    heart.moveTo(c,size*4/5);
+                    heart.curveTo(
+                            size/8,size/2,
+                            size/5,size/4,
+                            c,size*2/5
+                    );
+                    heart.curveTo(
+                            size*4/5,size/4,
+                            size*7/8,size/2,
+                            c,size*4/5
+                    );
+                    g.fill(heart);
+                }
+                case "ST_PATRICK"->{
+                    // Four-leaf clover.
+                    int d=size/4;
+                    g.fillOval(c-d,c-d,d,d);
+                    g.fillOval(c,c-d,d,d);
+                    g.fillOval(c-d,c,d,d);
+                    g.fillOval(c,c,d,d);
+                    g.drawLine(c,c+size/10,c-size/10,size*5/6);
+                }
+                case "LABOR","PRESIDENTS"->drawAmericanFlag(g,size);
+                case "MEMORIAL"->drawSalute(g,size);
+                case "VETERANS"->{
+                    drawAmericanFlag(g,size);
+                    g.setColor(Theme.text());
+                    drawStar(g,size*3/4,size/4,size*.13);
+                }
+                case "JUNETEENTH"->{
+                    drawAmericanFlag(g,size);
+                    g.setColor(Theme.text());
+                    drawStar(g,c,c,size*.19);
+                }
+                case "MLK"->drawDove(g,size);
+                case "EASTER"->drawEasterEgg(g,size);
+                default->{
+                    // Generic calendar image for company/custom events.
+                    g.drawRoundRect(
+                            size/6,size/5,size*2/3,size*3/5,
+                            size/10,size/10
+                    );
+                    g.drawLine(size/6,size*2/5,size*5/6,size*2/5);
+                    g.drawLine(size/3,size/7,size/3,size/4);
+                    g.drawLine(size*2/3,size/7,size*2/3,size/4);
+                    g.fillRect(size/3,size/2,size/9,size/9);
+                    g.fillRect(size/2,size/2,size/9,size/9);
+                }
+            }
+        }finally{
+            g.dispose();
+        }
+
+        return new ImageIcon(image);
+    }
+
+    private void drawTurkey(Graphics2D g,int size){
+        int c=size/2;
+        Color glyph=Theme.text();
+        Color knockout=Theme.panel2();
+
+        // Fan tail feathers.
+        g.setColor(glyph);
+        for(int i=0;i<5;i++){
+            double angle=Math.toRadians(-145+i*36);
+            int fx=(int)(c+Math.cos(angle)*size*.20);
+            int fy=(int)(size*.52+Math.sin(angle)*size*.20);
+            g.fillOval(
+                    fx-size/9,
+                    fy-size/5,
+                    size*2/9,
+                    size*2/5
+            );
+        }
+
+        // Body and head.
+        g.fillOval(size/3,size*2/5,size/3,size*2/5);
+        g.fillOval(size*9/20,size/4,size/5,size/5);
+
+        // Eye and separation detail as negative space.
+        g.setColor(knockout);
+        g.fillOval(
+                size*51/100,
+                size*31/100,
+                Math.max(3,size/18),
+                Math.max(3,size/18)
+        );
+
+        // Beak + wattle remain part of the bold silhouette.
+        g.setColor(glyph);
+        g.fillPolygon(
+                new int[]{size*13/20,size*4/5,size*13/20},
+                new int[]{size*7/20,size*2/5,size*9/20},
+                3
+        );
+        g.fillOval(size*3/5,size*9/20,size/10,size/5);
+    }
+
+    private void drawAmericanFlag(Graphics2D g,int size){
+        int x=size/8;
+        int y=size/5;
+        int w=size*3/4;
+        int h=size*3/5;
+
+        Color glyph=Theme.text();
+        Color knockout=Theme.panel2();
+
+        // Pole.
+        g.setColor(glyph);
+        g.fillRoundRect(
+                x-size/18,
+                y-size/16,
+                Math.max(3,size/18),
+                h+size/5,
+                size/30,
+                size/30
+        );
+
+        // Filled flag body.
+        g.fillRoundRect(x,y,w,h,size/18,size/18);
+
+        // Knock out alternating stripes for the glyph-sheet silhouette style.
+        g.setColor(knockout);
+        int stripe=Math.max(2,h/7);
+        for(int i=1;i<7;i+=2)
+            g.fillRect(x+w*2/5,y+i*stripe,w*3/5,stripe);
+
+        // Canton remains solid; cut tiny star dots into it.
+        for(int row=0;row<3;row++){
+            for(int col=0;col<3;col++){
+                int sx=x+w/13+col*w/10;
+                int sy=y+h/12+row*h/10;
+                g.fillOval(
+                        sx,sy,
+                        Math.max(2,size/28),
+                        Math.max(2,size/28)
+                );
+            }
+        }
+    }
+
+    private void drawSalute(Graphics2D g,int size){
+        g.setColor(Theme.text());
+
+        // Head/shoulders.
+        g.fillOval(size/4,size/6,size/3,size/3);
+        g.drawArc(size/7,size/2,size*2/3,size/2,20,140);
+
+        // Saluting arm and hand.
+        g.setStroke(new BasicStroke(
+                Math.max(3f,size/10f),
+                BasicStroke.CAP_ROUND,
+                BasicStroke.JOIN_ROUND
+        ));
+        g.drawLine(size*3/5,size*3/5,size*4/5,size*2/5);
+        g.drawLine(size*4/5,size*2/5,size*2/3,size/3);
+    }
+
+    private void drawDove(Graphics2D g,int size){
+        g.setColor(Theme.text());
+        java.awt.geom.Path2D bird=new java.awt.geom.Path2D.Double();
+        bird.moveTo(size*.18,size*.58);
+        bird.curveTo(size*.38,size*.48,size*.38,size*.25,size*.56,size*.32);
+        bird.curveTo(size*.67,size*.36,size*.73,size*.44,size*.82,size*.42);
+        bird.curveTo(size*.72,size*.52,size*.65,size*.58,size*.58,size*.60);
+        bird.curveTo(size*.45,size*.73,size*.31,size*.71,size*.18,size*.58);
+        g.fill(bird);
+        g.drawLine(
+                (int)(size*.20),(int)(size*.59),
+                (int)(size*.12),(int)(size*.70)
+        );
+    }
+
+    private void drawEasterEgg(Graphics2D g,int size){
+        g.setColor(Theme.text());
+        g.fillOval(size/4,size/8,size/2,size*3/4);
+
+        g.setColor(Theme.panel2());
+        g.setStroke(new BasicStroke(Math.max(2f,size/18f)));
+        g.drawArc(size/4,size*5/16,size/2,size/4,0,180);
+        g.drawArc(size/4,size*7/16,size/2,size/4,180,180);
+        g.fillOval(size*2/5,size/4,size/12,size/12);
+        g.fillOval(size*3/5,size*5/8,size/12,size/12);
+    }
+
+    private void drawStar(Graphics2D g,int cx,int cy,double radius){
+        Polygon star=new Polygon();
+        for(int i=0;i<10;i++){
+            double angle=-Math.PI/2+i*Math.PI/5;
+            double r=(i%2==0)?radius:radius*.44;
+            star.addPoint(
+                    (int)Math.round(cx+Math.cos(angle)*r),
+                    (int)Math.round(cy+Math.sin(angle)*r)
+            );
+        }
+        g.fill(star);
+    }
+
+    private String eventVisualKind(OperationEvent event){
+        String name=event==null||event.name()==null
+                ?""
+                :event.name().toLowerCase(Locale.ROOT);
+
+        if(name.contains("christmas"))return "CHRISTMAS";
+        if(name.contains("thanksgiving"))return "THANKSGIVING";
+        if(name.contains("independence")
+                ||name.contains("fourth of july")
+                ||name.contains("4th of july"))return "INDEPENDENCE";
+        if(name.contains("halloween"))return "HALLOWEEN";
+        if(name.contains("valentine"))return "VALENTINE";
+        if(name.contains("st. patrick")
+                ||name.contains("st patrick"))return "ST_PATRICK";
+        if(name.contains("labor day"))return "LABOR";
+        if(name.contains("memorial"))return "MEMORIAL";
+        if(name.contains("veteran"))return "VETERANS";
+        if(name.contains("new year"))return "NEW_YEAR";
+        if(name.contains("martin luther king")
+                ||name.contains("mlk"))return "MLK";
+        if(name.contains("president"))return "PRESIDENTS";
+        if(name.contains("easter"))return "EASTER";
+        if(name.contains("juneteenth"))return "JUNETEENTH";
+        return "GENERIC";
+    }
+
+    private JPanel celebrationsCard(){
+        JPanel card=card("Team Celebrations");
+        renderCelebrations(card);
+        return card;
+    }
+
+    private void renderCelebrations(JPanel card){
+        Component north=((BorderLayout)card.getLayout())
+                .getLayoutComponent(BorderLayout.NORTH);
+        card.removeAll();
+        if(north!=null)card.add(north,BorderLayout.NORTH);
+
+        JPanel content=new JPanel(new BorderLayout(0,8));
+        content.setOpaque(false);
+
+        JPanel rows=new JPanel();
+        rows.setOpaque(false);
+        rows.setLayout(new BoxLayout(rows,BoxLayout.Y_AXIS));
+
+        List<UpcomingCelebration> upcoming=upcomingCelebrations(2);
+        if(upcoming.isEmpty()){
+            rows.add(empty("No upcoming team celebrations"));
+        }else{
+            for(int i=0;i<upcoming.size();i++){
+                rows.add(celebrationRow(upcoming.get(i)));
+                if(i<upcoming.size()-1)rows.add(rowSeparator());
+            }
+        }
+
+        JButton viewAll=workspaceFooterButton("View All");
+        viewAll.addActionListener(e->openSettings("Employees"));
+
+        content.add(rows,BorderLayout.CENTER);
+        content.add(viewAll,BorderLayout.SOUTH);
+
+        card.add(content,BorderLayout.CENTER);
+        card.revalidate();
+        card.repaint();
+    }
+
+    private JComponent celebrationRow(UpcomingCelebration item){
+        JPanel row=new JPanel(new BorderLayout(9,0));
+        row.setOpaque(false);
+        row.setBorder(new EmptyBorder(8,0,8,0));
+        row.setMaximumSize(new Dimension(Integer.MAX_VALUE,96));
+
+        JPanel recognitionIcon=new RoundedPanel(11);
+        recognitionIcon.setBackground(Theme.panel2());
+        recognitionIcon.setLayout(new GridBagLayout());
+        recognitionIcon.setPreferredSize(new Dimension(64,64));
+        recognitionIcon.setMinimumSize(new Dimension(64,64));
+        recognitionIcon.setMaximumSize(new Dimension(64,64));
+
+        JLabel glyph=new JLabel(
+                celebrationTagIcon(item,48),
+                SwingConstants.CENTER
+        );
+        recognitionIcon.add(glyph);
+
+        JLabel avatar=new JLabel(employeeAvatar(item.person(),60));
+        avatar.setPreferredSize(new Dimension(64,64));
+
+        JPanel identity=new JPanel(new BorderLayout(8,0));
+        identity.setOpaque(false);
+        identity.add(avatar,BorderLayout.WEST);
+
+        JPanel words=new JPanel();
+        words.setOpaque(false);
+        words.setLayout(new BoxLayout(words,BoxLayout.Y_AXIS));
+
+        JLabel type=new JLabel(item.type());
+        type.setForeground(Theme.text());
+        type.setFont(new Font(Font.SANS_SERIF,Font.BOLD,12));
+
+        JLabel name=new JLabel(item.person().name());
+        name.setForeground(Theme.muted());
+        name.setFont(new Font(Font.SANS_SERIF,Font.PLAIN,10));
+
+        JLabel date=new JLabel(
+                item.date().format(DateTimeFormatter.ofPattern("MMM d"))
+        );
+        date.setForeground(Theme.muted());
+        date.setFont(new Font(Font.SANS_SERIF,Font.PLAIN,10));
+
+        words.add(type);
+        words.add(Box.createVerticalStrut(2));
+        words.add(name);
+        words.add(date);
+
+        identity.add(words,BorderLayout.CENTER);
+
+        row.add(recognitionIcon,BorderLayout.WEST);
+        row.add(identity,BorderLayout.CENTER);
+        return row;
+    }
+
+    private Icon celebrationTagIcon(
+            UpcomingCelebration item,
+            int size
+    ){
+        String type=item==null||item.type()==null
+                ?""
+                :item.type().toLowerCase(Locale.ROOT);
+        String assetKey=type.contains("anniversary")
+                ?"anniversary"
+                :type.contains("employee of the month")
+                    ?"employee_of_month"
+                    :"birthday";
+        Icon approved=WorkspaceGlyphs.icon(assetKey,size,Theme.text());
+        if(approved!=null)return approved;
+
+        BufferedImage image=new BufferedImage(
+                size,size,BufferedImage.TYPE_INT_ARGB);
+        Graphics2D g=image.createGraphics();
+
+        try{
+            g.setRenderingHint(
+                    RenderingHints.KEY_ANTIALIASING,
+                    RenderingHints.VALUE_ANTIALIAS_ON
+            );
+            g.setStroke(new BasicStroke(
+                    Math.max(2f,size/18f),
+                    BasicStroke.CAP_ROUND,
+                    BasicStroke.JOIN_ROUND
+            ));
+
+            if(type.contains("anniversary")){
+                drawConfettiPopper(g,size);
+            }else{
+                drawGift(g,size);
+            }
+        }finally{
+            g.dispose();
+        }
+
+        return new ImageIcon(image);
+    }
+
+    private void drawGift(Graphics2D g,int size){
+        Color glyph=Theme.text();
+        g.setColor(glyph);
+
+        int boxX=size/7;
+        int boxY=size*5/12;
+        int boxW=size*5/7;
+        int boxH=size*5/12;
+        int ribbonW=Math.max(4,size/8);
+
+        // Filled gift box and lid.
+        g.fillRoundRect(
+                boxX,
+                boxY,
+                boxW,
+                boxH,
+                size/12,
+                size/12
+        );
+        g.fillRoundRect(
+                boxX-size/30,
+                boxY-size/10,
+                boxW+size/15,
+                size/7,
+                size/14,
+                size/14
+        );
+
+        // Knock the ribbon channels out with the tile color for the strong
+        // silhouette/negative-space look used by the reference glyphs.
+        g.setColor(Theme.panel2());
+        g.fillRect(
+                size/2-ribbonW/2,
+                boxY-size/10,
+                ribbonW,
+                boxH+size/6
+        );
+        g.fillRect(
+                boxX,
+                boxY+size/9,
+                boxW,
+                Math.max(3,size/14)
+        );
+
+        // Bow loops in the foreground glyph color.
+        g.setColor(glyph);
+        int bowY=size/6;
+        g.fillOval(
+                size/2-size/4,
+                bowY,
+                size/4,
+                size/5
+        );
+        g.fillOval(
+                size/2,
+                bowY,
+                size/4,
+                size/5
+        );
+
+        // Cut the inner bow holes.
+        g.setColor(Theme.panel2());
+        g.fillOval(
+                size/2-size/5,
+                bowY+size/22,
+                size/9,
+                size/10
+        );
+        g.fillOval(
+                size/2+size/11,
+                bowY+size/22,
+                size/9,
+                size/10
+        );
+
+        g.setColor(glyph);
+        g.fillOval(
+                size/2-size/14,
+                bowY+size/15,
+                size/7,
+                size/7
+        );
+    }
+
+    private void drawConfettiPopper(Graphics2D g,int size){
+        Color glyph=Theme.text();
+        Color knockout=Theme.panel2();
+
+        g.setRenderingHint(
+                RenderingHints.KEY_ANTIALIASING,
+                RenderingHints.VALUE_ANTIALIAS_ON
+        );
+
+        // Strong filled party-popper cone based on the supplied glyph sheet.
+        g.setColor(glyph);
+        Polygon cone=new Polygon(
+                new int[]{
+                        size/7,
+                        size*2/5,
+                        size*3/5
+                },
+                new int[]{
+                        size*6/7,
+                        size*9/16,
+                        size*13/16
+                },
+                3
+        );
+        g.fill(cone);
+
+        // Negative-space decorative band.
+        g.setColor(knockout);
+        g.setStroke(new BasicStroke(
+                Math.max(3f,size/11f),
+                BasicStroke.CAP_ROUND,
+                BasicStroke.JOIN_ROUND
+        ));
+        g.drawLine(
+                size/4,
+                size*3/4,
+                size*7/15,
+                size*11/16
+        );
+
+        // Monochrome burst/streamers.
+        g.setColor(glyph);
+        g.setStroke(new BasicStroke(
+                Math.max(3f,size/15f),
+                BasicStroke.CAP_ROUND,
+                BasicStroke.JOIN_ROUND
+        ));
+
+        int[][] rays={
+                {size/2,size/2,size/2,size/8},
+                {size*9/16,size*7/16,size*3/4,size/5},
+                {size*7/16,size*7/16,size/4,size/5},
+                {size*3/5,size*2/5,size*7/8,size*2/5},
+                {size*2/5,size*2/5,size/8,size*2/5}
+        };
+        for(int[] ray:rays)
+            g.drawLine(ray[0],ray[1],ray[2],ray[3]);
+
+        int dot=Math.max(4,size/9);
+        int[][] dots={
+                {size/5,size/7},
+                {size*2/5,size/12},
+                {size*3/5,size/8},
+                {size*4/5,size/6},
+                {size*4/5,size*2/5}
+        };
+        for(int[] point:dots)
+            g.fillOval(
+                    point[0]-dot/2,
+                    point[1]-dot/2,
+                    dot,
+                    dot
+            );
+    }
+
+    private JComponent rowSeparator(){
+        JSeparator separator=new JSeparator();
+        separator.setForeground(Theme.border());
+        separator.setMaximumSize(new Dimension(Integer.MAX_VALUE,1));
+        return separator;
+    }
+
+    private JButton workspaceFooterButton(String text){
+        JButton button=new JButton(text);
+        button.setForeground(Theme.text());
+        button.setBackground(Theme.panel2());
+        button.setFocusPainted(false);
+        button.setFont(new Font(Font.SANS_SERIF,Font.PLAIN,9));
+        button.setBorder(BorderFactory.createCompoundBorder(
+                BorderFactory.createLineBorder(Theme.border(),1,true),
+                new EmptyBorder(7,10,7,10)
+        ));
+        button.setPreferredSize(new Dimension(100,30));
+        return button;
+    }
+
+    private JPanel informationStripCard(){
+        JPanel card=card("Information");
+        renderInformationStrip(card);
+        return card;
+    }
+
+    private void renderInformationStrip(JPanel card){
+        Component north=((BorderLayout)card.getLayout())
+                .getLayoutComponent(BorderLayout.NORTH);
+
+        card.removeAll();
+        if(north!=null)card.add(north,BorderLayout.NORTH);
+
+        List<String> configured=config.widgetTypes.stream()
+                .filter(Objects::nonNull)
+                .filter(value->!value.isBlank())
+                .toList();
+
+        if(configured.isEmpty()){
+            card.add(
+                    empty("Configure Information Blocks from the workspace sidebar"),
+                    BorderLayout.CENTER
+            );
+            stopInformationMovement();
+            card.revalidate();
+            card.repaint();
+            return;
+        }
+
+        String movement=config.workspaceInfoMovementMode==null
+                ?"STATIC"
+                :config.workspaceInfoMovementMode.trim().toUpperCase();
+
+        if("TICKER".equals(movement)){
+            renderInformationTicker(card,configured);
+            card.revalidate();
+            card.repaint();
+            return;
+        }
+
+        stopInformationTicker();
+
+        int columns=workspaceMetricColumnCount();
+        int visible=Math.max(
+                1,
+                Math.min(
+                        Math.min(config.workspaceInfoBlockCount,columns),
+                        configured.size()
+                )
+        );
+
+        boolean paged="PAGED".equals(movement);
+
+        if(informationPageStart>=configured.size())
+            informationPageStart=0;
+
+        JPanel metrics=new JPanel(new GridLayout(1,columns,10,0));
+        metrics.setOpaque(false);
+
+        int added=0;
+        for(int slot=0;slot<visible;slot++){
+            int absolute=informationPageStart+slot;
+
+            if(!paged&&absolute>=configured.size())
+                break;
+
+            int index=absolute%configured.size();
+            metrics.add(workspaceInfoMetric(configured.get(index)));
+            added++;
+        }
+
+        while(added<columns){
+            JPanel placeholder=new JPanel();
+            placeholder.setOpaque(false);
+            metrics.add(placeholder);
+            added++;
+        }
+
+        card.add(metrics,BorderLayout.CENTER);
+
+        if(paged&&configured.size()>visible){
+            JLabel page=new JLabel(
+                    informationPageLabel(
+                            informationPageStart,
+                            visible,
+                            configured.size()
+                    ),
+                    SwingConstants.RIGHT
+            );
+            page.setForeground(Theme.muted());
+            page.setFont(new Font(Font.SANS_SERIF,Font.PLAIN,8));
+            card.add(page,BorderLayout.SOUTH);
+        }
+
+        configureInformationRotation(
+                configured.size(),
+                visible,
+                paged
+        );
+
+        card.revalidate();
+        card.repaint();
+    }
+
+    private void renderInformationTicker(
+            JPanel card,
+            List<String> configured
+    ){
+        stopInformationRotation();
+
+        int slotWidth=Math.max(
+                165,
+                Math.max(1,card.getWidth())/workspaceMetricColumnCount()
+        );
+
+        informationTickerTrack=new JPanel();
+        informationTickerTrack.setOpaque(false);
+        informationTickerTrack.setLayout(
+                new BoxLayout(informationTickerTrack,BoxLayout.X_AXIS));
+
+        for(String type:configured){
+            JComponent metric=workspaceInfoMetric(type);
+            metric.setPreferredSize(new Dimension(slotWidth,76));
+            metric.setMinimumSize(new Dimension(slotWidth,76));
+            metric.setMaximumSize(new Dimension(slotWidth,76));
+            informationTickerTrack.add(metric);
+        }
+
+        informationTickerTrack.add(Box.createHorizontalStrut(slotWidth/2));
+
+        informationTickerCycleWidth=
+                configured.size()*slotWidth+(slotWidth/2);
+
+        /*
+         * Duplicate one complete cycle so resetting the viewport position is
+         * visually seamless rather than snapping the Information row.
+         */
+        for(String type:configured){
+            JComponent metric=workspaceInfoMetric(type);
+            metric.setPreferredSize(new Dimension(slotWidth,76));
+            metric.setMinimumSize(new Dimension(slotWidth,76));
+            metric.setMaximumSize(new Dimension(slotWidth,76));
+            informationTickerTrack.add(metric);
+        }
+
+        informationTickerTrack.setPreferredSize(
+                new Dimension(
+                        informationTickerCycleWidth*2,
+                        76
+                )
+        );
+
+        informationTickerViewport=new JViewport();
+        informationTickerViewport.setOpaque(false);
+        informationTickerViewport.setView(informationTickerTrack);
+        informationTickerViewport.setPreferredSize(new Dimension(100,76));
+
+        card.add(informationTickerViewport,BorderLayout.CENTER);
+
+        JLabel mode=new JLabel(
+                "CONTINUOUS",
+                SwingConstants.RIGHT
+        );
+        mode.setForeground(Theme.muted());
+        mode.setFont(new Font(Font.SANS_SERIF,Font.PLAIN,8));
+        card.add(mode,BorderLayout.SOUTH);
+
+        startInformationTicker();
+    }
+
+    private void startInformationTicker(){
+        stopInformationTicker();
+
+        if(informationTickerViewport==null
+                ||informationTickerTrack==null
+                ||informationTickerCycleWidth<=0)
+            return;
+
+        final int delay=33;
+        final double pixelsPerTick=
+                Math.max(
+                        8,
+                        Math.min(
+                                120,
+                                config.workspaceInfoTickerPixelsPerSecond
+                        )
+                )*(delay/1000.0);
+
+        final double[] x={0.0};
+
+        informationTickerTimer=new javax.swing.Timer(delay,e->{
+            if(informationTickerViewport==null
+                    ||!informationTickerViewport.isShowing())
+                return;
+
+            x[0]+=pixelsPerTick;
+
+            if(x[0]>=informationTickerCycleWidth)
+                x[0]-=informationTickerCycleWidth;
+
+            informationTickerViewport.setViewPosition(
+                    new Point((int)Math.round(x[0]),0));
+        });
+        informationTickerTimer.setCoalesce(true);
+        informationTickerTimer.start();
+    }
+
+
+    private JComponent workspaceInfoMetric(String type){
+        JPanel p=new JPanel();
+        p.setOpaque(false);
+        p.setBorder(new EmptyBorder(2,6,2,6));
+        p.setLayout(new BoxLayout(p,BoxLayout.Y_AXIS));
+
+        String titleText=workspaceInfoTitle(type);
+        JLabel label=new JLabel(titleText);
+        label.setForeground(Theme.muted());
+        label.setFont(new Font(
+                Font.SANS_SERIF,
+                Font.PLAIN,
+                responsiveInfoFontSize(titleText,10,8,24)
+        ));
+        label.setAlignmentX(.5f);
+
+        JPanel valueRow=new JPanel();
+        valueRow.setOpaque(false);
+        valueRow.setLayout(new BoxLayout(valueRow,BoxLayout.X_AXIS));
+        valueRow.setAlignmentX(.5f);
+        valueRow.setMaximumSize(
+                new Dimension(Integer.MAX_VALUE,28));
+
+        JLabel icon=new JLabel(workspaceInfoIcon(type));
+        icon.setAlignmentY(.5f);
+
+        String primaryText=workspaceInfoPrimary(type);
+        JLabel value=new JLabel(primaryText);
+        value.setForeground(Theme.text());
+        value.setFont(new Font(
+                Font.SANS_SERIF,
+                Font.BOLD,
+                responsiveInfoFontSize(primaryText,17,12,12)
+        ));
+        value.setAlignmentY(.5f);
+
+        valueRow.add(Box.createHorizontalGlue());
+        valueRow.add(icon);
+        valueRow.add(Box.createHorizontalStrut(8));
+        valueRow.add(value);
+        valueRow.add(Box.createHorizontalGlue());
+
+        String detailText=workspaceInfoDetail(type);
+        JLabel status=new JLabel(detailText);
+        status.setForeground(workspaceInfoDetailColor(type));
+        status.setFont(new Font(
+                Font.SANS_SERIF,
+                Font.BOLD,
+                responsiveInfoFontSize(detailText,8,7,32)
+        ));
+        status.setAlignmentX(.5f);
+
+        p.add(label);
+        p.add(Box.createVerticalStrut(1));
+        p.add(valueRow);
+        p.add(Box.createVerticalStrut(1));
+        p.add(status);
+
+        return p;
+    }
+
+    private void configureInformationRotation(
+            int total,
+            int visible,
+            boolean paged
+    ){
+        boolean shouldRotate=paged
+                &&total>visible
+                &&infoStripModule!=null;
+
+        if(!shouldRotate){
+            stopInformationRotation();
+            return;
+        }
+
+        int delay=Math.max(
+                5,
+                Math.min(60,config.workspaceInfoScrollSeconds)
+        )*1000;
+
+        if(informationRotationTimer!=null
+                &&informationRotationTimer.getDelay()==delay
+                &&informationRotationTimer.isRunning())
+            return;
+
+        stopInformationRotation();
+
+        informationRotationTimer=new javax.swing.Timer(delay,e->{
+            if(infoStripModule==null)return;
+
+            List<String> items=config.widgetTypes.stream()
+                    .filter(Objects::nonNull)
+                    .filter(value->!value.isBlank())
+                    .toList();
+
+            if(items.size()<=visible){
+                stopInformationRotation();
+                return;
+            }
+
+            informationPageStart=
+                    (informationPageStart+visible)%items.size();
+            renderInformationStrip(infoStripModule);
+        });
+        informationRotationTimer.setRepeats(true);
+        informationRotationTimer.start();
+    }
+
+    private void stopInformationRotation(){
+        if(informationRotationTimer!=null){
+            informationRotationTimer.stop();
+            informationRotationTimer=null;
+        }
+    }
+
+    private void stopInformationTicker(){
+        if(informationTickerTimer!=null){
+            informationTickerTimer.stop();
+            informationTickerTimer=null;
+        }
+        informationTickerViewport=null;
+        informationTickerTrack=null;
+        informationTickerCycleWidth=0;
+    }
+
+    private void stopInformationMovement(){
+        stopInformationRotation();
+        stopInformationTicker();
+    }
+
+    private String informationPageLabel(
+            int start,
+            int visible,
+            int total
+    ){
+        int first=Math.min(total,start+1);
+        int last=Math.min(total,start+visible);
+        return first+"–"+last+" of "+total+" • PAGED";
+    }
+
+    private static int responsiveInfoFontSize(
+            String text,
+            int preferred,
+            int minimum,
+            int comfortableCharacters
+    ){
+        if(text==null||text.isBlank())return preferred;
+
+        int length=text.length();
+        if(length<=comfortableCharacters)return preferred;
+
+        double ratio=comfortableCharacters/(double)length;
+        int scaled=(int)Math.round(preferred*Math.sqrt(ratio));
+        return Math.max(minimum,Math.min(preferred,scaled));
+    }
+
+    private String workspaceInfoTitle(String type){
+        if(type==null)return "STATUS";
+
+        if(type.startsWith("ROUTE_")){
+            int index=parseDynamicIndex(type,"ROUTE_");
+            return index>=0&&index<config.routes.size()
+                    ?"ROUTE • "+config.routes.get(index).name().toUpperCase()
+                    :"ROUTE";
+        }
+
+        if(type.startsWith("WEATHER_LOCATION_")){
+            int index=parseDynamicIndex(type,"WEATHER_LOCATION_");
+            return index>=0&&index<config.monitored.size()
+                    ?config.monitored.get(index).name().toUpperCase()+" WEATHER"
+                    :"LOCATION WEATHER";
+        }
+
+        if(type.startsWith("SPORTS_")){
+            int index=parseDynamicIndex(type,"SPORTS_");
+            return index>=0&&index<config.sports.size()
+                    ?config.sports.get(index).name().toUpperCase()
+                    :"SPORTS";
+        }
+
+        return switch(type){
+            case "WEATHER_PRIMARY"->config.primary.name().toUpperCase()+" WEATHER";
+            case "ALERTS"->"SEVERE WEATHER";
+            case "FORECAST_PRIMARY"->"TODAY'S OUTLOOK";
+            case "WIND_PRIMARY"->"WIND & GUSTS";
+            case "MEDIA"->"ANNOUNCEMENTS";
+            default->"SYSTEM STATUS";
+        };
+    }
+
+    private Icon workspaceInfoIcon(String type){
+        if(type!=null&&type.startsWith("ROUTE_"))
+            return new DashboardIcon(
+                    DashboardIcon.Kind.CAR,
+                    32,
+                    routeInfoColor(type)
+            );
+
+        if("ALERTS".equals(type))
+            return new DashboardIcon(
+                    DashboardIcon.Kind.ALERT,30,
+                    alerts.isEmpty()?Theme.muted():Theme.warn());
+
+        if("WIND_PRIMARY".equals(type))
+            return new DashboardIcon(
+                    DashboardIcon.Kind.WIND,30,Theme.accent());
+
+        if("MEDIA".equals(type))
+            return new DashboardIcon(
+                    DashboardIcon.Kind.MEDIA,30,Theme.accent());
+
+        if(type!=null&&type.startsWith("SPORTS_")){
+            int index=parseDynamicIndex(type,"SPORTS_");
+            ImageIcon logo=sportsLogos.get(index);
+            if(logo!=null)return logo;
+
+            return new DashboardIcon(
+                    DashboardIcon.Kind.STATUS,
+                    30,
+                    Theme.accent()
+            );
+        }
+
+        if(type!=null&&(type.equals("WEATHER_PRIMARY")
+                ||type.startsWith("WEATHER_LOCATION_")
+                ||type.equals("FORECAST_PRIMARY"))){
+            return new DashboardIcon(
+                    DashboardIcon.weatherKind(
+                            weather==null?"":weather.condition()),
+                    32,
+                    Theme.accent()
+            );
+        }
+
+        return new DashboardIcon(
+                DashboardIcon.Kind.STATUS,30,new Color(32,201,151));
+    }
+
+    private String workspaceInfoPrimary(String type){
+        if(type==null)return "Ready";
+
+        if(type.startsWith("ROUTE_")){
+            int index=parseDynamicIndex(type,"ROUTE_");
+            RouteStatus route=routeStatuses.get(index);
+            return route==null||route.travelMinutes()<0
+                    ?"—"
+                    :route.travelMinutes()+" min";
+        }
+
+        if(type.equals("WEATHER_PRIMARY")
+                ||type.startsWith("WEATHER_LOCATION_"))
+            return weather==null
+                    ?"—"
+                    :Math.round(weather.temperatureF())+"°F";
+
+        if("ALERTS".equals(type)){
+            WeatherAlert alert=primaryWeatherAlert();
+            return alert==null?"None":shortAlertName(alert.event());
+        }
+
+        if("FORECAST_PRIMARY".equals(type))
+            return weather==null
+                    ?"—"
+                    :Math.round(weather.highF())+"° / "
+                            +Math.round(weather.lowF())+"°";
+
+        if("WIND_PRIMARY".equals(type))
+            return weather==null
+                    ?"—"
+                    :Math.round(weather.windMph())+" mph";
+
+        if("MEDIA".equals(type))
+            return Integer.toString(
+                    MediaService.list(MediaCategory.ANNOUNCEMENTS).size());
+
+        if(type.startsWith("SPORTS_")){
+            int index=parseDynamicIndex(type,"SPORTS_");
+            SportsGame next=nextSportsGame(index);
+            if(next==null||next.startTime()==null)return "Loading…";
+
+            return next.startTime()
+                    .atZone(ZoneId.systemDefault())
+                    .format(DateTimeFormatter.ofPattern("EEE, MMM d"));
+        }
+
+        return "Online";
+    }
+
+    private String workspaceInfoDetail(String type){
+        if(type==null)return BrandIdentity.product()+" operational";
+
+        if(type.startsWith("ROUTE_")){
+            int index=parseDynamicIndex(type,"ROUTE_");
+            RouteStatus route=routeStatuses.get(index);
+            if(route==null)return "Loading traffic...";
+            if(route.travelMinutes()<0)return "Traffic unavailable";
+            String status=route.status()==null||route.status().isBlank()
+                    ?"Traffic available"
+                    :route.status();
+
+            return route.delayMinutes()<=0
+                    ?status
+                    :status+" • +"+route.delayMinutes()+" min";
+        }
+
+        if(type.equals("WEATHER_PRIMARY")
+                ||type.startsWith("WEATHER_LOCATION_"))
+            return weather==null?"Loading weather...":weather.condition();
+
+        if("ALERTS".equals(type)){
+            WeatherAlert alert=primaryWeatherAlert();
+            if(alert==null)return "No active alerts";
+
+            String severity=alert.severity()==null||alert.severity().isBlank()
+                    ?"Active alert"
+                    :alert.severity();
+
+            return severity+" • "+alerts.size()+" active";
+        }
+
+        if("FORECAST_PRIMARY".equals(type))
+            return weather==null
+                    ?"Loading forecast..."
+                    :"High / Low";
+
+        if("WIND_PRIMARY".equals(type))
+            return weather==null
+                    ?"Loading wind..."
+                    :"Gusts "+Math.round(weather.gustMph())+" mph";
+
+        if("MEDIA".equals(type))
+            return "Managed announcement media";
+
+        if(type.startsWith("SPORTS_")){
+            int index=parseDynamicIndex(type,"SPORTS_");
+            SportsGame next=nextSportsGame(index);
+
+            if(next==null)
+                return "Fetching next scheduled game…";
+
+            SportsConfig team=index>=0&&index<config.sports.size()
+                    ?config.sports.get(index)
+                    :null;
+
+            boolean home=teamMatchesSportsTeam(team,next.homeTeam());
+            String opponent=home?next.awayTeam():next.homeTeam();
+            String venue=home?"vs ":"at ";
+
+            String time=next.startTime()==null
+                    ?"TBD"
+                    :next.startTime()
+                            .atZone(ZoneId.systemDefault())
+                            .format(DateTimeFormatter.ofPattern("h:mm a"));
+
+            return venue+shortSportsName(opponent)+" • "+time;
+        }
+
+        return "Services operational";
+    }
+
+    private Color workspaceInfoDetailColor(String type){
+        if(type!=null&&type.startsWith("ROUTE_"))
+            return routeInfoColor(type);
+
+        if("ALERTS".equals(type)&&!alerts.isEmpty()){
+            WeatherAlert alert=primaryWeatherAlert();
+            return alert!=null&&weatherAlertPriority(alert)>=875
+                    ?Theme.danger()
+                    :Theme.warn();
+        }
+
+        return Theme.muted();
+    }
+
+    private SportsGame nextSportsGame(int index){
+        List<SportsGame> games=sportsSchedules.get(index);
+        return games==null||games.isEmpty()?null:games.get(0);
+    }
+
+    private static String shortSportsName(String value){
+        if(value==null||value.isBlank())return "TBD";
+        String trimmed=value.trim();
+        return trimmed.length()>22
+                ?trimmed.substring(0,21)+"…"
+                :trimmed;
+    }
+
+    /**
+     * Selects the most operationally significant active NWS alert rather than
+     * using whichever alert happens to appear first in the provider response.
+     */
+    private WeatherAlert primaryWeatherAlert(){
+        if(alerts==null||alerts.isEmpty())return null;
+
+        return alerts.stream()
+                .max(Comparator
+                        .comparingInt(this::weatherAlertPriority)
+                        .thenComparing(
+                                WeatherAlert::expires,
+                                Comparator.nullsLast(
+                                        Comparator.naturalOrder()
+                                )
+                        ))
+                .orElse(alerts.get(0));
+    }
+
+    private int weatherAlertPriority(WeatherAlert alert){
+        if(alert==null)return 0;
+
+        String event=(safe(alert.event())+" "
+                +safe(alert.headline()))
+                .toLowerCase(Locale.ROOT);
+        String severity=safe(alert.severity()).toLowerCase(Locale.ROOT);
+        String urgency=safe(alert.urgency()).toLowerCase(Locale.ROOT);
+
+        int rank=0;
+
+        if(event.contains("tornado emergency"))rank=1000;
+        else if(event.contains("tornado warning"))rank=950;
+        else if(event.contains("extreme wind warning"))rank=925;
+        else if(event.contains("severe thunderstorm warning"))rank=900;
+        else if(event.contains("flash flood warning"))rank=875;
+        else if(event.contains("tornado watch"))rank=825;
+        else if(event.contains("severe thunderstorm watch"))rank=800;
+        else if(event.contains("heat warning")
+                ||event.contains("excessive heat warning"))rank=775;
+        else if(event.contains("heat advisory"))rank=725;
+        else if(event.contains("flood warning"))rank=700;
+        else if(event.contains("winter storm warning"))rank=675;
+        else if(event.contains("wind advisory"))rank=625;
+        else if(event.contains("dense fog advisory"))rank=575;
+        else if(event.contains("advisory"))rank=525;
+        else if(event.contains("watch"))rank=500;
+        else if(event.contains("warning"))rank=650;
+        else rank=400;
+
+        if("extreme".equals(severity))rank+=90;
+        else if("severe".equals(severity))rank+=60;
+        else if("moderate".equals(severity))rank+=30;
+
+        if("immediate".equals(urgency))rank+=30;
+        else if("expected".equals(urgency))rank+=15;
+
+        return rank;
+    }
+
+    private static String shortAlertName(String event){
+        String value=safe(event).trim();
+        if(value.isBlank())return "Weather Alert";
+
+        String lower=value.toLowerCase(Locale.ROOT);
+        if(lower.contains("severe thunderstorm warning"))
+            return "Severe T-Storm Warning";
+        if(lower.contains("severe thunderstorm watch"))
+            return "Severe T-Storm Watch";
+        if(lower.contains("excessive heat warning"))
+            return "Excessive Heat Warning";
+        if(lower.contains("tornado emergency"))
+            return "Tornado Emergency";
+
+        return value.length()>28
+                ?value.substring(0,27)+"…"
+                :value;
+    }
+
+    private Color routeInfoColor(String type){
+        int index=parseDynamicIndex(type,"ROUTE_");
+        RouteStatus route=routeStatuses.get(index);
+        if(route==null)return Theme.muted();
+
+        if("HEAVY".equalsIgnoreCase(route.status())
+                ||"SEVERE".equalsIgnoreCase(route.status()))
+            return Theme.danger();
+
+        if("MODERATE".equalsIgnoreCase(route.status()))
+            return Theme.warn();
+
+        return new Color(32,201,151);
+    }
+
+    private static int parseDynamicIndex(String value,String prefix){
+        try{return Integer.parseInt(value.substring(prefix.length()));}
+        catch(Exception ex){return -1;}
+    }
+
+    private JPanel operationsSnapshotCard(){
+        JPanel card=card("Operations Snapshot");
+        renderOperations(card);return card;
+    }
+
+    /**
+     * One shared horizontal grid for Information and Operations Snapshot.
+     * Keeping this calculation in one place prevents the two rows from
+     * drifting apart as modules/KPIs are customized.
+     */
+    private int workspaceMetricColumnCount(){
+        long enabled=config.operationsKpis.stream()
+                .filter(OperationsKpiConfig::enabled)
+                .limit(8)
+                .count();
+        return Math.max(1,(int)enabled);
+    }
+
+    private void renderOperations(JPanel card){
+        Component north=((BorderLayout)card.getLayout()).getLayoutComponent(BorderLayout.NORTH);
+        card.removeAll();if(north!=null)card.add(north,BorderLayout.NORTH);
+        List<OperationsKpiConfig> enabled=config.operationsKpis.stream()
+                .filter(OperationsKpiConfig::enabled).limit(8).toList();
+        int columns=workspaceMetricColumnCount();
+        JPanel metrics=new JPanel(new GridLayout(1,columns,10,0));
+        metrics.setOpaque(false);
+        if(enabled.isEmpty())metrics.add(empty("Configure KPI cards in Settings → Operations Workspace"));
+        for(OperationsKpiConfig kpi:enabled)metrics.add(kpiCard(kpi));
+        card.add(metrics,BorderLayout.CENTER);card.revalidate();card.repaint();
+    }
+
+    private JComponent kpiCard(OperationsKpiConfig source){
+        double current="SYSTEM_ALERTS".equalsIgnoreCase(source.dataSourceId())
+                ?alerts.size():source.currentValue();
+        OperationsKpiConfig kpi=new OperationsKpiConfig(
+                source.id(),source.label(),current,source.targetValue(),source.unit(),
+                source.higherIsBetter(),source.enabled(),source.dataSourceId());
+
+        JPanel p=new JPanel();p.setOpaque(false);p.setBorder(new EmptyBorder(7,6,7,6));
+        p.setLayout(new BoxLayout(p,BoxLayout.Y_AXIS));
+        JLabel label=new JLabel(kpi.label());label.setForeground(Theme.muted());label.setFont(new Font(Font.SANS_SERIF,Font.PLAIN,9));label.setAlignmentX(.5f);
+        JLabel value=new JLabel(formatValue(current)+safe(kpi.unit()));value.setForeground(Theme.text());value.setFont(new Font(Font.SANS_SERIF,Font.BOLD,20));value.setAlignmentX(.5f);
+        JLabel status=new JLabel(kpiStatus(kpi));status.setAlignmentX(.5f);status.setFont(new Font(Font.SANS_SERIF,Font.BOLD,8));
+        status.setForeground(kpi.targetConfigured()?(kpi.targetMet()?new Color(32,201,151):Theme.warn()):Theme.accent());
+        p.add(label);p.add(Box.createVerticalStrut(4));p.add(value);p.add(Box.createVerticalStrut(4));p.add(status);return p;
+    }
+
+    private String kpiStatus(OperationsKpiConfig kpi){
+        if(!kpi.targetConfigured())return "LIVE VALUE";
+        String target="Target "+formatValue(kpi.targetValue())+safe(kpi.unit());
+        return (kpi.targetMet()?"✓ TARGET MET • ":"△ BELOW TARGET • ")+target;
+    }
+
+    private void startRefreshers(){
+        stopRefreshers();
+        refreshExecutor=Executors.newScheduledThreadPool(4,r->{
+            Thread t=new Thread(r,"northstar-workspace-refresh");t.setDaemon(true);return t;});
+        refreshExecutor.execute(this::refreshWeather);
+        refreshExecutor.execute(this::refreshAlerts);
+        refreshExecutor.execute(this::refreshRadar);
+        refreshExecutor.execute(this::refreshTraffic);
+        refreshExecutor.execute(this::refreshSports);
+        refreshExecutor.scheduleAtFixedRate(this::refreshWeather,
+                Math.max(1,config.weatherRefreshMinutes),Math.max(1,config.weatherRefreshMinutes),TimeUnit.MINUTES);
+        refreshExecutor.scheduleAtFixedRate(this::refreshAlerts,
+                Math.max(1,config.alertRefreshMinutes),Math.max(1,config.alertRefreshMinutes),TimeUnit.MINUTES);
+        refreshExecutor.scheduleAtFixedRate(this::refreshRadar,
+                Math.max(1,config.radarRefreshMinutes),Math.max(1,config.radarRefreshMinutes),TimeUnit.MINUTES);
+        refreshExecutor.scheduleAtFixedRate(this::refreshTraffic,
+                Math.max(1,config.trafficRefreshMinutes),Math.max(1,config.trafficRefreshMinutes),TimeUnit.MINUTES);
+        refreshExecutor.scheduleAtFixedRate(this::refreshSports,
+                Math.max(1,config.sportsRefreshMinutes),Math.max(1,config.sportsRefreshMinutes),TimeUnit.MINUTES);
+    }
+
+    private void stopRefreshers(){
+        if(refreshExecutor!=null){
+            refreshExecutor.shutdownNow();
+            refreshExecutor=null;
+        }
+        stopInformationMovement();
+    }
+
+    private void refreshWeather(){
+        try{
+            weather=weatherService.fetch(config.primary,config);
+            SwingUtilities.invokeLater(()->{
+                refreshTopSummaries();
+                if(weatherModule!=null)renderWeatherCard(weatherModule);
+                if(infoStripModule!=null)renderInformationStrip(infoStripModule);
+            });
+        }catch(Exception ignored){}
+    }
+
+    private void refreshAlerts(){
+        try{
+            alerts=List.copyOf(alertService.fetch(config.primary,config));
+            SwingUtilities.invokeLater(()->{
+                refreshTopSummaries();
+                if(map!=null)map.setAlerts(alerts);
+                if(mainShowcase!=null)
+                    mainShowcase.setAutomaticSevereWeatherActive(
+                            automaticSevereWeatherActive());
+                if(overlayEffects!=null)
+                    overlayEffects.setSevereSuppressed(
+                            hasSevereAutomaticPriority());
+                if(operationsModule!=null)renderOperations(operationsModule);
+                if(infoStripModule!=null)renderInformationStrip(infoStripModule);
+            });
+        }catch(Exception ignored){}
+    }
+
+    private boolean automaticSevereWeatherActive(){
+        if(!config.automaticSevereWeatherMode
+                ||alerts==null
+                ||alerts.isEmpty())
+            return false;
+
+        for(WeatherAlert alert:alerts){
+            String event=alert.event()==null
+                    ?""
+                    :alert.event().trim().toLowerCase(Locale.ROOT);
+
+            if(event.contains("tornado warning")
+                    ||event.contains("tornado watch")
+                    ||event.contains("tornado emergency")
+                    ||event.contains("severe thunderstorm warning")
+                    ||event.contains("severe thunderstorm watch")
+                    ||event.contains("flash flood warning")
+                    ||event.contains("extreme wind warning")
+                    ||"extreme".equalsIgnoreCase(alert.severity()))
+                return true;
+        }
+
+        return false;
+    }
+
+    private void refreshRadar(){
+        try{
+            RadarFrame frame=radarService.latest();
+            SwingUtilities.invokeLater(()->{if(map!=null)map.setRadarFrame(frame);});
+        }catch(Exception ignored){}
+    }
+
+    private void refreshTraffic(){
+        for(int i=0;i<config.routes.size();i++){
+            try{routeStatuses.put(i,trafficService.fetchRoute(config.routes.get(i),config.tomTomApiKey));}
+            catch(Exception ignored){}
+        }
+        SwingUtilities.invokeLater(()->{
+            refreshTopSummaries();
+            if(infoStripModule!=null)
+                renderInformationStrip(infoStripModule);
+        });
+    }
+
+    private void refreshSports(){
+        for(int i=0;i<config.sports.size();i++){
+            try{
+                SportsConfig team=config.sports.get(i);
+                List<SportsGame> games=sportsService.fetchUpcoming(
+                        team,
+                        config.sportsApiKey,
+                        3
+                );
+                sportsSchedules.put(i,games);
+
+                if(team.showLogos()){
+                    String badgeUrl="";
+                    if(!games.isEmpty()){
+                        SportsGame game=games.get(0);
+                        boolean home=teamMatchesSportsTeam(team,game.homeTeam());
+                        badgeUrl=home?game.homeBadgeUrl():game.awayBadgeUrl();
+                    }
+
+                    if(badgeUrl==null||badgeUrl.isBlank())
+                        badgeUrl=sportsService.configuredTeamBadge(
+                                team,
+                                config.sportsApiKey
+                        );
+
+                    if(badgeUrl!=null&&!badgeUrl.isBlank())
+                        sportsLogos.put(i,loadSportsLogo(badgeUrl,34));
+                }
+            }catch(Exception ignored){}
+        }
+
+        SwingUtilities.invokeLater(()->{
+            if(infoStripModule!=null)
+                renderInformationStrip(infoStripModule);
+        });
+    }
+
+    private ImageIcon loadSportsLogo(String url,int size){
+        try{
+            byte[] bytes=http.getBytes(url);
+            BufferedImage image=ImageIO.read(new ByteArrayInputStream(bytes));
+            if(image==null)return null;
+
+            return new ImageIcon(
+                    image.getScaledInstance(size,size,Image.SCALE_SMOOTH)
+            );
+        }catch(Exception ex){
+            return null;
+        }
+    }
+
+    private static boolean teamMatchesSportsTeam(
+            SportsConfig cfg,
+            String teamName
+    ){
+        if(cfg==null||teamName==null)return false;
+        if(teamName.equalsIgnoreCase(cfg.teamName()))return true;
+
+        String configured=cfg.teamName()==null
+                ?""
+                :cfg.teamName().trim().toLowerCase(Locale.ROOT);
+
+        return !configured.isBlank()
+                &&teamName.toLowerCase(Locale.ROOT).contains(configured);
+    }
+
+    private void refreshTopSummaries(){
+        if(topWeatherLabel!=null){
+            JLabel detail=(JLabel)topWeatherLabel.getClientProperty("detailLabel");
+            if(weather==null){topWeatherLabel.setText("--°F");if(detail!=null)detail.setText("Loading weather...");}
+            else{topWeatherLabel.setText(Math.round(weather.temperatureF())+"°F");if(detail!=null)detail.setText(weather.condition()+" • feels "+Math.round(weather.apparentTemperatureF())+"°");}
+        }
+        if(topTrafficLabel!=null){
+            JLabel detail=(JLabel)topTrafficLabel.getClientProperty("detailLabel");
+            int worst=routeStatuses.values().stream().mapToInt(RouteStatus::delayMinutes).max().orElse(0);
+            topTrafficLabel.setText(worst<=0?"Light":worst<10?"Moderate":"Delayed");
+            if(detail!=null)detail.setText(worst<=0?"No major delays":"Worst route +"+worst+" min");
+        }
+        if(alertBadge!=null){
+            alertBadge.setText("●  "+alerts.size()+" alert"+(alerts.size()==1?"":"s"));
+            alertBadge.setForeground(alerts.isEmpty()?Theme.muted():Theme.warn());
+        }
+    }
+
+    private void refreshVisibleModules(){
+        refreshTopSummaries();
+        if(weatherModule!=null)renderWeatherCard(weatherModule);
+        if(eventsModule!=null)renderEvents(eventsModule);
+        if(celebrationsModule!=null)renderCelebrations(celebrationsModule);
+        if(infoStripModule!=null)renderInformationStrip(infoStripModule);
+        if(operationsModule!=null)renderOperations(operationsModule);
+    }
+
+    private void showDirectWorkspacePage(
+            String routeTitle,
+            JComponent page
+    ){
+        closeEmbeddedSettingsSession();
+        releaseDashboardModules();
+        activeWorkspaceRoute=routeTitle;
+
+        JPanel shell=new JPanel(new BorderLayout(0,12));
+        shell.setBackground(Theme.bg());
+        shell.setBorder(new EmptyBorder(18,20,18,20));
+
+        JPanel header=new JPanel(new BorderLayout(12,0));
+        header.setOpaque(false);
+
+        JLabel title=new JLabel(routeTitle);
+        title.setForeground(Theme.text());
+        title.setFont(new Font(Font.SANS_SERIF,Font.BOLD,22));
+
+        JButton dashboard=new JButton("← Dashboard");
+        dashboard.addActionListener(e->showDashboardRoute());
+
+        header.add(title,BorderLayout.WEST);
+        header.add(dashboard,BorderLayout.EAST);
+
+        shell.add(header,BorderLayout.NORTH);
+        shell.add(page,BorderLayout.CENTER);
+
+        ThemeStyler.apply(shell,Theme.active());
+
+        if(workspaceContentHost!=null){
+            workspaceContentHost.removeAll();
+            workspaceContentHost.add(shell,BorderLayout.CENTER);
+            workspaceContentHost.revalidate();
+            workspaceContentHost.repaint();
+        }
+    }
+
+    private void openSettings(String tab){
+        Permission permission=permissionForSettingsTab(tab);
+        openWorkspaceSettingsPage(
+                tab==null?"General":tab,
+                tab==null?"General":tab,
+                permission
+        );
+    }
+
+    /**
+     * v4 settings are first-class workspace routes. The underlying form and
+     * validation are shared with Classic Settings, but only the requested page
+     * is mounted into the right-hand workspace surface.
+     */
+    private void openWorkspaceSettingsPage(
+            String routeTitle,
+            String settingsTab,
+            Permission permission
+    ){
+        releaseDashboardModules();
+
+        UserAccount account=SessionManager.currentUser();
+        if(account==null){
+            account=UserLoginDialog.authenticate(
+                    this,
+                    BrandIdentity.product()+" Settings",
+                    "Sign in to administer the operations workspace.",
+                    Theme.active(),
+                    ""
+            );
+            if(account==null)return;
+            SessionManager.login(account);
+        }
+
+        if(permission!=null&&!AuthorizationService.allowed(permission)){
+            ThemedDialogs.message(
+                    this,
+                    "Your account does not have permission to access "
+                            +routeTitle+".",
+                    "Access Denied",
+                    ThemedDialogs.Kind.WARNING
+            );
+            return;
+        }
+
+        if("Employees".equalsIgnoreCase(settingsTab)){
+            showDirectWorkspacePage(
+                    routeTitle,
+                    new EmployeeOperationsPanel(config)
+            );
+            return;
+        }
+
+        boolean protectedApi=
+                "API Providers".equalsIgnoreCase(settingsTab)
+                ||"API Usage".equalsIgnoreCase(settingsTab);
+
+        if(protectedApi&&config.protectApiSettings){
+            UserAccount verified=UserLoginDialog.authenticate(
+                    this,
+                    "Unlock "+settingsTab,
+                    "Re-enter an authorized account password to access "
+                            +settingsTab+".",
+                    Theme.active(),
+                    account.username()
+            );
+            if(verified==null)return;
+
+            Permission required="API Usage".equalsIgnoreCase(settingsTab)
+                    ?Permission.API_USAGE
+                    :Permission.API_ADMINISTRATION;
+
+            if(!verified.has(required)){
+                ThemedDialogs.message(
+                        this,
+                        "That account does not have permission to access "
+                                +settingsTab+".",
+                        "Access Denied",
+                        ThemedDialogs.Kind.WARNING
+                );
+                return;
+            }
+        }
+
+        closeEmbeddedSettingsSession();
+
+        SettingsDialog session=new SettingsDialog(
+                this,
+                config,
+                this::applyConfig
+        );
+
+        if(protectedApi)
+            session.unlockProtectedForWorkspace();
+
+        JComponent page=session.detachTabForWorkspace(settingsTab);
+        if(page==null){
+            session.discardEmbeddedPage();
+            ThemedDialogs.message(
+                    this,
+                    routeTitle+" is not available for the current account.",
+                    "Page Unavailable",
+                    ThemedDialogs.Kind.INFO
+            );
+            return;
+        }
+
+        embeddedSettingsSession=session;
+        activeWorkspaceRoute=routeTitle;
+
+        JPanel shell=new JPanel(new BorderLayout(0,12));
+        shell.setBackground(Theme.bg());
+        shell.setBorder(new EmptyBorder(18,20,18,20));
+
+        JPanel header=new JPanel(new BorderLayout(12,0));
+        header.setOpaque(false);
+
+        JPanel words=new JPanel();
+        words.setOpaque(false);
+        words.setLayout(new BoxLayout(words,BoxLayout.Y_AXIS));
+
+        JLabel title=new JLabel(routeTitle);
+        title.setForeground(Theme.text());
+        title.setFont(new Font(Font.SANS_SERIF,Font.BOLD,22));
+
+        JLabel subtitle=new JLabel(workspacePageDescription(routeTitle));
+        subtitle.setForeground(Theme.muted());
+        subtitle.setFont(new Font(Font.SANS_SERIF,Font.PLAIN,11));
+
+        words.add(title);
+        words.add(Box.createVerticalStrut(3));
+        words.add(subtitle);
+
+        JButton dashboard=new JButton("← Dashboard");
+        dashboard.setForeground(Theme.text());
+        dashboard.setBackground(Theme.panel2());
+        dashboard.setFocusPainted(false);
+        dashboard.setBorder(BorderFactory.createCompoundBorder(
+                BorderFactory.createLineBorder(Theme.border(),1,true),
+                new EmptyBorder(7,11,7,11)
+        ));
+        dashboard.addActionListener(e->showDashboardRoute());
+
+        header.add(words,BorderLayout.WEST);
+        header.add(dashboard,BorderLayout.EAST);
+
+        RoundedPanel contentCard=new RoundedPanel(14);
+        contentCard.setBackground(Theme.panel());
+        contentCard.putClientProperty(
+                "outlineColor",
+                Theme.border()
+        );
+        contentCard.setLayout(new BorderLayout());
+        contentCard.setBorder(new EmptyBorder(4,4,4,4));
+        contentCard.add(page,BorderLayout.CENTER);
+
+        JPanel actions=new JPanel(new FlowLayout(FlowLayout.RIGHT,8,0));
+        actions.setOpaque(false);
+
+        JButton discard=new JButton("Discard Changes");
+        discard.addActionListener(e->showDashboardRoute());
+
+        JButton save=new JButton("Save & Apply");
+        save.putClientProperty("primaryAction",Boolean.TRUE);
+        save.addActionListener(e->{
+            SettingsDialog current=embeddedSettingsSession;
+            if(current!=null)
+                current.saveEmbeddedPage();
+        });
+
+        ThemeStyler.apply(discard,Theme.active());
+        ThemeStyler.apply(save,Theme.active());
+
+        actions.add(discard);
+        actions.add(save);
+
+        shell.add(header,BorderLayout.NORTH);
+        shell.add(contentCard,BorderLayout.CENTER);
+        shell.add(actions,BorderLayout.SOUTH);
+
+        if(workspaceContentHost!=null){
+            workspaceContentHost.removeAll();
+            workspaceContentHost.add(shell,BorderLayout.CENTER);
+            workspaceContentHost.revalidate();
+            workspaceContentHost.repaint();
+        }
+    }
+
+    private void releaseDashboardModules(){
+        stopInformationRotation();
+
+        if(mainShowcase!=null){
+            mainShowcase.disposeShowcase();
+            mainShowcase=null;
+        }
+
+        if(map!=null){
+            map.shutdown();
+            map=null;
+        }
+
+        informationPageStart=0;
+        weatherModule=null;
+        eventsModule=null;
+        celebrationsModule=null;
+        infoStripModule=null;
+        operationsModule=null;
+    }
+
+    private void closeEmbeddedSettingsSession(){
+        SettingsDialog session=embeddedSettingsSession;
+        embeddedSettingsSession=null;
+
+        if(session!=null)
+            session.discardEmbeddedPage();
+    }
+
+    private Permission permissionForSettingsTab(String tab){
+        if(tab==null)return Permission.GENERAL_SETTINGS;
+        return switch(tab){
+            case "General"->Permission.GENERAL_SETTINGS;
+            case "Pinned Locations"->Permission.PINNED_LOCATIONS;
+            case "Routes"->Permission.ROUTES;
+            case "Sports"->Permission.SPORTS;
+            case "Employees"->Permission.EMPLOYEE_OPERATIONS;
+            case "Operations Calendar"->Permission.OPERATIONS_CALENDAR;
+            case "Dashboard Blocks","Operations Workspace"->Permission.DASHBOARD_LAYOUT;
+            case "Main Showcase"->Permission.MAIN_SHOWCASE;
+            case "Media Library"->Permission.MEDIA_LIBRARY;
+            case "Users & Access","Security"->Permission.MANAGE_USERS;
+            case "API Providers"->Permission.API_ADMINISTRATION;
+            case "API Usage"->Permission.API_USAGE;
+            case "Data & Refresh"->Permission.DATA_REFRESH;
+            default->null;
+        };
+    }
+
+    private String workspacePageDescription(String routeTitle){
+        return switch(routeTitle){
+            case "Weather"->"Weather refresh, severe-weather and provider-independent display settings";
+            case "Traffic & Routes"->"Traffic-aware commute routes and destination configuration";
+            case "Operations Calendar"->"Closures, limited service, modified hours and automatic announcements";
+            case "Employee Operations"->"Management employee records, recognition preferences, training, attendance, performance and assignment eligibility";
+            case "Pinned Locations"->"Locations used by maps, weather and operational monitoring";
+            case "Routes"->"Configured traffic routes originating from the primary facility";
+            case "Sports"->"Upcoming team schedules available to North Star modules";
+            case "Main Showcase"->"Announcement media rotation and severe-weather map priority";
+            case "Operations Workspace"->"Choose home modules, information blocks and Operations Snapshot KPIs";
+            case "Information Blocks"->"Configure the compact route, weather and status cards shown on the v4 dashboard";
+            case "Media Library"->"Managed announcements, employee photos and employee showcase media";
+            case "Users & Access"->"Local accounts, role templates, granular permissions and audit access";
+            case "API Providers"->"Provider adapters and protected API credentials";
+            case "API Usage"->"Locally tracked provider usage and configured limits";
+            case "Data & Refresh"->"Refresh cadence and live severe-weather data behavior";
+            case "My Account"->"Signed-in account and password management";
+            default->BrandIdentity.product()+" workspace configuration";
+        };
+    }
+
+    private void applyConfig(AppConfig updated){
+        embeddedSettingsSession=null;
+        config=updated;
+        updated.themeId=AppTheme.NORTH_STAR.id();
+        updated.darkMode=true;
+        buildUi();
+        startRefreshers();
+    }
+
+    private boolean moduleEnabled(String id){
+        return config.workspaceModules.stream().anyMatch(id::equalsIgnoreCase);
+    }
+
+    private void updateClock(){
+        if(dateTimeLabel!=null){
+            LocalDateTime now=LocalDateTime.now();
+            dateTimeLabel.setText(now.format(DateTimeFormatter.ofPattern(
+                    "EEEE, MMMM d, yyyy  •  h:mm:ss a")));
+        }
+    }
+
+    private List<UpcomingCelebration> upcomingCelebrations(int maximum){
+        LocalDate today=LocalDate.now();
+        List<UpcomingCelebration> out=new ArrayList<>();
+        for(CelebrationConfig person:config.celebrations){
+            if(!person.enabled())continue;
+            if(person.employeeOfMonthToday(today))
+                out.add(new UpcomingCelebration(person,today,"Employee of the Month"));
+            if(person.showBirthday()&&person.birthdayMonth()>0&&person.birthdayDay()>0){
+                LocalDate date=nextDate(today,person.birthdayMonth(),person.birthdayDay());
+                out.add(new UpcomingCelebration(person,date,"Happy Birthday"));
+            }
+            if(person.showAnniversary()&&person.hireDate()!=null){
+                LocalDate date=nextDate(today,person.hireDate().getMonthValue(),person.hireDate().getDayOfMonth());
+                int years=Math.max(1,date.getYear()-person.hireDate().getYear());
+                out.add(new UpcomingCelebration(person,date,years+ordinal(years)+" Anniversary"));
+            }
+        }
+        return out.stream()
+                .filter(c->!c.date().isBefore(today))
+                .sorted(Comparator.comparing(UpcomingCelebration::date))
+                .limit(maximum).toList();
+    }
+
+    private static LocalDate nextDate(LocalDate today,int month,int day){
+        LocalDate candidate;
+        try{candidate=LocalDate.of(today.getYear(),month,day);}
+        catch(Exception ex){return today.plusYears(10);}
+        if(candidate.isBefore(today))candidate=candidate.plusYears(1);
+        return candidate;
+    }
+
+    private ImageIcon employeeAvatar(CelebrationConfig person,int size){
+        try{
+            Path file=MediaService.resolve(MediaCategory.EMPLOYEE_PHOTOS,person.photoAsset());
+            if(file!=null){
+                BufferedImage source=OrientedImageLoader.load(file);
+                if(source!=null){
+                    BufferedImage avatar=new BufferedImage(size,size,BufferedImage.TYPE_INT_ARGB);
+                    Graphics2D g=avatar.createGraphics();
+                    g.setRenderingHint(RenderingHints.KEY_ANTIALIASING,RenderingHints.VALUE_ANTIALIAS_ON);
+                    g.setClip(new Ellipse2D.Double(0,0,size,size));
+                    double scale=Math.max(size/(double)source.getWidth(),size/(double)source.getHeight());
+                    int w=(int)Math.ceil(source.getWidth()*scale),h=(int)Math.ceil(source.getHeight()*scale);
+                    g.drawImage(source,(size-w)/2,(size-h)/2,w,h,null);g.dispose();
+                    return new ImageIcon(avatar);
+                }
+            }
+        }catch(Exception ignored){}
+        BufferedImage avatar=new BufferedImage(size,size,BufferedImage.TYPE_INT_ARGB);
+        Graphics2D g=avatar.createGraphics();g.setColor(Theme.panel2());g.fillOval(0,0,size,size);g.setColor(Color.WHITE);g.setFont(new Font(Font.SANS_SERIF,Font.BOLD,size/3));
+        String initials=initials(person.name());FontMetrics fm=g.getFontMetrics();g.drawString(initials,(size-fm.stringWidth(initials))/2,(size+fm.getAscent()-fm.getDescent())/2);g.dispose();return new ImageIcon(avatar);
+    }
+
+    private JLabel empty(String text){JLabel label=new JLabel(text);label.setForeground(Theme.muted());label.setFont(new Font(Font.SANS_SERIF,Font.PLAIN,10));return label;}
+    private JButton navUtilityButton(String text){JButton b=new JButton(text);b.setForeground(Theme.text());b.setBackground(Theme.panel2());b.setFocusPainted(false);b.setBorder(BorderFactory.createLineBorder(Theme.border(),1,true));b.setPreferredSize(new Dimension(40,34));return b;}
+    private String greeting(){int h=LocalTime.now().getHour();return h<12?"Good morning":h<17?"Good afternoon":"Good evening";}
+    private static String firstName(String name){if(name==null||name.isBlank())return "Team";return name.trim().split("\\s+")[0];}
+    private static String shortHour(String value){try{return LocalDateTime.parse(value).format(DateTimeFormatter.ofPattern("ha")).toLowerCase();}catch(Exception e){return value.length()>5?value.substring(value.length()-5):value;}}
+    private static String safe(String s){return s==null?"":s;}
+    private static String formatValue(double v){if(!Double.isFinite(v))return "—";if(Math.abs(v-Math.rint(v))<.00001)return String.format(Locale.US,"%,.0f",v);return String.format(Locale.US,"%,.1f",v);}
+    private static String ordinal(int n){int m=n%100;if(m>=11&&m<=13)return "th";return switch(n%10){case 1->"st";case 2->"nd";case 3->"rd";default->"th";};}
+    private static String initials(String name){if(name==null||name.isBlank())return "?";String[] parts=name.trim().split("\\s+");StringBuilder b=new StringBuilder();for(String p:parts)if(!p.isBlank())b.append(Character.toUpperCase(p.charAt(0)));return b.substring(0,Math.min(2,b.length()));}
+
+    @Override public void dispose(){
+        closeEmbeddedSettingsSession();
+        stopRefreshers();
+        if(map!=null)map.shutdown();
+        if(clockTimer!=null)clockTimer.stop();
+        super.dispose();
+    }
+
+    private record UpcomingCelebration(
+            CelebrationConfig person,
+            LocalDate date,
+            String type){}
+}

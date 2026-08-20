@@ -1,0 +1,9 @@
+<component name="libraryTable">
+  <library name="NorthStarOperations">
+    <CLASSES>
+      <root url="jar://$PROJECT_DIR$/NorthStarOperations.jar!/" />
+    </CLASSES>
+    <JAVADOC />
+    <SOURCES />
+  </library>
+</component>
