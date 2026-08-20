@@ -240,7 +240,7 @@ public final class EmployeeOperationsPanel extends JPanel {
         addField(content,y++,"Phone",phone);
         JLabel phoneHelp=new JLabel(
                 "<html>Enter a normal U.S. phone format such as "
-                +"205-799-9890. NORTH STAR validates and converts it to E.164 "
+                +"123-456-7890. NORTH STAR validates and converts it to E.164 "
                 +"internally for Twilio/provider use.</html>");
         addFull(content,y++,phoneHelp);
 
@@ -425,6 +425,7 @@ public final class EmployeeOperationsPanel extends JPanel {
 
     private JComponent callInPanel(){
         SettingsFormPanel content=formPanel();
+        content.setBorder(new EmptyBorder(26,24,36,24));
         int y=0;
 
         addSectionTitle(content,y++,"Call-In Service");
@@ -497,7 +498,7 @@ public final class EmployeeOperationsPanel extends JPanel {
         test.setOpaque(false);
         test.setBorder(new EmptyBorder(2,0,2,0));
         GridBagConstraints c=new GridBagConstraints();
-        c.insets=new Insets(7,5,7,5);
+        c.insets=new Insets(8,6,8,6);
         c.fill=GridBagConstraints.HORIZONTAL;
         c.anchor=GridBagConstraints.WEST;
 
@@ -1174,7 +1175,7 @@ public final class EmployeeOperationsPanel extends JPanel {
     ){
         GridBagConstraints c=new GridBagConstraints();
         c.gridy=row;
-        c.insets=new Insets(7,5,7,5);
+        c.insets=new Insets(8,6,8,6);
         c.anchor=GridBagConstraints.WEST;
 
         c.gridx=0;
@@ -1204,7 +1205,7 @@ public final class EmployeeOperationsPanel extends JPanel {
         c.gridwidth=2;
         c.weightx=1;
         c.fill=GridBagConstraints.HORIZONTAL;
-        c.insets=new Insets(7,5,7,5);
+        c.insets=new Insets(8,6,8,6);
         panel.add(component,c);
     }
 
@@ -1225,18 +1226,45 @@ public final class EmployeeOperationsPanel extends JPanel {
             int row,
             String title
     ){
-        JPanel section=new JPanel(new BorderLayout(10,0));
+        /*
+         * Section headings previously shared the same compact GridBag row
+         * sizing as ordinary fields.  On shorter windows/macOS this let the
+         * layout compress the heading until the text was partially hidden by
+         * the separator or tab content border.  Give every section its own
+         * protected vertical space so headings remain readable at any scroll
+         * position.
+         */
+        JPanel section=new JPanel();
         section.setOpaque(false);
-        section.setBorder(new EmptyBorder(10,0,4,0));
+        section.setLayout(new BoxLayout(section,BoxLayout.Y_AXIS));
+        section.setBorder(new EmptyBorder(14,0,8,0));
 
         JLabel label=new JLabel(title);
         label.setFont(new Font(Font.SANS_SERIF,Font.BOLD,14));
-        section.add(label,BorderLayout.WEST);
+        label.setAlignmentX(Component.LEFT_ALIGNMENT);
+        section.add(label);
+        section.add(Box.createVerticalStrut(8));
 
         JSeparator separator=new JSeparator();
-        section.add(separator,BorderLayout.SOUTH);
+        separator.setAlignmentX(Component.LEFT_ALIGNMENT);
+        separator.setMaximumSize(new Dimension(Integer.MAX_VALUE,1));
+        section.add(separator);
 
-        addFull(panel,row,section);
+        Dimension protectedSize=new Dimension(320,52);
+        section.setPreferredSize(protectedSize);
+        section.setMinimumSize(new Dimension(120,52));
+        section.setMaximumSize(new Dimension(Integer.MAX_VALUE,52));
+
+        GridBagConstraints c=new GridBagConstraints();
+        c.gridy=row;
+        c.gridx=0;
+        c.gridwidth=2;
+        c.weightx=1;
+        c.weighty=0;
+        c.fill=GridBagConstraints.HORIZONTAL;
+        c.anchor=GridBagConstraints.NORTHWEST;
+        c.insets=new Insets(row==0?12:16,5,8,5);
+        panel.add(section,c);
     }
 
     private static void normalizeInputHeight(Component component){

@@ -73,6 +73,8 @@ public final class OperationsWorkspaceFrame extends JFrame {
     private JPanel workspaceContentHost;
     private SettingsDialog embeddedSettingsSession;
     private String activeWorkspaceRoute="Dashboard";
+    private final Map<String,JButton> sidebarRouteButtons=
+            new LinkedHashMap<>();
     private JLabel dateTimeLabel;
     private JLabel topWeatherLabel;
     private JLabel topTrafficLabel;
@@ -274,6 +276,7 @@ public final class OperationsWorkspaceFrame extends JFrame {
 
     private void showDashboardRoute(){
         activeWorkspaceRoute="Dashboard";
+        updateSidebarSelection();
         closeEmbeddedSettingsSession();
         releaseDashboardModules();
 
@@ -287,6 +290,7 @@ public final class OperationsWorkspaceFrame extends JFrame {
     }
 
     private JComponent buildSidebar(){
+        sidebarRouteButtons.clear();
         JPanel side=new JPanel();
         side.setBackground(Theme.panel());
         side.setLayout(new BoxLayout(side,BoxLayout.Y_AXIS));
@@ -300,7 +304,7 @@ public final class OperationsWorkspaceFrame extends JFrame {
                 side,"☀  Weather","Weather","Data & Refresh",
                 Permission.DATA_REFRESH);
         addPermittedSidePage(
-                side,"▰  Traffic","Traffic & Routes","Routes",
+                side,"▰  Traffic & Routes","Traffic & Routes","Routes",
                 Permission.ROUTES);
         addPermittedSidePage(
                 side,"▣  Operations Calendar","Operations Calendar",
@@ -312,8 +316,6 @@ public final class OperationsWorkspaceFrame extends JFrame {
                 side,"●  Pinned Locations","Pinned Locations",
                 "Pinned Locations",Permission.PINNED_LOCATIONS);
         addPermittedSidePage(
-                side,"⇢  Routes","Routes","Routes",Permission.ROUTES);
-        addPermittedSidePage(
                 side,"◉  Sports","Sports","Sports",Permission.SPORTS);
         addPermittedSidePage(
                 side,"▤  Main Showcase","Main Showcase",
@@ -322,12 +324,15 @@ public final class OperationsWorkspaceFrame extends JFrame {
         side.add(Box.createVerticalStrut(12));
         side.add(sideSectionLabel("ADMINISTRATION"));
 
+        /*
+         * v1.0.7: Information Blocks and the former Operations Workspace page
+         * are one Settings page now. The sidebar must route to the exact tab
+         * title created by SettingsDialog; otherwise detachTabForWorkspace()
+         * returns null and incorrectly reports the page as unavailable.
+         */
         addPermittedSidePage(
-                side,"⚙  Workspace Setup","Operations Workspace",
-                "Operations Workspace",Permission.DASHBOARD_LAYOUT);
-        addPermittedSidePage(
-                side,"▦  Information Blocks","Information Blocks",
-                "Dashboard Blocks",Permission.DASHBOARD_LAYOUT);
+                side,"⚙  Workspace Setup","Workspace Setup",
+                "Workspace Setup",Permission.DASHBOARD_LAYOUT);
         addPermittedSidePage(
                 side,"▧  Media Library","Media Library",
                 "Media Library",Permission.MEDIA_LIBRARY);
@@ -374,17 +379,10 @@ public final class OperationsWorkspaceFrame extends JFrame {
     }
 
     private JButton sideDashboardButton(){
-        JButton button=new JButton("▦  Dashboard");
-        button.setHorizontalAlignment(SwingConstants.LEFT);
-        button.setFont(new Font(Font.SANS_SERIF,Font.BOLD,12));
-        button.setForeground(Color.WHITE);
-        button.setBackground(Theme.panel2());
-        button.setOpaque(true);
-        button.setContentAreaFilled(true);
-        button.setFocusPainted(false);
-        button.setBorder(new EmptyBorder(10,10,10,10));
-        button.setMaximumSize(new Dimension(Integer.MAX_VALUE,42));
+        JButton button=createSidebarButton("▦  Dashboard",true);
+        sidebarRouteButtons.put("Dashboard",button);
         button.addActionListener(e->showDashboardRoute());
+        updateSidebarSelection();
         return button;
     }
 
@@ -406,19 +404,39 @@ public final class OperationsWorkspaceFrame extends JFrame {
             String settingsTab,
             Permission permission
     ){
-        JButton button=new JButton(text);
-        button.setHorizontalAlignment(SwingConstants.LEFT);
-        button.setFont(new Font(Font.SANS_SERIF,Font.PLAIN,12));
-        button.setForeground(Theme.muted());
-        button.setBackground(new Color(0,0,0,0));
-        button.setOpaque(false);
-        button.setContentAreaFilled(false);
-        button.setFocusPainted(false);
-        button.setBorder(new EmptyBorder(9,10,9,10));
-        button.setMaximumSize(new Dimension(Integer.MAX_VALUE,40));
+        JButton button=createSidebarButton(text,false);
+        sidebarRouteButtons.put(routeTitle,button);
         button.addActionListener(e->openWorkspaceSettingsPage(
                 routeTitle,settingsTab,permission));
+        updateSidebarSelection();
         return button;
+    }
+
+    private JButton createSidebarButton(String text,boolean bold){
+        RoundedSidebarButton button=new RoundedSidebarButton(text);
+        button.setHorizontalAlignment(SwingConstants.LEFT);
+        button.setFont(new Font(
+                Font.SANS_SERIF,
+                bold?Font.BOLD:Font.PLAIN,
+                12
+        ));
+        button.setFocusPainted(false);
+        button.setBorder(new EmptyBorder(9,12,9,12));
+        button.setMaximumSize(new Dimension(Integer.MAX_VALUE,42));
+        button.setAlignmentX(Component.LEFT_ALIGNMENT);
+        button.setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
+        return button;
+    }
+
+    private void updateSidebarSelection(){
+        for(Map.Entry<String,JButton> entry:sidebarRouteButtons.entrySet()){
+            boolean active=entry.getKey().equalsIgnoreCase(
+                    activeWorkspaceRoute==null?"":activeWorkspaceRoute);
+            JButton button=entry.getValue();
+            button.putClientProperty("northstar.sidebar.active",active);
+            button.setForeground(active?Color.WHITE:Theme.muted());
+            button.repaint();
+        }
     }
 
     private JComponent buildSummaryStrip(){
@@ -924,18 +942,13 @@ public final class OperationsWorkspaceFrame extends JFrame {
         return switch(kind){
             case "CHRISTMAS"->"christmas";
             case "THANKSGIVING"->"thanksgiving";
-            case "INDEPENDENCE"->"independence_day";
-            case "NEW_YEAR"->"new_year";
+            case "INDEPENDENCE","NEW_YEAR"->"fireworks";
             case "HALLOWEEN"->"halloween";
-            case "VALENTINE"->"valentine";
-            case "ST_PATRICK"->"st_patricks";
-            case "LABOR"->"labor_day";
-            case "PRESIDENTS"->"presidents_day";
-            case "MEMORIAL"->"memorial_day";
-            case "VETERANS"->"veterans_day";
-            case "JUNETEENTH"->"juneteenth";
-            case "MLK"->"mlk_day";
+            case "GOOD_FRIDAY"->"good_friday";
             case "EASTER"->"easter";
+            case "LABOR","MEMORIAL","VETERANS"->"american";
+            case "FOOD"->"food";
+            case "TOAST"->"toast";
             default->"calendar_generic";
         };
     }
@@ -1233,6 +1246,14 @@ public final class OperationsWorkspaceFrame extends JFrame {
 
         if(name.contains("christmas"))return "CHRISTMAS";
         if(name.contains("thanksgiving"))return "THANKSGIVING";
+        if(name.contains("good friday"))return "GOOD_FRIDAY";
+        if(name.contains("catering")
+                ||name.contains("breakfast")
+                ||name.contains("lunch")
+                ||name.contains("dinner")
+                ||name.contains("food"))return "FOOD";
+        if(name.contains("toast")
+                ||name.contains("celebration reception"))return "TOAST";
         if(name.contains("independence")
                 ||name.contains("fourth of july")
                 ||name.contains("4th of july"))return "INDEPENDENCE";
@@ -1356,38 +1377,51 @@ public final class OperationsWorkspaceFrame extends JFrame {
                 ?""
                 :item.type().toLowerCase(Locale.ROOT);
         String assetKey=type.contains("anniversary")
-                ?"anniversary"
+                ?"confetti"
                 :type.contains("employee of the month")
-                    ?"employee_of_month"
+                    ?"toast"
                     :"birthday";
         Icon approved=WorkspaceGlyphs.icon(assetKey,size,Theme.text());
         if(approved!=null)return approved;
 
-        BufferedImage image=new BufferedImage(
-                size,size,BufferedImage.TYPE_INT_ARGB);
-        Graphics2D g=image.createGraphics();
+        /*
+         * Birthday currently uses the built-in gift glyph. Paint it as vector
+         * geometry at display time instead of rasterizing it into a 40px image;
+         * this keeps the recognition tile crisp on Retina/HiDPI screens.
+         */
+        return new Icon(){
+            @Override public int getIconWidth(){ return size; }
+            @Override public int getIconHeight(){ return size; }
 
-        try{
-            g.setRenderingHint(
-                    RenderingHints.KEY_ANTIALIASING,
-                    RenderingHints.VALUE_ANTIALIAS_ON
-            );
-            g.setStroke(new BasicStroke(
-                    Math.max(2f,size/18f),
-                    BasicStroke.CAP_ROUND,
-                    BasicStroke.JOIN_ROUND
-            ));
-
-            if(type.contains("anniversary")){
-                drawConfettiPopper(g,size);
-            }else{
-                drawGift(g,size);
+            @Override public void paintIcon(
+                    Component component,
+                    Graphics graphics,
+                    int x,
+                    int y
+            ){
+                Graphics2D g=(Graphics2D)graphics.create();
+                try{
+                    g.translate(x,y);
+                    g.setRenderingHint(
+                            RenderingHints.KEY_ANTIALIASING,
+                            RenderingHints.VALUE_ANTIALIAS_ON);
+                    g.setRenderingHint(
+                            RenderingHints.KEY_RENDERING,
+                            RenderingHints.VALUE_RENDER_QUALITY);
+                    g.setStroke(new BasicStroke(
+                            Math.max(2f,size/18f),
+                            BasicStroke.CAP_ROUND,
+                            BasicStroke.JOIN_ROUND
+                    ));
+                    if(type.contains("anniversary"))
+                        drawConfettiPopper(g,size);
+                    else
+                        drawGift(g,size);
+                }finally{
+                    g.dispose();
+                }
             }
-        }finally{
-            g.dispose();
-        }
-
-        return new ImageIcon(image);
+        };
     }
 
     private void drawGift(Graphics2D g,int size){
@@ -1679,11 +1713,29 @@ public final class OperationsWorkspaceFrame extends JFrame {
             List<String> configured
     ){
         stopInformationRotation();
+        stopInformationTicker();
 
+        int visibleSlots=Math.max(
+                1,
+                Math.min(config.workspaceInfoBlockCount,workspaceMetricColumnCount())
+        );
+        int availableWidth=Math.max(
+                1,
+                card.getWidth()>0
+                        ?card.getWidth()
+                        :Math.max(900,getContentPane().getWidth()-260)
+        );
         int slotWidth=Math.max(
+                150,
+                availableWidth/visibleSlots
+        );
+
+        int slotWidthLegacy=Math.max(
                 165,
                 Math.max(1,card.getWidth())/workspaceMetricColumnCount()
         );
+        // slotWidthLegacy is retained only for source compatibility/documentation.
+        // The unified visible-at-once setting above controls actual ticker slot width.
 
         informationTickerTrack=new JPanel();
         informationTickerTrack.setOpaque(false);
@@ -1741,8 +1793,6 @@ public final class OperationsWorkspaceFrame extends JFrame {
     }
 
     private void startInformationTicker(){
-        stopInformationTicker();
-
         if(informationTickerViewport==null
                 ||informationTickerTrack==null
                 ||informationTickerCycleWidth<=0)
@@ -2313,7 +2363,11 @@ public final class OperationsWorkspaceFrame extends JFrame {
     private String kpiStatus(OperationsKpiConfig kpi){
         if(!kpi.targetConfigured())return "LIVE VALUE";
         String target="Target "+formatValue(kpi.targetValue())+safe(kpi.unit());
-        return (kpi.targetMet()?"✓ TARGET MET • ":"△ BELOW TARGET • ")+target;
+        if(kpi.targetMet())
+            return "✓ TARGET MET • "+target;
+        return (kpi.effectiveHigherIsBetter()
+                ?"△ BELOW TARGET • "
+                :"△ ABOVE TARGET • ")+target;
     }
 
     private void startRefreshers(){
@@ -2518,6 +2572,7 @@ public final class OperationsWorkspaceFrame extends JFrame {
         closeEmbeddedSettingsSession();
         releaseDashboardModules();
         activeWorkspaceRoute=routeTitle;
+        updateSidebarSelection();
 
         JPanel shell=new JPanel(new BorderLayout(0,12));
         shell.setBackground(Theme.bg());
@@ -2658,6 +2713,7 @@ public final class OperationsWorkspaceFrame extends JFrame {
 
         embeddedSettingsSession=session;
         activeWorkspaceRoute=routeTitle;
+        updateSidebarSelection();
 
         JPanel shell=new JPanel(new BorderLayout(0,12));
         shell.setBackground(Theme.bg());
@@ -2793,11 +2849,10 @@ public final class OperationsWorkspaceFrame extends JFrame {
             case "Operations Calendar"->"Closures, limited service, modified hours and automatic announcements";
             case "Employee Operations"->"Management employee records, recognition preferences, training, attendance, performance and assignment eligibility";
             case "Pinned Locations"->"Locations used by maps, weather and operational monitoring";
-            case "Routes"->"Configured traffic routes originating from the primary facility";
             case "Sports"->"Upcoming team schedules available to North Star modules";
             case "Main Showcase"->"Announcement media rotation and severe-weather map priority";
             case "Operations Workspace"->"Choose home modules, information blocks and Operations Snapshot KPIs";
-            case "Information Blocks"->"Configure the compact route, weather and status cards shown on the v4 dashboard";
+            case "Information Blocks"->"Configure the compact route, weather and status cards shown on the North Star dashboard";
             case "Media Library"->"Managed announcements, employee photos and employee showcase media";
             case "Users & Access"->"Local accounts, role templates, granular permissions and audit access";
             case "API Providers"->"Provider adapters and protected API credentials";
@@ -2811,8 +2866,6 @@ public final class OperationsWorkspaceFrame extends JFrame {
     private void applyConfig(AppConfig updated){
         embeddedSettingsSession=null;
         config=updated;
-        updated.themeId=AppTheme.NORTH_STAR.id();
-        updated.darkMode=true;
         buildUi();
         startRefreshers();
     }
@@ -2898,6 +2951,55 @@ public final class OperationsWorkspaceFrame extends JFrame {
         if(map!=null)map.shutdown();
         if(clockTimer!=null)clockTimer.stop();
         super.dispose();
+    }
+
+    private static final class RoundedSidebarButton extends JButton {
+        private RoundedSidebarButton(String text){
+            super(text);
+            setOpaque(false);
+            setContentAreaFilled(false);
+        }
+
+        @Override protected void paintComponent(Graphics g){
+            boolean active=Boolean.TRUE.equals(
+                    getClientProperty("northstar.sidebar.active"));
+            Graphics2D g2=(Graphics2D)g.create();
+            try{
+                g2.setRenderingHint(
+                        RenderingHints.KEY_ANTIALIASING,
+                        RenderingHints.VALUE_ANTIALIAS_ON);
+                if(active){
+                    Color accent=Theme.accent();
+                    g2.setColor(new Color(
+                            accent.getRed(),
+                            accent.getGreen(),
+                            accent.getBlue(),
+                            70
+                    ));
+                    g2.fillRoundRect(
+                            2,2,
+                            Math.max(0,getWidth()-4),
+                            Math.max(0,getHeight()-4),
+                            14,14
+                    );
+                    g2.setColor(new Color(
+                            accent.getRed(),
+                            accent.getGreen(),
+                            accent.getBlue(),
+                            145
+                    ));
+                    g2.drawRoundRect(
+                            2,2,
+                            Math.max(0,getWidth()-5),
+                            Math.max(0,getHeight()-5),
+                            14,14
+                    );
+                }
+            }finally{
+                g2.dispose();
+            }
+            super.paintComponent(g);
+        }
     }
 
     private record UpcomingCelebration(

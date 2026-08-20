@@ -49,7 +49,7 @@ public final class SettingsDialog extends JDialog {
     private final JCheckBox showHeader=new JCheckBox("Show title/header");
     private final JCheckBox showTicker=new JCheckBox("Show scrolling ticker");
     private final JCheckBox fullscreen=new JCheckBox("Fullscreen on startup");
-    private final JComboBox<AppTheme> themeSelector=new JComboBox<>(new AppTheme[]{AppTheme.NORTH_STAR});
+    private final JComboBox<AppTheme> themeSelector=new JComboBox<>(AppTheme.values());
     private final JPanel themePreview=new JPanel();
     private final JCheckBox automaticHolidayThemes=new JCheckBox(
             "Automatically switch to holiday / seasonal themes");
@@ -167,7 +167,7 @@ public final class SettingsDialog extends JDialog {
     private final JCheckBox workspaceInfoStrip=
             new JCheckBox("Custom Information Blocks");
     private final JComboBox<Integer> workspaceInfoBlockCount=
-            new JComboBox<>(new Integer[]{2,3,4,5,6});
+            new JComboBox<>(new Integer[]{2,3,4,5,6,7,8});
     private final JComboBox<String> workspaceInfoMovementMode=
             new JComboBox<>(new String[]{
                     "Static",
@@ -253,12 +253,7 @@ public final class SettingsDialog extends JDialog {
                 Permission.OPERATIONS_CALENDAR
         );
         addPermittedTab(
-                "Dashboard Blocks",
-                widgets(),
-                Permission.DASHBOARD_LAYOUT
-        );
-        addPermittedTab(
-                "Operations Workspace",
+                "Workspace Setup",
                 operationsWorkspace(),
                 Permission.DASHBOARD_LAYOUT
         );
@@ -306,6 +301,11 @@ public final class SettingsDialog extends JDialog {
         applyResponsiveWindowSize(owner,tabs);
 
         automaticSevereWeather.addActionListener(e->updateAutomaticSevereControls());
+        themeSelector.addActionListener(e->{
+            updateThemePreview();
+            AppTheme selected=(AppTheme)themeSelector.getSelectedItem();
+            if(selected!=null)applySettingsTheme(selected);
+        });
 
         loadValues();
         installEmployeeOfMonthSelectionGuard();
@@ -313,7 +313,7 @@ public final class SettingsDialog extends JDialog {
         updateEmployeeOfMonthStatus();
         installOperationTypeBehavior();
         updateAutomaticSevereControls();
-        applySettingsTheme(AppTheme.NORTH_STAR);
+        applySettingsTheme(AppTheme.fromId(cfg.themeId));
     }
 
     private JPanel buildSettingsBrandBar(){
@@ -746,8 +746,15 @@ public final class SettingsDialog extends JDialog {
 
         JLabel identity=new JLabel(
                 "<html><b>Application identity:</b> North Star Operations Intelligence. "
-              + "The interface remains North Star while seasonal overlays may activate automatically.</html>");
+              + "Branding remains North Star while the interface palette can be changed below.</html>");
         addFull(p,y++,identity);
+
+        addRow(p,y++,"Interface theme",themeSelector);
+        themePreview.setPreferredSize(new Dimension(600,42));
+        themePreview.setMinimumSize(new Dimension(300,42));
+        themePreview.setBorder(BorderFactory.createTitledBorder("Theme preview"));
+        addFull(p,y++,themePreview);
+
         addFull(p,y++,automaticHolidayThemes);
 
         JLabel holidayStatus=new JLabel(
@@ -1426,30 +1433,23 @@ public final class SettingsDialog extends JDialog {
         JPanel infoTop=new JPanel(new FlowLayout(FlowLayout.LEFT,10,0));
         infoTop.setOpaque(false);
         infoTop.add(workspaceInfoStrip);
-        infoTop.add(new JLabel("Visible at once:"));
-        infoTop.add(workspaceInfoBlockCount);
-        infoTop.add(Box.createHorizontalStrut(10));
-        infoTop.add(new JLabel("Movement:"));
-        infoTop.add(workspaceInfoMovementMode);
-        infoTop.add(new JLabel("Page interval:"));
-        infoTop.add(workspaceInfoScrollSeconds);
-        infoTop.add(new JLabel("sec"));
-        infoTop.add(new JLabel("Ticker speed:"));
-        infoTop.add(workspaceInfoTickerSpeed);
-        infoTop.add(new JLabel("px/sec"));
 
         JLabel infoHelp=new JLabel(
-                "<html>These compact metrics appear directly above Operations Snapshot "
-              + "and reuse the choices configured under <b>Information Blocks</b>. "
-              + "Choose <b>Static</b> for a fixed row, <b>Paged Rotation</b> for the "
-              + "existing page-by-page behavior, or <b>Continuous Ticker</b> to move the "
-              + "entire Information row smoothly from right to left. Routes, weather, alerts, "
-              + "wind, forecast, sports and status information all use the same mode.</html>"
+                "<html><b>Information is now configured in one place.</b> "
+              + "Use the <b>Information Row & Dashboard Layout</b> section directly below "
+              + "to choose the 6/8/10/12 items, how many are visible at once, and "
+              + "whether the row is Static, Paged Rotation, or a Continuous Ticker. "
+              + "This checkbox controls whether that Information row appears on the dashboard.</html>"
         );
 
         infoStrip.add(infoTop,BorderLayout.NORTH);
         infoStrip.add(infoHelp,BorderLayout.CENTER);
         addFull(p,y++,infoStrip);
+
+        JPanel informationSetup=widgets();
+        informationSetup.setBorder(BorderFactory.createTitledBorder(
+                "Information Row & Dashboard Layout"));
+        addFull(p,y++,informationSetup);
 
         workspaceKpiTable.setRowHeight(30);
         workspaceKpiTable.setSelectionMode(ListSelectionModel.SINGLE_SELECTION);
@@ -1550,12 +1550,49 @@ public final class SettingsDialog extends JDialog {
         JPanel controls=new JPanel();
         controls.setLayout(new BoxLayout(controls,BoxLayout.Y_AXIS));
 
-        JPanel countRow=new JPanel(new FlowLayout(FlowLayout.LEFT,10,0));
-        countRow.setAlignmentX(Component.LEFT_ALIGNMENT);
-        countRow.add(new JLabel("Visible information blocks:"));
+        RoundedPanel informationControls=new RoundedPanel(16);
+        informationControls.setLayout(new BorderLayout(10,8));
+        informationControls.setBorder(
+                BorderFactory.createEmptyBorder(12,14,12,14));
+        informationControls.setAlignmentX(Component.LEFT_ALIGNMENT);
+
+        JPanel countRow=new JPanel(new FlowLayout(FlowLayout.LEFT,10,4));
+        countRow.setOpaque(false);
+        countRow.add(new JLabel("Configured items:"));
         countRow.add(blockCount);
-        countRow.add(new JLabel("Use 10–12 on large 1080p/4K displays."));
-        controls.add(countRow);
+        countRow.add(new JLabel("Visible at once:"));
+        countRow.add(workspaceInfoBlockCount);
+        countRow.add(Box.createHorizontalStrut(12));
+        countRow.add(new JLabel("Movement:"));
+        countRow.add(workspaceInfoMovementMode);
+
+        JPanel motionRow=new JPanel(new FlowLayout(FlowLayout.LEFT,10,4));
+        motionRow.setOpaque(false);
+        motionRow.add(new JLabel("Page interval:"));
+        motionRow.add(workspaceInfoScrollSeconds);
+        motionRow.add(new JLabel("sec"));
+        motionRow.add(Box.createHorizontalStrut(12));
+        motionRow.add(new JLabel("Ticker speed:"));
+        motionRow.add(workspaceInfoTickerSpeed);
+        motionRow.add(new JLabel("px/sec"));
+
+        JLabel unifiedHelp=new JLabel(
+                "<html>This page is the single source of truth for the dashboard "
+              + "<b>Information</b> row. <b>Configured items</b> determines how many "
+              + "selectors appear below. <b>Visible at once</b> controls the fixed viewport. "
+              + "If 12 items are configured and Continuous Ticker is selected, all 12 travel "
+              + "through that viewport and loop continuously.</html>"
+        );
+
+        JPanel rows=new JPanel();
+        rows.setOpaque(false);
+        rows.setLayout(new BoxLayout(rows,BoxLayout.Y_AXIS));
+        rows.add(countRow);
+        rows.add(motionRow);
+
+        informationControls.add(rows,BorderLayout.NORTH);
+        informationControls.add(unifiedHelp,BorderLayout.CENTER);
+        controls.add(informationControls);
         controls.add(Box.createVerticalStrut(14));
 
         RoundedPanel layoutCard=new RoundedPanel(16);
@@ -1607,9 +1644,27 @@ public final class SettingsDialog extends JDialog {
 
         outer.add(controls,BorderLayout.NORTH);
 
-        JScrollPane scroll=new JScrollPane(widgetRows);
-        scroll.setBorder(BorderFactory.createEmptyBorder(12,0,0,0));
+        /*
+         * v1.0.8: The unified Workspace Setup embeds this panel in a larger
+         * GridBag page. Without an explicit selector viewport height,
+         * BorderLayout.CENTER collapses to essentially one combo-box row.
+         * Reserve enough vertical space for all configured Information Block
+         * selectors while retaining an internal scrollbar on smaller screens.
+         */
+        JScrollPane scroll=new JScrollPane(
+                widgetRows,
+                ScrollPaneConstants.VERTICAL_SCROLLBAR_AS_NEEDED,
+                ScrollPaneConstants.HORIZONTAL_SCROLLBAR_NEVER
+        );
+        scroll.setBorder(BorderFactory.createTitledBorder(
+                "Information Block Selections"));
+        scroll.getVerticalScrollBar().setUnitIncrement(18);
+        scroll.setPreferredSize(new Dimension(900,360));
+        scroll.setMinimumSize(new Dimension(500,260));
         outer.add(scroll,BorderLayout.CENTER);
+
+        outer.setPreferredSize(new Dimension(900,690));
+        outer.setMinimumSize(new Dimension(500,560));
 
         blockCount.addActionListener(e->rebuildWidgetRows());
         return outer;
@@ -1777,7 +1832,7 @@ public final class SettingsDialog extends JDialog {
         fullscreen.setSelected(cfg.fullscreen);
         loginRequiredOnStartup.setSelected(cfg.loginRequiredOnStartup);
         protectApiSettings.setSelected(cfg.protectApiSettings);
-        themeSelector.setSelectedItem(AppTheme.NORTH_STAR);
+        themeSelector.setSelectedItem(AppTheme.fromId(cfg.themeId));
         updateThemePreview();
         automaticHolidayThemes.setSelected(cfg.automaticHolidayThemes);
         themeEffects.setSelected(cfg.themeOverlayEffects);
@@ -1883,7 +1938,7 @@ public final class SettingsDialog extends JDialog {
         workspaceOperationsSnapshot.setSelected(cfg.workspaceModules.contains("OPERATIONS_SNAPSHOT"));
         workspaceInfoStrip.setSelected(cfg.workspaceInfoStripEnabled);
         workspaceInfoBlockCount.setSelectedItem(
-                Math.max(2,Math.min(6,cfg.workspaceInfoBlockCount)));
+                Math.max(2,Math.min(8,cfg.workspaceInfoBlockCount)));
         workspaceInfoMovementMode.setSelectedItem(
                 switch(cfg.workspaceInfoMovementMode){
                     case "PAGED"->"Paged Rotation";
@@ -1909,7 +1964,7 @@ public final class SettingsDialog extends JDialog {
                     Double.isFinite(kpi.targetValue())
                             ?formatSettingsNumber(kpi.targetValue()):"",
                     kpi.unit(),
-                    kpi.higherIsBetter()?"Higher is better":"Lower is better",
+                    kpi.effectiveHigherIsBetter()?"Higher is better":"Lower is better",
                     kpi.dataSourceId(),
                     kpi.enabled()
             });
@@ -2165,7 +2220,8 @@ public final class SettingsDialog extends JDialog {
             cfg.fullscreen=fullscreen.isSelected();
             cfg.loginRequiredOnStartup=loginRequiredOnStartup.isSelected();
             cfg.protectApiSettings=protectApiSettings.isSelected();
-            AppTheme selected=AppTheme.NORTH_STAR;
+            AppTheme selected=(AppTheme)themeSelector.getSelectedItem();
+            if(selected==null)selected=AppTheme.NORTH_STAR;
             cfg.themeId=selected.id();
             cfg.automaticHolidayThemes=automaticHolidayThemes.isSelected();
             cfg.darkMode=selected.dark();
@@ -2359,7 +2415,7 @@ public final class SettingsDialog extends JDialog {
             cfg.workspaceInfoStripEnabled=workspaceInfoStrip.isSelected();
             Object infoCount=workspaceInfoBlockCount.getSelectedItem();
             cfg.workspaceInfoBlockCount=infoCount instanceof Integer value
-                    ?Math.max(2,Math.min(6,value))
+                    ?Math.max(2,Math.min(8,value))
                     :4;
             String movement=Objects.toString(
                     workspaceInfoMovementMode.getSelectedItem(),

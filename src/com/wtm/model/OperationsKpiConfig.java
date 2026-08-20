@@ -21,9 +21,27 @@ public record OperationsKpiConfig(
         return Double.isFinite(targetValue);
     }
 
+    /**
+     * Certain operational exception metrics have fixed semantics regardless of
+     * older saved configuration: fewer damages, denials and active alerts is
+     * always better. This also repairs legacy profiles that accidentally saved
+     * them as "Higher is better".
+     */
+    public boolean effectiveHigherIsBetter(){
+        String key=((id==null?"":id)+" "+(label==null?"":label))
+                .toLowerCase(java.util.Locale.ROOT);
+        if(key.contains("damage")
+                ||key.contains("floor_denial")
+                ||key.contains("floor denial")
+                ||key.contains("active_alert")
+                ||key.contains("active alert"))
+            return false;
+        return higherIsBetter;
+    }
+
     public boolean targetMet(){
         if(!targetConfigured()) return true;
-        return higherIsBetter
+        return effectiveHigherIsBetter()
                 ? currentValue >= targetValue
                 : currentValue <= targetValue;
     }

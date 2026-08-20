@@ -59,6 +59,8 @@ public final class MediaLibraryPanel extends JPanel {
         });
 
         preview.setOpaque(true);
+        preview.setPreferredSize(new Dimension(900,500));
+        preview.setMinimumSize(new Dimension(560,380));
         preview.setBackground(Theme.panel2());
         preview.setForeground(Theme.muted());
         preview.setBorder(BorderFactory.createLineBorder(Theme.border()));
@@ -68,9 +70,15 @@ public final class MediaLibraryPanel extends JPanel {
                 new JScrollPane(files),
                 preview
         );
-        split.setResizeWeight(.35);
-        split.setDividerLocation(360);
+        split.setResizeWeight(.24);
+        split.setDividerLocation(320);
+        split.setPreferredSize(new Dimension(1320,540));
+        split.setMinimumSize(new Dimension(820,420));
         add(split,BorderLayout.CENTER);
+
+        // Give 16:9 announcement artwork enough room to be judged accurately.
+        setPreferredSize(new Dimension(1380,640));
+        setMinimumSize(new Dimension(860,500));
 
         JButton upload=new JButton("Upload Image");
         JButton delete=new JButton("Delete Selected");
@@ -232,7 +240,9 @@ public final class MediaLibraryPanel extends JPanel {
                     maxW/(double)image.getWidth(),
                     maxH/(double)image.getHeight()
             );
-            scale=Math.min(1.0,scale);
+            // The preview is intentionally presentation-sized. High-resolution
+            // announcement art may scale up or down to use the available area.
+            scale=Math.min(2.0,scale);
 
             int w=Math.max(1,(int)Math.round(image.getWidth()*scale));
             int h=Math.max(1,(int)Math.round(image.getHeight()*scale));

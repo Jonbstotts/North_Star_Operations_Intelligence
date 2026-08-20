@@ -23,7 +23,7 @@ import java.util.concurrent.ConcurrentHashMap;
 public final class WorkspaceGlyphs {
     private static final Map<String, BufferedImage> SOURCE_CACHE=
             new ConcurrentHashMap<>();
-    private static final Map<String, ImageIcon> RENDER_CACHE=
+    private static final Map<String, Icon> RENDER_CACHE=
             new ConcurrentHashMap<>();
 
     private WorkspaceGlyphs(){}
@@ -39,7 +39,10 @@ public final class WorkspaceGlyphs {
         String cacheKey=normalized+":"+size+":"+color.getRGB();
         return RENDER_CACHE.computeIfAbsent(
                 cacheKey,
-                ignored->new ImageIcon(render(source,size,color))
+                ignored->new HighDpiGlyphIcon(
+                        tintFullResolution(source,color),
+                        size
+                )
         );
     }
 
@@ -58,59 +61,81 @@ public final class WorkspaceGlyphs {
         }
     }
 
-    private static BufferedImage render(
+    private static BufferedImage tintFullResolution(
             BufferedImage source,
-            int size,
             Color tint
     ){
-        BufferedImage scaled=new BufferedImage(
-                size,size,BufferedImage.TYPE_INT_ARGB);
-        Graphics2D g=scaled.createGraphics();
-        try{
-            g.setRenderingHint(
-                    RenderingHints.KEY_INTERPOLATION,
-                    RenderingHints.VALUE_INTERPOLATION_BICUBIC);
-            g.setRenderingHint(
-                    RenderingHints.KEY_RENDERING,
-                    RenderingHints.VALUE_RENDER_QUALITY);
-
-            double scale=Math.min(
-                    size/(double)source.getWidth(),
-                    size/(double)source.getHeight());
-            int w=Math.max(1,(int)Math.round(source.getWidth()*scale));
-            int h=Math.max(1,(int)Math.round(source.getHeight()*scale));
-            int x=(size-w)/2;
-            int y=(size-h)/2;
-            g.drawImage(source,x,y,w,h,null);
-        }finally{
-            g.dispose();
-        }
+        BufferedImage out=new BufferedImage(
+                source.getWidth(),
+                source.getHeight(),
+                BufferedImage.TYPE_INT_ARGB
+        );
 
         int rgb=tint.getRGB()&0x00FFFFFF;
-        for(int y=0;y<size;y++){
-            for(int x=0;x<size;x++){
-                int argb=scaled.getRGB(x,y);
+        for(int y=0;y<source.getHeight();y++){
+            for(int x=0;x<source.getWidth();x++){
+                int argb=source.getRGB(x,y);
                 int alpha=(argb>>>24)&0xFF;
                 if(alpha==0)continue;
 
-                // Preserve source alpha/luminance antialiasing while replacing
-                // its color with the active theme's approved glyph color.
                 int r=(argb>>>16)&0xFF;
-                int gg=(argb>>>8)&0xFF;
+                int g=(argb>>>8)&0xFF;
                 int b=argb&0xFF;
-                int luminance=(r*299+gg*587+b*114)/1000;
+                int luminance=(r*299+g*587+b*114)/1000;
                 int effectiveAlpha=(alpha*(255-luminance))/255;
-
-                // Assets may be supplied white-on-transparent or
-                // black-on-transparent. If black-pixel conversion produced
-                // almost no alpha, keep the original source alpha instead.
                 if(effectiveAlpha<alpha/8)
                     effectiveAlpha=alpha;
 
-                scaled.setRGB(
-                        x,y,(effectiveAlpha<<24)|rgb);
+                out.setRGB(x,y,(effectiveAlpha<<24)|rgb);
             }
         }
-        return scaled;
+        return out;
+    }
+
+    /**
+     * Retina/HiDPI-safe glyph. Swing receives logical dimensions, while the
+     * full-resolution source is painted directly through the device transform.
+     * This avoids creating a 40 px bitmap that macOS later enlarges.
+     */
+    private static final class HighDpiGlyphIcon implements Icon {
+        private final BufferedImage source;
+        private final int logicalSize;
+
+        private HighDpiGlyphIcon(BufferedImage source,int logicalSize){
+            this.source=source;
+            this.logicalSize=logicalSize;
+        }
+
+        @Override public int getIconWidth(){ return logicalSize; }
+        @Override public int getIconHeight(){ return logicalSize; }
+
+        @Override public void paintIcon(
+                Component component,
+                Graphics graphics,
+                int x,
+                int y
+        ){
+            Graphics2D g=(Graphics2D)graphics.create();
+            try{
+                g.setRenderingHint(
+                        RenderingHints.KEY_ANTIALIASING,
+                        RenderingHints.VALUE_ANTIALIAS_ON);
+                g.setRenderingHint(
+                        RenderingHints.KEY_INTERPOLATION,
+                        RenderingHints.VALUE_INTERPOLATION_BICUBIC);
+                g.setRenderingHint(
+                        RenderingHints.KEY_RENDERING,
+                        RenderingHints.VALUE_RENDER_QUALITY);
+                g.drawImage(
+                        source,
+                        x,y,
+                        x+logicalSize,y+logicalSize,
+                        0,0,source.getWidth(),source.getHeight(),
+                        null
+                );
+            }finally{
+                g.dispose();
+            }
+        }
     }
 }

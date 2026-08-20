@@ -870,3 +870,60 @@
 - Twilio SMS recipient and from-number values are normalized to E.164 immediately before provider requests, so punctuation in locally configured numbers cannot break messaging.
 - Invalid telephone entries are rejected with a clear validation message before the employee profile is saved or a Twilio request is attempted.
 - Existing Employee Operations files remain compatible; the new celebration-announcement preference defaults to enabled when the field does not exist.
+
+## 1.0.3 — Full-resolution North Star identity and Call-In layout polish
+- Replaced all derived/cropped North Star brand sources with the new full-quality approved primary logo, splash screen and app icon artwork.
+- Added a single canonical brand pipeline: every header/window/Dock icon is downscaled directly from the original high-resolution source, never from a previously resized image.
+- Added progressive high-quality downscaling for small North Star marks to improve 16–64 px Retina rendering.
+- The startup window now paints the exact supplied North Star splash artwork and overlays the live progress value on its integrated progress track.
+- The login and setup flows use the exact full-resolution primary North Star logo asset.
+- The application/window icon uses the supplied high-resolution app-icon artwork with only the external presentation-white canvas removed.
+- Reworked Employee Operations > Call-In Integration section headers with protected 52 px header rows, larger vertical separation, and independent separators so Call-In Service, Twilio Voice & SMS, Management Email and Local Call-In Test cannot collapse into adjacent controls.
+- Increased Employee Operations form row padding for a cleaner, more legible layout at 1080p/Retina sizes.
+
+
+## 1.0.4 — KPI semantics, active navigation, HiDPI header branding and approved glyphs
+- Corrected Operations Snapshot status semantics for exception KPIs.
+- Damages, Floor Denials and Active Alerts are always evaluated as lower-is-better metrics.
+- A missed lower-is-better target now reads ABOVE TARGET instead of BELOW TARGET.
+- Legacy saved KPI direction values no longer cause incorrect green/amber status logic.
+- Added rounded active-state highlighting to the North Star sidebar so the current workspace page is immediately visible.
+- Dashboard, settings routes and direct Employee Operations pages all keep the sidebar selection synchronized.
+- Reworked the North Star compact symbol as a HiDPI-aware Swing icon that paints from the full-resolution canonical source instead of a pre-rendered 42 px bitmap.
+- Vertically centered the NORTH STAR / OPERATIONS INTELLIGENCE text beside the header symbol.
+- Added the supplied approved glyph assets: confetti, toast, food, Halloween, Christmas, Good Friday, fireworks, Easter, Thanksgiving and American flag.
+- Anniversary recognition now uses the supplied confetti glyph.
+- Employee-of-the-Month recognition can use the supplied toast/recognition glyph.
+- Calendar events now map the supplied holiday/event glyphs by semantic name, with existing fallback rendering retained for events without an approved asset.
+
+
+## 1.0.5 — Unified Information controls, working continuous ticker and HiDPI dashboard glyphs
+- Fixed the Continuous Ticker lifecycle bug that destroyed its viewport/track immediately before the timer started.
+- Continuous Ticker now scrolls every configured Information item and loops the duplicated track continuously.
+- Information Blocks is now the single configuration page for configured item count, visible-at-once count, movement mode, page interval and ticker speed.
+- Operations Workspace retains only the Information row enable/disable checkbox and points administrators to Information Blocks for configuration.
+- Expanded visible-at-once choices from 2–6 to 2–8 so the Information row can align with up to eight Operations Snapshot KPI columns.
+- Configured Information sets remain 6/8/10/12 items. A 12-item set can now move through an 8-item viewport as a continuous loop.
+- Converted supplied holiday/event glyphs to full-resolution HiDPI painting instead of pre-rendering 40 px bitmap icons.
+- Converted the built-in birthday gift glyph to display-time vector painting for Retina/HiDPI clarity.
+- Thanksgiving, American-flag/Labor Day, anniversary confetti and other supplied glyphs now remain crisp in Upcoming Events and Team Celebrations.
+
+
+## 1.0.6 — Workspace consolidation, larger media preview and vector branding
+- Combined Dashboard Blocks/Information controls and Operations Workspace into one Workspace Setup tab.
+- Enlarged Media Library presentation preview and allowed high-resolution media to fill the available preview region.
+- Changed the sample phone number to 123-456-7890.
+- Replaced the small raster header/Dock symbol with a resolution-independent North Star vector mark.
+- Removed the legacy white lower-edge artifact from the app icon.
+
+
+## 1.0.7 — Workspace Setup routing fix
+- Removed the obsolete Information Blocks item from the main administration sidebar.
+- Corrected Workspace Setup to route to the unified Workspace Setup settings page.
+- Fixes the false "Page Unavailable" message for administrators caused by stale pre-merge tab names.
+
+
+## 1.0.8 — Information Block selector sizing
+- Increased the Information Row & Dashboard Layout section inside Workspace Setup.
+- Added a dedicated, titled selector viewport with enough height to display the configured Information Block selectors.
+- Retained vertical scrolling for 10/12-item configurations and smaller displays instead of collapsing the selector list to a single row.

@@ -45,9 +45,9 @@ public final class AppConfig {
     ));
 
     /**
-     * Compact information cards placed between the primary workspace modules
-     * and Operations Snapshot. They reuse the same configured widget choices
-     * as Classic Dashboard Blocks, but v4 controls how many are surfaced.
+     * Compact Information row placed between the primary workspace modules and
+     * Operations Snapshot. Information Blocks is the single configuration
+     * surface for item count, selected content, viewport size and movement.
      */
     public boolean workspaceInfoStripEnabled = true;
     public int workspaceInfoBlockCount = 4;

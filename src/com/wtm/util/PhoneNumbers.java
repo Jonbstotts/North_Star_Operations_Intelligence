@@ -15,11 +15,11 @@ public final class PhoneNumbers {
      * Blank input remains blank.
      *
      * Accepted U.S. examples:
-     * 205-799-9890
+     * 123-456-7890
      * (205) 799-9890
      * 205 799 9890
      * 2057999890
-     * 1-205-799-9890
+     * 1-123-456-7890
      * +12057999890
      */
     public static String toE164(String value){
@@ -47,7 +47,7 @@ public final class PhoneNumbers {
 
         throw new IllegalArgumentException(
                 "Enter a valid phone number. U.S. examples: "
-                        +"205-799-9890 or +12057999890."
+                        +"123-456-7890 or +12057999890."
         );
     }
 

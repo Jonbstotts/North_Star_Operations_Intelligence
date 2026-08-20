@@ -9,5 +9,5 @@ public final class BrandIdentity {
     public static boolean northStar(){ return true; }
     public static String product(){ return NorthStarBrand.PRODUCT_NAME; }
     public static String tagline(){ return NorthStarBrand.TAGLINE; }
-    public static ImageIcon symbol(int size){ return NorthStarBrand.symbol(size); }
+    public static Icon symbol(int size){ return NorthStarBrand.symbol(size); }
 }

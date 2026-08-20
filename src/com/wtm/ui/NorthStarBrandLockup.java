@@ -44,14 +44,25 @@ public final class NorthStarBrandLockup extends JPanel {
                 Font.BOLD,
                 Math.max(8,Math.round(wordmarkSize*.28f))));
 
-        JPanel words=new JPanel();
-        words.setOpaque(false);
-        words.setLayout(new BoxLayout(words,BoxLayout.Y_AXIS));
-        words.add(wordmark);
+        JPanel stack=new JPanel();
+        stack.setOpaque(false);
+        stack.setLayout(new BoxLayout(stack,BoxLayout.Y_AXIS));
+        wordmark.setAlignmentX(Component.LEFT_ALIGNMENT);
+        sub.setAlignmentX(Component.LEFT_ALIGNMENT);
+        stack.add(wordmark);
         if(tagline){
-            words.add(Box.createVerticalStrut(1));
-            words.add(sub);
+            stack.add(Box.createVerticalStrut(2));
+            stack.add(sub);
         }
+
+        JPanel words=new JPanel(new GridBagLayout());
+        words.setOpaque(false);
+        GridBagConstraints center=new GridBagConstraints();
+        center.gridx=0;
+        center.gridy=0;
+        center.anchor=GridBagConstraints.WEST;
+        center.weightx=1;
+        words.add(stack,center);
         add(words,BorderLayout.CENTER);
     }
 }

@@ -66,9 +66,20 @@ public final class ConfigService {
         }
     }
 
-    /** North Star is the only product identity in this standalone build. */
+    /**
+     * North Star remains the product identity, but the user-selected visual
+     * palette is available during splash/login startup.
+     */
     public static String peekThemeId(){
-        return "NORTH_STAR";
+        try{
+            Path file=appDataDir().resolve(FILE_NAME);
+            if(!Files.exists(file))return "NORTH_STAR";
+            Properties p=new Properties();
+            try(InputStream in=Files.newInputStream(file)){p.load(in);}
+            return p.getProperty("themeId","NORTH_STAR");
+        }catch(Exception ex){
+            return "NORTH_STAR";
+        }
     }
 
     public static AppConfig load() {
@@ -86,9 +97,9 @@ public final class ConfigService {
 
             cfg.fullscreen = bool(p, "fullscreen", cfg.fullscreen);
             cfg.darkMode = bool(p, "darkMode", cfg.darkMode);
-            cfg.themeId="NORTH_STAR";
-            AppTheme selectedTheme=AppTheme.NORTH_STAR;
-            cfg.darkMode=true;
+            cfg.themeId=p.getProperty("themeId",cfg.themeId);
+            AppTheme selectedTheme=AppTheme.fromId(cfg.themeId);
+            cfg.darkMode=selectedTheme.dark();
 
             cfg.showHeader = bool(p, "showHeader", cfg.showHeader);
             cfg.showTicker = bool(p, "showTicker", cfg.showTicker);
@@ -434,7 +445,7 @@ public final class ConfigService {
             MediaService.ensureDirectories();
             Properties p = new Properties();
             p.setProperty("fullscreen", Boolean.toString(cfg.fullscreen));
-            p.setProperty("themeId", "NORTH_STAR");
+            p.setProperty("themeId", cfg.themeId);
             p.setProperty("northStarPreviewV501","true");
             p.setProperty("automaticHolidayThemes",Boolean.toString(cfg.automaticHolidayThemes));
             p.setProperty("darkMode", Boolean.toString(cfg.darkMode));
