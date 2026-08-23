@@ -10,10 +10,10 @@ import java.time.*;
 import java.util.*;
 
 /**
- * FedEx Basic Integrated Visibility adapter.
- *
- * Basic tracking is event-based. North Star stores scan events as confirmed
- * checkpoints and never presents interpolation as continuous FedEx vehicle GPS.
+ * FedEx Basic Integrated Visibility adapter for both parcel and Freight LTL.
+ * FedEx Freight PRO numbers are master tracking numbers and use the same Track
+ * API as FedEx Express/Ground tracking numbers. Detailed scan events are stored
+ * as confirmed checkpoints for trace-back and map playback.
  */
 public final class FedExTrackingService {
     public record Result(
@@ -51,8 +51,14 @@ public final class FedExTrackingService {
 
         String response=http.postJson(
                 base+"/track/v1/trackingnumbers",json.toString(),
-                Map.of("Authorization","Bearer "+token));
-        return parse(response);
+                Map.of("Authorization","Bearer "+token,
+                        "X-locale","en_US"));
+        List<Result> parsed=parse(response);
+        if(parsed.isEmpty())
+            throw new IllegalStateException(
+                    "FedEx returned no tracking results for the supplied identifier(s). "
+                    +"Confirm Production/Test environment and FedEx API project credentials.");
+        return parsed;
     }
 
     private String oauth(
@@ -60,7 +66,7 @@ public final class FedExTrackingService {
         if(clientId==null||clientId.isBlank()
                 ||clientSecret==null||clientSecret.isBlank())
             throw new IllegalStateException(
-                    "FedEx Client ID and Client Secret are required.");
+                    "FedEx API Key/Client ID and Secret Key are required.");
         String form="grant_type=client_credentials"
                 +"&client_id="+URLEncoder.encode(clientId,StandardCharsets.UTF_8)
                 +"&client_secret="+URLEncoder.encode(
@@ -86,16 +92,19 @@ public final class FedExTrackingService {
                 String number=MiniJson.str(
                         map(track.get("trackingNumberInfo")).get("trackingNumber"));
                 if(number.isBlank())number=topNumber;
+                ShipmentTrackingEvent.MovementMode fallback=
+                        defaultMovementMode(track);
                 results.add(new Result(
                         number,readStatus(track),readEta(track),
-                        readDelivered(track),parseEvents(track,number)));
+                        readDelivered(track),parseEvents(track,number,fallback)));
             }
         }
         return List.copyOf(results);
     }
 
     private List<ShipmentTrackingEvent> parseEvents(
-            Map<String,Object> track,String tracking){
+            Map<String,Object> track,String tracking,
+            ShipmentTrackingEvent.MovementMode fallback){
         List<ShipmentTrackingEvent> events=new ArrayList<>();
         for(Object raw:list(track.get("scanEvents"))){
             Map<String,Object> scan=map(raw);
@@ -127,12 +136,29 @@ public final class FedExTrackingService {
             String mode=MiniJson.str(scan.get("transportationMode"));
             if(mode.isBlank())mode=MiniJson.str(scan.get("transportationType"));
             e.movementMode=ShipmentTrackingEvent.MovementMode.parse(mode);
+            if(e.movementMode==ShipmentTrackingEvent.MovementMode.UNKNOWN)
+                e.movementMode=fallback;
             events.add(e);
         }
         events.sort(Comparator.comparing(
                 (ShipmentTrackingEvent e)->e.eventTime,
                 Comparator.nullsLast(Comparator.naturalOrder())));
         return List.copyOf(events);
+    }
+
+    private static ShipmentTrackingEvent.MovementMode defaultMovementMode(
+            Map<String,Object> track){
+        Map<String,Object> service=map(track.get("serviceDetail"));
+        String type=(MiniJson.str(service.get("type"))+" "
+                +MiniJson.str(service.get("description"))).toUpperCase(Locale.ROOT);
+        if(type.contains("FREIGHT")||type.contains("GROUND"))
+            return ShipmentTrackingEvent.MovementMode.GROUND;
+        if(type.contains("EXPRESS")||type.contains("OVERNIGHT")
+                ||type.contains("2_DAY")||type.contains("2DAY")
+                ||type.contains("INTERNATIONAL_PRIORITY")
+                ||type.contains("INTERNATIONAL_FIRST"))
+            return ShipmentTrackingEvent.MovementMode.AIR;
+        return ShipmentTrackingEvent.MovementMode.UNKNOWN;
     }
 
     private LocationSearchResult geocode(String city,String state,String country){
