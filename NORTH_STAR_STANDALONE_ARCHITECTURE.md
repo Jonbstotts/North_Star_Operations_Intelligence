@@ -1,38 +1,26 @@
-# North Star Operations Intelligence — Standalone Architecture
+# North Star Operations Intelligence — Standalone Architecture v1.2
 
 ## Runtime
 
-`com.wtm.app.Main` launches `OperationsWorkspaceFrame` directly. There is no dashboard launcher and no alternate Classic runtime.
-
-Removed from the North Star source tree:
-
-- `DashboardFrame`
-- `DashboardLauncher`
-- Dashboard Experience / Classic-vs-Workspace configuration
-- selectable ORIVUE application identity
-- bundled ORIVUE image resources
-
-North Star is the only product identity. Holiday themes remain only as animation/effect definitions for seasonal overlays.
+`com.wtm.app.Main` launches the North Star splash/authentication flow and then `OperationsWorkspaceFrame`. North Star has one product identity and one runtime path; there is no ORIVUE/Classic dashboard branch in this codebase.
 
 ## Data isolation
 
-North Star uses `~/.northstar-operations-intelligence`. On the first launch, if that folder does not yet exist and the old shared `~/.weather-traffic-monitor` folder does, the old folder is copied as a migration seed. It is never moved or deleted. After migration North Star writes only to its own folder.
+North Star reads and writes only `~/.northstar-operations-intelligence`. Product-split migration from the former shared weather/traffic directory has been removed from runtime code.
 
-## Major product areas
+## Desktop-first performance model
 
-- modular operations dashboard
+The target is modern desktop hardware on macOS, Windows, or Linux. Provider/network work is kept off the Swing EDT. Map and webhook I/O use Java 21 virtual threads. Visual overlays use a deterministic high-quality animation path rather than hardware-degrading performance profiles.
+
+## Major areas
+
+- operations dashboard and workspace navigation
 - weather / traffic / radar / severe-weather monitoring
-- information ticker
-- operations KPIs
-- operations calendar
-- media / showcase
+- information and KPI ticker systems
+- operations calendar and managed media
 - sports schedules
-- Employee Operations
-- qualifications and training
-- attendance and call-ins
-- performance history
-- assignment recommendations
+- Employee Operations, qualifications, attendance, call-ins, performance, and assignments
 - optional Twilio / SendGrid integration
-- users / roles / permissions
-- API providers and usage tracking
-- seasonal overlays and celebration effects
+- local users / roles / permissions / audit history
+- encrypted API/provider credentials
+- seasonal and celebration overlays

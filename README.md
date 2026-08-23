@@ -1,8 +1,8 @@
 # North Star Operations Intelligence
 
-**Version 1.0.1**
+**Version 1.2.0**
 
-Standalone operations application. North Star no longer contains the Classic ORIVUE dashboard or a dashboard-experience switch.
+North Star is a standalone desktop operations application built on Java 21 and Swing. The application has one runtime and one product identity; the former shared/Classic application branch is not part of this codebase.
 
 ## Included
 - modular operations workspace
@@ -11,15 +11,19 @@ Standalone operations application. North Star no longer contains the Classic ORI
 - Operations Calendar
 - sports schedules
 - configurable Information strip/ticker
-- Operations Snapshot KPIs
+- Operations Snapshot KPIs and CSV imports
 - Employee Operations
 - training/qualifications
 - attendance and call-ins
 - performance records
 - daily assignment recommendations
 - optional Twilio/SendGrid notification integration
-- users, roles and permissions
+- users, roles, permissions and audit history
+- encrypted provider credentials
 - seasonal overlays and celebration effects
+
+## Runtime target
+North Star is optimized for modern desktop-class hardware on macOS, Windows, and Linux. Raspberry Pi performance constraints are no longer a design target.
 
 ## Build
 Requires JDK 21.
@@ -33,8 +37,9 @@ Output: `NorthStarOperations.jar`
 ## Local data
 `~/.northstar-operations-intelligence`
 
-On first launch, data may be copied from the former shared `~/.weather-traffic-monitor` directory. After that North Star is independent.
+North Star reads and writes only its own application-data directory. Provider credentials are stored separately in encrypted form.
 
-
-## 1.0.1 visual-system note
-The application now uses the approved North Star raster mark/wordmark as the canonical identity source. Settings controls also use a platform-independent North Star combo-box delegate so selected values remain vertically centered and readable on macOS, Windows, and Raspberry Pi/Linux.
+## Engineering documentation
+- `CODEBASE_GUIDE.md` — package boundaries, threading model, extension rules, and security boundary.
+- `ENGINEERING_AUDIT_V1_2.md` — v1.2 performance/security cleanup and architectural decisions.
+- `SECURITY_AUDIT.md` — current application-level security controls and deployment considerations.

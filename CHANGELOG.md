@@ -1,3 +1,13 @@
+# v1.1.13 — Appearance & Workspace display overhaul
+
+- Renamed General to Appearance and grouped dashboard chrome/theme controls into consistent rounded cards.
+- Activated dashboard header text and continuous message ticker in the modern Operations Workspace.
+- Reworked Workspace Setup language and grouping for clearer first-time configuration.
+- Added independent Operations Snapshot display controls: visible count, Static, Paged Rotation, Continuous Ticker, page interval, and ticker speed.
+- Persisted Operations Snapshot movement settings alongside Information Row settings.
+- Added real paged/ticker rendering for Operations Snapshot KPI cards.
+- Preserved Information Row movement controls and map/information layout behavior.
+
 # North Star Operations Intelligence Changelog
 
 ## 1.0.1 — Settings control geometry and canonical North Star artwork
@@ -927,3 +937,190 @@
 - Increased the Information Row & Dashboard Layout section inside Workspace Setup.
 - Added a dedicated, titled selector viewport with enough height to display the configured Information Block selectors.
 - Retained vertical scrolling for 10/12-item configurations and smaller displays instead of collapsing the selector list to a single row.
+
+## 1.1.0 — Sports information + bulk CSV employee updates
+- Sports Information blocks now fit team badges inside the available icon box without cropping or forced aspect-ratio distortion.
+- Increased the Sports value row height so badge artwork is fully visible.
+- Sports blocks now show the full opponent on the primary line and the complete local schedule date/time on the detail line, removing the previous 22-character opponent truncation.
+- Added Employees → Import / Update CSV for bulk employee upserts using EmployeeNumber as the stable key.
+- Blank CSV cells preserve existing values; existing IDs, secure call-in PIN hashes, training, attendance, and performance records remain intact.
+- Added an Employee CSV Template action and import preview/confirmation summary.
+- Added reusable `com.wtm.importer` CSV parsing, handler, and result classes as the foundation for future daily KPI CSV imports such as LHY, picks, floor denials, and other operational metrics.
+
+
+## 1.1.1 — Information row sizing and clipping fix
+- Matched the dashboard Information band height to the Operations Snapshot band at 132 px.
+- Increased the Information ticker viewport and metric height so sports opponent/date/time, weather, routes, and system-status content no longer clips vertically.
+- Added consistent minimum heights to both Information and Operations Snapshot bands for stable layout behavior across display sizes.
+- Added extra vertical padding inside Information metrics while preserving the existing horizontal column/ticker behavior.
+
+
+## 1.1.2 — Information layout fit + visible-count persistence
+- Increased both Information and Operations Snapshot dashboard bands to 156 px so their visual scale remains matched while providing enough room for all Information metric lines.
+- Increased Information ticker metric/viewport height to 116 px and vertically centered each metric, preventing route status and sports game date/time text from being clipped.
+- Fixed a configuration persistence defect where `Visible at once = 8` was saved correctly but clamped back to 6 during application startup.
+- Synchronized the Information visible-count load limit with the existing Workspace Setup UI/save limit of 8.
+
+
+## 1.1.3 — Information fit and balanced lower dashboard bands
+- Reworked the Information band instead of simply increasing its height: removed the ticker mode SOUTH label that was shrinking the usable metric viewport and clipping the detail line.
+- Matched Information and Operations Snapshot at a compact 144 px card height.
+- Reduced ticker metric/viewport height to 92 px so its fixed content size fits inside the actual BorderLayout CENTER region.
+- Tightened Information line spacing while retaining all three lines: title, primary icon/value, and detail/status.
+- Vertically centered Operations Snapshot KPI content with equal flexible space above and below to eliminate the large unused lower area.
+- Updated dashboard height calculations for the compact matched bands.
+
+
+## 1.1.4 — Animated North Star startup + integrated fading login
+- Replaced the synthetic static startup progress screen with the supplied `NORTHSTAR loading animation.mp4` rendered as an embedded one-shot 12 fps frame sequence.
+- The animation plays once and holds its exact final frame instead of looping.
+- Added a secure login card directly to the startup surface; it begins a smooth eased fade during the final portion of the animation and becomes interactive as the fade completes.
+- The login is overlaid on the lower portion of the animation so the video canvas never jumps, resizes, or disappears when authentication becomes available.
+- Startup authentication continues to use the existing UserService lockout, password verification, session, and audit-log infrastructure.
+- First-run administrator setup and login-disabled startup still wait for the complete branded animation before transitioning.
+- The startup architecture is ready for a future looping finished-state animation without changing the authentication flow.
+
+
+## 1.1.5 — Startup login overlay visibility fix
+- Fixed the animated startup login being hidden behind the full-screen animation surface.
+- Explicitly raises the fading secure-login panel above the animation using Swing component z-order.
+- Keeps the supplied animation playing once, holds its final frame, and fades the login over that frame near the end.
+- Increased the login overlay height slightly so username, password, sign-in, and status content fit comfortably.
+
+
+## 1.1.6 — Aspect-ratio startup layout + dedicated fading login region
+- Increased the startup window to provide a dedicated authentication area beneath the loading animation.
+- The supplied North Star loading animation now retains its original aspect ratio inside the upper region.
+- Reserved the login region from the first frame so the animation never jumps or resizes when authentication fades in.
+- The login now fades into a clean lower black panel instead of covering the NORTHSTAR / OPERATIONS INTELLIGENCE branding.
+- Preserved the one-shot animation behavior and final-frame hold from v1.1.5.
+
+
+## 1.1.7 — Interactive animated-login input fix
+- Fixed the startup login fields appearing visible but not accepting mouse/keyboard interaction on macOS.
+- Explicitly makes the startup JWindow focusable and auto-focus capable.
+- Activates the startup window and requests initial editor focus when the fade completes.
+- Makes controls interactive once the login is visibly faded in instead of waiting until the last few animation frames.
+- Makes the entire rounded username/password field shell clickable, including icon and padding areas, by forwarding clicks to the underlying text editor.
+- Propagates enabled/disabled state through each custom North Star login field, including the password visibility control.
+
+
+## 1.1.8 — macOS startup authentication focus fix
+- Replaced the startup JWindow with an undecorated JFrame while preserving the same full-screen branded appearance.
+- Fixes macOS cases where the visible startup login could not become a native key/focus window, leaving username/password fields unclickable.
+- Explicitly enables Swing focus traversal and native focus acquisition for the startup frame.
+- Makes text editors explicitly focusable/request-focus enabled.
+- Shell/icon clicks now transfer focus synchronously to the actual editor.
+- Login controls become interactive earlier in the fade while the animation still finishes and holds its final frame.
+
+## 1.1.9 — KPI CSV imports, active-alert dropdown, and dashboard centering
+- Vertically centers Information and Operations Snapshot metrics against the complete card height, including the title band.
+- Adds a generic profile-based KPI CSV import pipeline to Operations Workspace settings.
+- Adds import support for the supplied Daily LHY / LPH report: latest completed LHY maps to LHY Performance and latest completed Order Lines maps to Lines Shipped.
+- Adds import support for the supplied Floor Denials report, deduplicating multiple RF task rows that belong to the same business denial by day/order/line/item/type.
+- Stores imported daily KPI values in a generic long-form kpi-history.csv under the North Star application-data folder so future KPI reports can reuse the same architecture.
+- Adds an Import KPI CSV preview/application control and persistent imported-data summary to Operations Workspace settings.
+- Makes the top alert count clickable; the dropdown lists active NWS alerts by priority and opens alert details on selection.
+
+
+## 1.1.10 — Themed KPI file browser and import progress
+- Replaces the macOS JFileChooser used by KPI imports with a dedicated North Star themed CSV browser.
+- Fixes overlapping Name / Date Modified rendering caused by platform file-chooser delegates.
+- Adds Home, Documents, Up-folder navigation, CSV-only filtering, file metadata, double-click navigation, and consistent North Star styling.
+- KPI preview now uses the themed application dialog path.
+- Separates KPI preview from commit so KPI history is not changed until the user confirms Import.
+- Adds a themed determinate progress bar showing validation, history update, dashboard application, and completion stages.
+
+## 1.1.11 — Workspace polish, LHY rollups, employee damage attribution
+- Standardizes tab content and sub-blocks on a rounded, single-pane design.
+- Removes the extra tab content outline that created a double-border appearance.
+- LHY imports populate Previous Day, Monthly Average, Quarterly Average, and Annual Average when enough daily data exists.
+- Keeps legacy LHY Performance populated for backward compatibility.
+- Adds damage CSV KPI recognition and maps matched employee damage rows into Employee Operations > Performance.
+- Matches damage employees by employee number, WMS/short name, or full name and suppresses duplicate imported incidents.
+
+## 1.1.12 — Dedicated Call-In workspace
+- Adds a first-class Call-In route to the North Star sidebar using the same rounded navigation highlight, spacing, borders and active theme as the rest of the application.
+- Moves system-level Twilio, SendGrid, webhook, notification and master enable/disable controls out of individual Employee Operations records.
+- Employee Operations now retains only employee-specific call-in data: employee phone, Call-In PIN, and per-employee Attendance & Call-Ins history.
+- Adds Call-In Activity with today summary cards and recent employee call-ins.
+- Adds searchable Call-In History with employee, type, source, status, caller and notes.
+- Adds centralized Call-In Settings with master service toggle, LOCAL_TEST/TWILIO_WEBHOOK/OFF modes, secure credentials, management recipients and listener status.
+- Adds a dedicated Testing tab for PIN validation, local call-in simulation and optional management notification tests.
+- All new Call-In screens use North Star themed controls, rounded cards, themed tables/scroll panes and themed message dialogs.
+
+
+## 1.1.14 — Integrated site header, severe-weather ticker, alert popup polish
+- Moves the configured site/location header and dashboard ticker into the permanent top application chrome.
+- Removes the duplicate dashboard header card.
+- Replaces the old viewport ticker with a paint-driven continuous ticker that scrolls reliably.
+- Active NWS alerts automatically override normal ticker messaging and return to configured text after alerts clear.
+- Rebuilds the Active Weather Alerts dropdown using North Star colors, rounded alert rows, consistent spacing, and hover states.
+- The top-right settings shortcut now opens Appearance directly.
+
+
+## 1.1.15 — Alert ticker controls and polished alert popover
+- Adds an Appearance checkbox controlling whether routine active weather alerts are included in the top ticker.
+- Severe weather alerts still take ticker priority even if routine weather-alert ticker display is disabled.
+- Keeps the configured normal ticker message in the same stream as weather-alert text.
+- Renders only one ticker message instance at a time, eliminating repeated copies across wide displays.
+- Replaces the alert popup with a rounded transparent JWindow to remove native white popup corners.
+- Clicking the alert badge a second time closes the open alert panel.
+- The alert panel also closes when focus moves elsewhere and retains North Star hover/detail behavior.
+
+
+## 1.1.16 — Workspace Setup polish and functional width balancing
+- Restores Main Dashboard Width Balance behavior; Save & Apply now changes the Main Showcase share and redistributes remaining width across side modules.
+- Rebuilds Information Row Display and Operations Snapshot Display using the same spacing, control sizes, labels, and ticker terminology.
+- Expands Movement controls so Continuous Ticker is readable instead of visually cramped.
+- Renames the selector area to Information Cards.
+- Replaces the long one-column block list with a two-column numbered card picker and larger dropdown controls.
+- Clarifies Workspace Setup copy so a new administrator can distinguish visibility, card selection, movement, paging, and ticker speed.
+
+
+## 1.4.1 — Smoother grid editing and unified location management
+- Smooths dashboard tile movement/resizing by moving continuously with the mouse and snapping only on release.
+- Adds a live snap-preview outline so the final grid destination is visible without tile jumping.
+- Improves minimum-size and canvas-edge handling, especially for bottom-edge and corner resizing.
+- Combines Traffic & Routes and Pinned Locations into one Locations & Routes navigation item.
+- Replaces the two separate Settings pages with one unified Locations & Routes workspace.
+- Presents Primary Facility, Pinned Locations and Traffic Routes with consistent rounded cards, spacing and controls.
+- Supports creating a route directly from the selected pinned location.
+- Preserves existing route and pinned-location data and authorization checks.
+
+
+## 1.4.2 — Polished authentication and workspace startup transition
+- Vertically centers the secure login content inside its dedicated lower startup region.
+- Keeps the approved North Star loading animation at its original aspect ratio while reserving a balanced authentication area.
+- Adds a branded post-login loading state with an indeterminate progress animation and workspace-preparation messaging.
+- Keeps the completed startup artwork visible while the Operations Workspace is being constructed.
+- Delays removal of the startup surface until the main workspace frame is visible, preventing the blank white/desktop flash during startup.
+- Gives the Operations Workspace a North Star dark background before its first native paint for a cleaner macOS transition.
+
+
+## 1.5.1 — IBM/DVIEW tracking extract + Truck Tracking UI polish
+- Corrects Truck Tracking Settings control height/padding so spinner/combo values are fully visible.
+- Adds explicit PRO number, trailer number, outbound shipment ID, customer/dealer key, source system, Ship IDs, and shipped date fields to the shipment model.
+- Adds automatic detection/import of IBM/DVIEW `TrailerInfoFromTrackingNumber` CSV extracts.
+- Consolidates line-level IBM rows by `OUTBOUNDSHIPMENTID`, preventing one outbound shipment from appearing dozens of times because it contains multiple Ship IDs.
+- Preserves all unique Ship IDs and multiple FedEx tracking numbers while retaining a separate FedEx PRO number field.
+- Uses deterministic IBM outbound shipment IDs so re-imports update existing records instead of generating duplicates.
+- Preserves provider-enriched ETA/GPS/delay/status data when an IBM reference extract is re-imported.
+- Automatically recognizes records containing a tracking number or PRO number as FedEx candidates; records without a confirmed carrier remain `OTHER` instead of being incorrectly labelled Penske.
+- Archives old IBM reference records by default so historical extracts remain searchable without flooding the live Current view.
+- Expands Current/History tables and manual edit forms to expose the new shipment identifiers.
+\n\n## 1.5.2 — Historical truck playback and settings polish
+- Corrects Truck Tracking numeric/spinner vertical spacing and text clipping.
+- Adds a Playback / Test tab for using old delivered shipments as temporary in-transit map records.
+- Playback can select any historical shipment, choose a configured route, scrub 0–100%, and play/pause the marker.
+- Historical playback never mutates or reopens the stored shipment; the overlay is explicitly marked TEST on the map.
+- Adds immediate map repaint notifications while scrubbing playback.
+- Establishes the playback contract that future FedEx/Penske scan-event coordinates can use for true event-by-event historical replay.\n
+## 1.5.3 — Historical roadway playback
+- Adds TomTom roadway geometry reconstruction for old truck shipments.
+- Adds Build Playback Route, Play/Pause, Reset, and Clear controls.
+- Playback movement is distance-based for smoother road-following animation.
+- Draws the reconstructed roadway and endpoint checkpoints on the main map.
+- Clearly labels roadway reconstruction vs straight-line fallback.
+- Preserves historical shipment data without modifying delivered status.
+- Corrects clipped numeric controls in Truck Tracking Settings.

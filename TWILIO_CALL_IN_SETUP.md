@@ -1,4 +1,8 @@
-# ORIVUE 5.0 — Employee Call-In Integration
+## North Star workspace organization
+
+Call-In is now an application-level workspace in the left navigation. Use **Call-In → Settings** for the master enable/disable control, webhook/Twilio/SendGrid configuration and management recipients. Use **Call-In → Activity** and **History** for system-wide records, and **Call-In → Testing** for local validation. Employee Operations keeps only employee-specific phone/PIN and per-employee attendance history.
+
+# North Star Operations Intelligence — Call-In Service
 
 ## Modes
 
@@ -7,14 +11,14 @@
 No Twilio account is required.
 
 Management can enter an employee number, employee PIN, and attendance type directly in
-Employee Operations -> Call-In Integration. The event is recorded through the same
+Call-In -> Testing. The event is recorded through the same
 Employee Operations attendance path used by production calls.
 
 "Simulate + Notify" can also test configured SMS/email notification credentials.
 
 ### TWILIO_WEBHOOK
 
-ORIVUE starts a local webhook listener on the configured port.
+North Star starts a local webhook listener on the configured port.
 
 Twilio Voice URL:
 
@@ -24,7 +28,7 @@ Method:
 
     POST
 
-Additional ORIVUE paths are used internally by the TwiML call flow:
+Additional North Star paths are used internally by the TwiML call flow:
 
     /callin/employee
     /callin/pin
@@ -34,21 +38,21 @@ Additional ORIVUE paths are used internally by the TwiML call flow:
 ## Call flow
 
 1. Employee calls the Twilio number.
-2. ORIVUE asks for employee number.
-3. ORIVUE asks for the employee call-in PIN.
+2. North Star asks for employee number.
+3. North Star asks for the employee call-in PIN.
 4. The employee chooses:
    - 1 = Call out
    - 2 = Running late
    - 3 = Leaving early
    - 4 = Other attendance issue
-5. ORIVUE writes an AttendanceRecord.
+5. North Star writes an AttendanceRecord.
 6. Configured management SMS/email notifications are attempted.
 
 ## Webhook security
 
 Production webhook requests are validated against X-Twilio-Signature.
 
-ORIVUE uses:
+North Star uses:
 
 - the Twilio Auth Token,
 - the exact configured public HTTPS URL,
@@ -56,9 +60,9 @@ ORIVUE uses:
 
 to validate each inbound request before any employee information is processed.
 
-The embedded ORIVUE listener is intended to remain behind the site's network boundary.
+The embedded North Star listener is intended to remain behind the site's network boundary.
 Expose it only through an approved HTTPS reverse proxy, secure tunnel, serverless function,
-or future ORIVUE web service. Do not directly port-forward the Raspberry Pi to the public
+or future North Star web service. Do not directly port-forward the host computer to the public
 Internet.
 
 ## Notification providers
@@ -84,26 +88,26 @@ Required:
 - Verified sender address
 - Management destination email address(es)
 
-Provider credentials are stored in ORIVUE's private credentials.properties file rather
+Provider credentials are stored in North Star's private encrypted credential store file rather
 than the ordinary dashboard configuration.
 
 ## Trial / proof-of-concept workflow
 
 For initial testing:
 
-1. Leave ORIVUE in LOCAL_TEST mode while Employee Operations is being configured.
+1. Leave North Star in LOCAL_TEST mode while Employee Operations is being configured.
 2. Create employee numbers and call-in PINs.
 3. Test attendance records locally.
 4. Configure a Twilio trial account.
 5. Configure a public HTTPS webhook endpoint.
 6. Switch to TWILIO_WEBHOOK only after signature validation can succeed.
 7. Call the trial number from an allowed/verified test phone.
-8. Confirm ORIVUE records the attendance event.
+8. Confirm North Star records the attendance event.
 9. Add management notifications only after the call flow is stable.
 
 ## Local API usage
 
-ORIVUE's API Usage screen now also records installation-local outbound requests for:
+North Star's API Usage screen now also records installation-local outbound requests for:
 
 - Twilio management SMS
 - SendGrid management email

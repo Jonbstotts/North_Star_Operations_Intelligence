@@ -1,8 +1,8 @@
-# ORIVUE 5.0 — Employee Operations
+# North Star Operations Intelligence — Employee Operations
 
 ## Purpose
 
-Employee Operations is the management-only personnel system of record for ORIVUE.
+Employee Operations is the management-only personnel system of record for North Star.
 It replaces the former duplicate Team Celebrations employee table as the authoritative
 source for employee identity and recognition data.
 
@@ -47,7 +47,7 @@ Each employee can store:
 - Employee of the Month status
 - Call-in PIN
 
-Call-in PINs are never stored as plaintext. ORIVUE stores a salted
+Call-in PINs are never stored as plaintext. North Star stores a salted
 PBKDF2-HMAC-SHA256 hash.
 
 ## Training and qualifications
@@ -86,7 +86,7 @@ site-specific measures.
 
 Management defines duties and the qualification required for each duty.
 
-ORIVUE then:
+North Star then:
 
 1. Finds active employees.
 2. Removes employees with whole-day attendance events such as call-outs.
@@ -107,14 +107,14 @@ After migration:
 
 Employee Operations -> compatibility CelebrationConfig -> Main Showcase
 
-Classic Settings no longer writes the retired duplicate celebration table back over the
+North Star Settings no longer writes the retired duplicate celebration table back over the
 Employee Operations data.
 
 ## Celebration announcement preferences
 
 Employee Operations is the only employee/recognition settings destination. The separate Team Celebrations settings route has been removed.
 
-Each employee has a master **Celebration announcements** preference. When disabled, the employee remains active and their birthday/hire-date data remains stored, but ORIVUE/North Star will not generate birthday, anniversary, or Employee of the Month announcements for that person.
+Each employee has a master **Celebration announcements** preference. When disabled, the employee remains active and their birthday/hire-date data remains stored, but North Star will not generate birthday, anniversary, or Employee of the Month announcements for that person.
 
 Birthday, anniversary, and Employee of the Month remain individual recognition choices when the master preference is enabled.
 
@@ -123,3 +123,21 @@ Birthday, anniversary, and Employee of the Month remain individual recognition c
 Employee phone entry is human-friendly. Common U.S. formats are accepted, including `205-799-9890`, `(205) 799-9890`, `2057999890`, `1-205-799-9890`, and `+12057999890`.
 
 The application validates the value and stores the canonical provider form internally as E.164 (`+12057999890`). The Employee Operations screen displays the same U.S. number in readable form as `(205) 799-9890`. Twilio SMS destination/from numbers are also normalized immediately before outbound API calls.
+
+## CSV bulk employee import (v1.1.0)
+
+The Employees directory now includes **Import / Update CSV** and **CSV Template**.
+
+- `EmployeeNumber` is required and is the stable upsert key.
+- A new employee number adds a new employee.
+- A matching employee number updates only nonblank values supplied by the CSV.
+- Blank CSV cells preserve the employee's existing value.
+- Existing North Star employee IDs, call-in PIN hashes, training, attendance, and performance history are preserved.
+- The importer previews Added / Updated / Unchanged / Skipped counts before committing.
+- Supported profile columns are: `EmployeeNumber, Name, ShortName, Department, Shift, HireDate, Birthday, Phone, PhotoAsset, Active, CelebrationAnnouncements, ShowBirthday, ShowAnniversary, EmployeeOfMonth`.
+- The shared `com.wtm.importer` CSV pipeline is intentionally domain-neutral so later daily KPI imports (LHY, picks, floor denials, and other metrics) can plug into the same parser/result architecture.
+
+
+## Dedicated Call-In workspace
+
+System-level call-in administration is intentionally separated from Employee Operations. Employee records retain phone number, Call-In PIN and individual Attendance & Call-Ins history. The **Call-In** sidebar workspace owns the master service toggle, activity/history, Twilio/SendGrid configuration, management notifications and local testing.
