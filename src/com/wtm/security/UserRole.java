@@ -24,6 +24,9 @@ public enum UserRole {
             Permission.MEDIA_LIBRARY,
             Permission.API_USAGE,
             Permission.DATA_REFRESH,
+            Permission.AI_ASSISTANT,
+            Permission.AI_KNOWLEDGE_ADMIN,
+            Permission.AI_EMPLOYEE_METRICS,
             Permission.VIEW_AUDIT_LOG
     )),
     OPERATIONS("Operations", EnumSet.of(
@@ -34,7 +37,8 @@ public enum UserRole {
             Permission.DASHBOARD_LAYOUT,
             Permission.MAIN_SHOWCASE,
             Permission.MEDIA_LIBRARY,
-            Permission.DATA_REFRESH
+            Permission.DATA_REFRESH,
+            Permission.AI_ASSISTANT
     )),
     DISPLAY("Display User", EnumSet.noneOf(Permission.class)),
     CUSTOM("Custom", EnumSet.noneOf(Permission.class));
