@@ -1,0 +1,163 @@
+package com.wtm.ui;
+
+import com.wtm.security.UserAccount;
+import com.wtm.security.UserService;
+
+import javax.swing.*;
+import javax.swing.border.EmptyBorder;
+import java.awt.*;
+import java.util.Arrays;
+
+/** Branded first-run administrator provisioning screen. */
+public final class FirstAdminDialog extends JDialog {
+    private final JTextField username=new JTextField("admin");
+    private final JTextField displayName=new JTextField("System Administrator");
+    private final JPasswordField password=new JPasswordField();
+    private final JPasswordField confirm=new JPasswordField();
+    private final JLabel status=new JLabel(" ",SwingConstants.CENTER);
+
+    private UserAccount account;
+
+    private FirstAdminDialog(Window owner,AppTheme ignoredTheme){
+        super(owner,"NORTH STAR • Initial Administrator Setup",ModalityType.APPLICATION_MODAL);
+        setDefaultCloseOperation(DISPOSE_ON_CLOSE);
+        // Best-effort macOS title-bar integration: preserve native window
+        // controls while letting the NORTH STAR surface visually extend beneath it.
+        getRootPane().putClientProperty("apple.awt.fullWindowContent",Boolean.TRUE);
+        getRootPane().putClientProperty("apple.awt.transparentTitleBar",Boolean.TRUE);
+        getRootPane().putClientProperty("apple.awt.windowTitleVisible",Boolean.FALSE);
+        setResizable(false);
+
+        NorthStarBackdropPanel root=new NorthStarBackdropPanel();
+        root.setLayout(new GridBagLayout());
+        root.setBorder(new EmptyBorder(28,34,28,34));
+
+        RoundedPanel card=new RoundedPanel(28);
+        card.setBackground(Theme.panel());
+        card.setLayout(new BorderLayout(0,16));
+        card.setBorder(BorderFactory.createCompoundBorder(
+                BorderFactory.createLineBorder(Theme.border(),1,true),
+                new EmptyBorder(22,32,26,32)
+        ));
+        card.setPreferredSize(new Dimension(520,690));
+
+        NorthStarBrandLockup logo=new NorthStarBrandLockup(
+                NorthStarBrandLockup.Layout.VERTICAL,
+                118,
+                28,
+                true
+        );
+        card.add(logo,BorderLayout.NORTH);
+
+        JPanel form=new JPanel(new GridBagLayout());
+        form.setOpaque(false);
+        GridBagConstraints c=new GridBagConstraints();
+        c.insets=new Insets(7,0,7,12);
+        c.fill=GridBagConstraints.HORIZONTAL;
+
+        c.gridx=0;c.gridy=0;c.gridwidth=2;c.weightx=1;
+        JLabel title=new JLabel(
+                "Create the first NORTH STAR administrator",
+                SwingConstants.CENTER
+        );
+        title.setFont(title.getFont().deriveFont(Font.BOLD,18f));
+        form.add(title,c);
+
+        c.gridy++;
+        JLabel help=new JLabel(
+                "<html><div style='text-align:center'>This account controls "
+                +"users, permissions, API administration, and system security."
+                +"</div></html>",
+                SwingConstants.CENTER
+        );
+        help.setForeground(Theme.muted());
+        form.add(help,c);
+
+        c.gridwidth=1;
+        addRow(form,c,2,"Username",username);
+        addRow(form,c,3,"Display name",displayName);
+        addRow(form,c,4,"Password",password);
+        addRow(form,c,5,"Confirm password",confirm);
+
+        c.gridx=0;c.gridy=6;c.gridwidth=2;c.weightx=1;
+        status.setForeground(Theme.danger());
+        form.add(status,c);
+
+        card.add(form,BorderLayout.CENTER);
+
+        JButton create=new JButton("Create Administrator");
+        create.putClientProperty("primaryAction",Boolean.TRUE);
+        create.setFont(create.getFont().deriveFont(Font.BOLD,15f));
+
+        JButton cancel=new JButton("Cancel");
+        create.addActionListener(e->create());
+        confirm.addActionListener(e->create());
+        cancel.addActionListener(e->dispose());
+
+        JPanel buttons=new JPanel(new GridLayout(2,1,0,8));
+        buttons.setOpaque(false);
+        buttons.add(create);
+        buttons.add(cancel);
+        card.add(buttons,BorderLayout.SOUTH);
+
+        root.add(card);
+        setContentPane(root);
+        ThemeStyler.apply(this,AppTheme.NORTH_STAR);
+
+        root.setBackground(Theme.bg());
+        card.setBackground(Theme.panel());
+        help.setForeground(Theme.muted());
+        status.setForeground(Theme.danger());
+
+        getRootPane().setDefaultButton(create);
+        setSize(610,800);
+        setLocationRelativeTo(owner);
+        ApplicationBrand.applyWindowIcon(this);
+    }
+
+    public static UserAccount create(Window owner,AppTheme theme){
+        FirstAdminDialog dialog=new FirstAdminDialog(owner,theme);
+        dialog.setVisible(true);
+        return dialog.account;
+    }
+
+    private static void addRow(
+            JPanel panel,
+            GridBagConstraints c,
+            int row,
+            String label,
+            JComponent field
+    ){
+        c.gridy=row;c.gridx=0;c.gridwidth=1;c.weightx=0;
+        c.insets=new Insets(7,0,7,16);
+        panel.add(new JLabel(label),c);
+
+        c.gridx=1;c.weightx=1;c.insets=new Insets(7,0,7,0);
+        field.setPreferredSize(new Dimension(300,40));
+        panel.add(field,c);
+    }
+
+    private void create(){
+        char[] first=password.getPassword();
+        char[] second=confirm.getPassword();
+        try{
+            if(!Arrays.equals(first,second)){
+                status.setText("Passwords do not match.");
+                return;
+            }
+            account=UserService.createFirstAdministrator(
+                    username.getText(),
+                    displayName.getText(),
+                    first
+            );
+            dispose();
+        }catch(Exception ex){
+            status.setText(ex.getMessage());
+        }finally{
+            Arrays.fill(first,'\0');
+            Arrays.fill(second,'\0');
+            password.setText("");
+            confirm.setText("");
+        }
+    }
+}

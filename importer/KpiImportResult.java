@@ -1,0 +1,7 @@
+package com.wtm.importer;
+import java.time.LocalDate; import java.util.*;
+public record KpiImportResult(String profileName,int rowsRead,LocalDate firstDate,LocalDate lastDate,List<KpiImportedMetric>metrics,List<KpiImportedMetric>historyMetrics,List<String>warnings){
+ public KpiImportResult{metrics=metrics==null?List.of():List.copyOf(metrics);historyMetrics=historyMetrics==null?metrics:List.copyOf(historyMetrics);warnings=warnings==null?List.of():List.copyOf(warnings);}
+ public String summary(){StringBuilder b=new StringBuilder();b.append("Detected report: ").append(profileName).append('\n').append("Rows read: ").append(rowsRead);if(firstDate!=null||lastDate!=null)b.append("\nDate range: ").append(firstDate==null?"—":firstDate).append(" through ").append(lastDate==null?"—":lastDate);if(!historyMetrics.isEmpty())b.append("\nDaily KPI records stored: ").append(historyMetrics.size());if(!metrics.isEmpty()){b.append("\n\nDashboard values:");for(KpiImportedMetric m:metrics)b.append("\n• ").append(m.label()).append(": ").append(fmt(m.value())).append(m.unit()==null?"":m.unit()).append("  (").append(m.effectiveDate()==null?"date unavailable":m.effectiveDate()).append(")");}if(!warnings.isEmpty()){b.append("\n\nWarnings:");for(String w:warnings)b.append("\n• ").append(w);}return b.toString();}
+ private static String fmt(double v){return Math.rint(v)==v?String.format(Locale.US,"%,.0f",v):String.format(Locale.US,"%,.2f",v);}
+}
