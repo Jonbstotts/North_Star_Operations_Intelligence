@@ -1,26 +1,16 @@
 package com.wtm.ui;
 
-import com.wtm.ai.NorthStarLhyAnalytics;
-import javax.swing.*;
-import javax.swing.border.EmptyBorder;
-import java.awt.*;
+import com.wtm.ai.NorthStarLhyAnalytics;import com.wtm.ingest.OperationalContextEngine;
+import javax.swing.*;import javax.swing.border.EmptyBorder;import java.awt.*;import java.util.*;import java.util.List;
 
-/** Shared chart/evidence view for dashboard Intelligence analysis. */
+/** Shared dynamic evidence view selected from the operational query domain. */
 public final class IntelligenceEvidencePanel {
  private IntelligenceEvidencePanel(){}
- public static JComponent create(String q){
-  GlassSurfacePanel p=new GlassSurfacePanel(16);p.setLayout(new BorderLayout(0,10));p.setBorder(new EmptyBorder(14,14,14,14));
-  JLabel title=new JLabel("OPERATIONAL EVIDENCE");title.setForeground(Theme.text());title.setFont(new Font(Font.SANS_SERIF,Font.BOLD,11));p.add(title,BorderLayout.NORTH);
-  if(NorthStarLhyAnalytics.matches(q)){
-   var s=NorthStarLhyAnalytics.trend();
-   if(s!=null&&s.points()!=null&&s.points().size()>=2){
-    JPanel body=new JPanel(new BorderLayout(0,10));body.setOpaque(false);JPanel m=new JPanel(new GridLayout(2,2,8,8));m.setOpaque(false);
-    m.add(metric("LATEST",s.latest()));m.add(metric("5-DAY AVG",s.recentAverage()));m.add(metric("WEEK AVG",s.weekAverage()));m.add(metric("MONTH AVG",s.monthAverage()));body.add(m,BorderLayout.NORTH);
-    body.add(new IntelligenceTrendChart(s.points().stream().map(com.wtm.ai.NorthStarLhyAnalytics.Point::value).toList(),s.points().stream().map(pt->pt.date().toString()).toList(),s.target()),BorderLayout.CENTER);p.add(body,BorderLayout.CENTER);return p;
-   }
-  }
-  JTextArea n=new JTextArea("NorthStar will place charts, KPI cards, tables, route history, document evidence, or other relevant visual analysis here when the prompt and available data support it.");
-  n.setEditable(false);n.setLineWrap(true);n.setWrapStyleWord(true);n.setOpaque(false);n.setForeground(Theme.muted());n.setFont(new Font(Font.SANS_SERIF,Font.PLAIN,12));p.add(n,BorderLayout.CENTER);return p;
- }
- private static JComponent metric(String label,double value){GlassSurfacePanel p=new GlassSurfacePanel(12);p.setLayout(new BoxLayout(p,BoxLayout.Y_AXIS));p.setBorder(new EmptyBorder(8,10,8,10));JLabel l=new JLabel(label);l.setForeground(Theme.muted());l.setFont(new Font(Font.SANS_SERIF,Font.BOLD,8));JLabel v=new JLabel(String.format("%,.0f",value));v.setForeground(Theme.text());v.setFont(new Font(Font.SANS_SERIF,Font.BOLD,18));p.add(l);p.add(Box.createVerticalStrut(2));p.add(v);return p;}
+ public static JComponent create(String q){GlassSurfacePanel p=new GlassSurfacePanel(16);p.setLayout(new BorderLayout(0,10));p.setBorder(new EmptyBorder(14,14,14,14));JLabel title=new JLabel("OPERATIONAL EVIDENCE");title.setForeground(Theme.text());title.setFont(new Font(Font.SANS_SERIF,Font.BOLD,11));p.add(title,BorderLayout.NORTH);
+  if(NorthStarLhyAnalytics.matches(q)){var s=NorthStarLhyAnalytics.trend();if(s!=null&&s.points()!=null&&s.points().size()>=2){JPanel body=new JPanel(new BorderLayout(0,10));body.setOpaque(false);body.add(metricGrid(Map.of("LATEST",fmt(s.latest()),"5-DAY AVG",fmt(s.recentAverage()),"WEEK AVG",fmt(s.weekAverage()),"MONTH AVG",fmt(s.monthAverage()))),BorderLayout.NORTH);body.add(new IntelligenceTrendChart(s.points().stream().map(com.wtm.ai.NorthStarLhyAnalytics.Point::value).toList(),s.points().stream().map(pt->pt.date().toString()).toList(),s.target()),BorderLayout.CENTER);p.add(body);return p;}}
+  OperationalContextEngine.Analysis a=OperationalContextEngine.analyze(q);if(a.operationalIntent()){JPanel body=new JPanel(new BorderLayout(0,10));body.setOpaque(false);if(!a.metrics().isEmpty())body.add(metricGrid(a.metrics()),BorderLayout.NORTH);if(!a.labels().isEmpty()&&a.labels().size()==a.values().size())body.add(new BarChart(a.labels(),a.values()),BorderLayout.CENTER);else{JTextArea text=new JTextArea(evidenceText(a));text.setEditable(false);text.setLineWrap(true);text.setWrapStyleWord(true);text.setOpaque(false);text.setForeground(Theme.muted());text.setFont(new Font(Font.SANS_SERIF,Font.PLAIN,12));body.add(new JScrollPane(text),BorderLayout.CENTER);}p.add(body);return p;}
+  JTextArea n=new JTextArea("No structured operational visualization applies to this question. Document or policy evidence remains available in the AI summary and cited sources.");n.setEditable(false);n.setLineWrap(true);n.setWrapStyleWord(true);n.setOpaque(false);n.setForeground(Theme.muted());n.setFont(new Font(Font.SANS_SERIF,Font.PLAIN,12));p.add(n);return p;}
+ private static JComponent metricGrid(Map<String,String>metrics){int count=Math.min(8,metrics.size()),cols=count<=4?2:4,rows=(int)Math.ceil(count/(double)cols);JPanel m=new JPanel(new GridLayout(rows,cols,8,8));m.setOpaque(false);int i=0;for(var e:metrics.entrySet()){if(i++>=8)break;m.add(metric(e.getKey(),e.getValue()));}return m;}
+ private static JComponent metric(String label,String value){GlassSurfacePanel p=new GlassSurfacePanel(12);p.setLayout(new BoxLayout(p,BoxLayout.Y_AXIS));p.setBorder(new EmptyBorder(8,10,8,10));JLabel l=new JLabel(label.toUpperCase(Locale.ROOT));l.setForeground(Theme.muted());l.setFont(new Font(Font.SANS_SERIF,Font.BOLD,8));JLabel v=new JLabel(value);v.setForeground(Theme.text());v.setFont(new Font(Font.SANS_SERIF,Font.BOLD,17));p.add(l);p.add(Box.createVerticalStrut(2));p.add(v);return p;}private static String fmt(double d){return String.format(Locale.US,"%,.0f",d);}private static String evidenceText(OperationalContextEngine.Analysis a){StringBuilder b=new StringBuilder();b.append("Domain: ").append(a.view()).append("\n\n");if(!a.sources().isEmpty())b.append("Verified sources:\n• ").append(String.join("\n• ",a.sources())).append("\n\n");String c=a.context();if(c.length()>3500)c=c.substring(0,3500)+"…";b.append(c);return b.toString();}
+ private static final class BarChart extends JComponent{private final List<String>labels;private final List<Double>values;BarChart(List<String>l,List<Double>v){labels=List.copyOf(l);values=List.copyOf(v);setPreferredSize(new Dimension(420,300));}protected void paintComponent(Graphics g0){super.paintComponent(g0);Graphics2D g=(Graphics2D)g0.create();g.setRenderingHint(RenderingHints.KEY_ANTIALIASING,RenderingHints.VALUE_ANTIALIAS_ON);int w=getWidth(),h=getHeight(),left=105,right=26,top=18,bottom=24,n=Math.min(8,values.size());double max=values.stream().limit(n).mapToDouble(Double::doubleValue).max().orElse(1);int gap=9,bh=Math.max(15,(h-top-bottom-gap*Math.max(0,n-1))/Math.max(1,n));for(int i=0;i<n;i++){int y=top+i*(bh+gap);String lab=labels.get(i);if(lab.length()>15)lab=lab.substring(0,14)+"…";g.setColor(Theme.muted());g.setFont(new Font(Font.SANS_SERIF,Font.PLAIN,10));g.drawString(lab,6,y+bh-4);int bw=(int)Math.round((w-left-right)*(values.get(i)/Math.max(1,max)));Color a=Theme.accent();g.setColor(new Color(a.getRed(),a.getGreen(),a.getBlue(),190));g.fillRoundRect(left,y,Math.max(2,bw),bh,8,8);g.setColor(Theme.text());g.drawString(String.format(Locale.US,"%,.0f",values.get(i)),Math.min(w-right-34,left+bw+6),y+bh-4);}g.dispose();}}
 }
