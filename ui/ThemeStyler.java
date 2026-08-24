@@ -43,8 +43,7 @@ public final class ThemeStyler {
             field.setSelectedTextColor(readableText(theme.accent()));
             field.setBorder(fieldBorder(border));
             field.setOpaque(true);
-            normalizeHeight(field,38);
-            normalizeHeight(field,38);
+            normalizeHeight(field,48);
         }else if(component instanceof JPasswordField field){
             field.setBackground(panel2);
             field.setForeground(text);
@@ -158,7 +157,7 @@ public final class ThemeStyler {
             spinner.setBackground(panel2);
             spinner.setForeground(text);
             spinner.setBorder(fieldBorder(border));
-            normalizeHeight(spinner,38);
+            normalizeHeight(spinner,48);
             if(spinner.getEditor() instanceof JSpinner.DefaultEditor editor){
                 apply(editor.getTextField(),theme);
             }

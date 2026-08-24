@@ -75,9 +75,14 @@ public final class TruckShipment {
         return s;
     }
 
+    /**
+     * FedEx Freight PRO is the authoritative master tracking identifier for an
+     * LTL shipment. Prefer it whenever it is present; parcel/Express/Ground
+     * shipments continue to use their ordinary tracking number.
+     */
     public String primaryCarrierIdentifier(){
-        if(trackingNumber!=null&&!trackingNumber.isBlank())return trackingNumber;
         if(proNumber!=null&&!proNumber.isBlank())return proNumber;
+        if(trackingNumber!=null&&!trackingNumber.isBlank())return trackingNumber;
         if(outboundShipmentId!=null&&!outboundShipmentId.isBlank())
             return outboundShipmentId;
         if(trailerNumber!=null&&!trailerNumber.isBlank())return trailerNumber;
