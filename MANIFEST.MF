@@ -1,5 +1,5 @@
 Manifest-Version: 1.0
 Main-Class: com.wtm.app.AiEnabledMain
 Implementation-Title: North Star Operations Intelligence
-Implementation-Version: 1.7.4
+Implementation-Version: 1.7.5
 
