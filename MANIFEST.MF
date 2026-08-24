@@ -1,5 +1,5 @@
 Manifest-Version: 1.0
-Main-Class: com.wtm.app.NorthStarMain178
+Main-Class: com.wtm.app.NorthStarMain188
 Implementation-Title: North Star Operations Intelligence
-Implementation-Version: 1.8.4
+Implementation-Version: 1.8.8
 
