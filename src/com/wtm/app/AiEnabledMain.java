@@ -20,16 +20,25 @@ public final class AiEnabledMain {
     private static void inject(){try{for(Window window:Window.getWindows()){if(!window.isDisplayable())continue;injectGlassAppearance(window);if(!(window instanceof JFrame frame))continue;if(!frame.getClass().getName().equals("com.wtm.ui.OperationsWorkspaceFrame"))continue;if(!AuthorizationService.allowed(Permission.AI_ASSISTANT))continue;injectSidebar(frame);injectDashboard(frame);}}catch(Throwable ignored){}}
 
     private static void injectGlassAppearance(Window window){
-        if(!window.getClass().getName().equals("com.wtm.ui.SettingsDialog"))return;
-        JTabbedPane tabs=findTabs(window); if(tabs==null)return;
-        for(int i=0;i<tabs.getTabCount();i++){
-            if(!"Appearance".equalsIgnoreCase(tabs.getTitleAt(i)))continue;
-            Component existing=tabs.getComponentAt(i); if(findByName(existing instanceof Container c?c:null,"northstar.glass.appearance")!=null)return;
-            JPanel footer=new JPanel(new BorderLayout(12,4));footer.setName("northstar.glass.appearance");footer.setBorder(new CompoundBorder(new MatteBorder(1,0,0,0,Theme.border()),new EmptyBorder(12,16,12,16)));footer.setBackground(Theme.panel());
-            JPanel words=new JPanel();words.setOpaque(false);words.setLayout(new BoxLayout(words,BoxLayout.Y_AXIS));JLabel t=new JLabel("GLASS SURFACES");t.setForeground(Theme.text());t.setFont(new Font(Font.SANS_SERIF,Font.BOLD,11));JLabel d=new JLabel("Modern translucent card treatment for compatible NorthStar dashboard and Intelligence surfaces.");d.setForeground(Theme.muted());d.setFont(new Font(Font.SANS_SERIF,Font.PLAIN,10));words.add(t);words.add(Box.createVerticalStrut(3));words.add(d);footer.add(words,BorderLayout.CENTER);
-            JCheckBox toggle=new JCheckBox("Enable Glass Surfaces",IntelligenceGlassSettings.enabled());toggle.setOpaque(false);toggle.setForeground(Theme.text());toggle.addActionListener(e->{IntelligenceGlassSettings.setEnabled(toggle.isSelected());for(Window w:Window.getWindows()){w.repaint();}});footer.add(toggle,BorderLayout.EAST);
-            JPanel wrapper=new JPanel(new BorderLayout());wrapper.setBackground(Theme.bg());wrapper.add(existing,BorderLayout.CENTER);wrapper.add(footer,BorderLayout.SOUTH);tabs.setComponentAt(i,wrapper);tabs.revalidate();tabs.repaint();return;
-        }
+        JScrollPane appearanceScroll=findAppearanceScroll(window);
+        if(appearanceScroll==null)return;
+        Component view=appearanceScroll.getViewport().getView();
+        if(view instanceof Container ct&&findByName(ct,"northstar.glass.appearance")!=null)return;
+        JPanel wrapper=new JPanel(new BorderLayout(0,12));wrapper.setOpaque(false);wrapper.setName("northstar.glass.appearance.wrapper");
+        appearanceScroll.getViewport().setView(wrapper);wrapper.add(view,BorderLayout.CENTER);wrapper.add(glassAppearanceCard(),BorderLayout.SOUTH);
+        wrapper.revalidate();wrapper.repaint();
+    }
+    private static JScrollPane findAppearanceScroll(Container root){
+        for(Component c:root.getComponents()){
+            if(c instanceof JScrollPane sp){Component v=sp.getViewport().getView();if(v instanceof Container ct&&containsLabel(ct,"Appearance & Display")&&containsLabel(ct,"Startup Experience"))return sp;}
+            if(c instanceof Container child){JScrollPane f=findAppearanceScroll(child);if(f!=null)return f;}
+        }return null;
+    }
+    private static boolean containsLabel(Container root,String text){for(Component c:root.getComponents()){if(c instanceof JLabel l&&l.getText()!=null&&l.getText().contains(text))return true;if(c instanceof Container ct&&containsLabel(ct,text))return true;}return false;}
+    private static JComponent glassAppearanceCard(){
+        RoundedPanel card=new RoundedPanel(14);card.setName("northstar.glass.appearance");card.setLayout(new BorderLayout(16,0));card.setBackground(Theme.panel());card.putClientProperty("outlineColor",Theme.border());card.setBorder(new EmptyBorder(14,16,14,16));
+        JPanel words=new JPanel();words.setOpaque(false);words.setLayout(new BoxLayout(words,BoxLayout.Y_AXIS));JLabel t=new JLabel("GLASS SURFACES");t.setForeground(Theme.text());t.setFont(new Font(Font.SANS_SERIF,Font.BOLD,12));JLabel d=new JLabel("Modern translucent surface treatment for dashboard cards and NorthStar Intelligence analysis.");d.setForeground(Theme.muted());d.setFont(new Font(Font.SANS_SERIF,Font.PLAIN,10));words.add(t);words.add(Box.createVerticalStrut(3));words.add(d);card.add(words,BorderLayout.CENTER);
+        JCheckBox toggle=new JCheckBox("Enable Glass Surfaces",IntelligenceGlassSettings.enabled());toggle.setOpaque(false);toggle.setForeground(Theme.text());toggle.addActionListener(e->{IntelligenceGlassSettings.setEnabled(toggle.isSelected());for(Window w:Window.getWindows())if(w!=null&&w.isDisplayable())w.repaint();});card.add(toggle,BorderLayout.EAST);return card;
     }
     private static JTabbedPane findTabs(Container root){for(Component c:root.getComponents()){if(c instanceof JTabbedPane t)return t;if(c instanceof Container child){JTabbedPane t=findTabs(child);if(t!=null)return t;}}return null;}
 
