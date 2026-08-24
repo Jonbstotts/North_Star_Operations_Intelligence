@@ -2,7 +2,7 @@ package com.wtm.ui;
 import javax.swing.*;import javax.swing.border.*;import javax.swing.plaf.basic.BasicButtonUI;import java.awt.*;import java.awt.event.*;import java.util.*;
 /** Canonical NorthStar in-workspace tabs. Matches the compact Intelligence reference tabs. */
 public final class NorthStarTabHost extends JPanel{
- private static final int TAB_H=27,GAP=5,HPAD=11;
+ private static final int TAB_H=27,GAP=8,HPAD=11;
  private final JPanel strip=new JPanel(new FlowLayout(FlowLayout.LEFT,GAP,0));
  private final JPanel cards=new JPanel(new CardLayout());
  private final java.util.List<JButton> tabs=new ArrayList<>();private final java.util.List<String> keys=new ArrayList<>();private int selected;
@@ -11,5 +11,5 @@ public final class NorthStarTabHost extends JPanel{
  public void select(int i){if(i<0||i>=keys.size())return;selected=i;((CardLayout)cards.getLayout()).show(cards,keys.get(i));refreshStyle();}
  public int selectedIndex(){return selected;}
  public void refreshStyle(){for(int i=0;i<tabs.size();i++)style(tabs.get(i),i==selected,false);revalidate();repaint();}
- private static void style(JButton b,boolean active,boolean hover){Color border=active?Theme.accent():(hover?Theme.text():Theme.border());Color bg=hover&&!active?Theme.panel():Theme.panel2();b.setForeground(active?Theme.text():Theme.muted());b.setBackground(bg);b.setBorder(new CompoundBorder(new LineBorder(border,1,true),new EmptyBorder(0,HPAD-1,0,HPAD-1)));}
+ private static void style(JButton b,boolean active,boolean hover){Color border=active?Theme.accent():(hover?Theme.text():Theme.border());Color bg=hover&&!active?Theme.panel():Theme.panel2();b.setForeground(Theme.text());b.setBackground(bg);b.setBorder(new CompoundBorder(new LineBorder(border,1,true),new EmptyBorder(0,HPAD-1,0,HPAD-1)));}
 }
