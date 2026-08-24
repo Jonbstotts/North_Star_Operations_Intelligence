@@ -23,11 +23,46 @@ public final class AiEnabledMain {
         JScrollPane appearanceScroll=findAppearanceScroll(window);
         if(appearanceScroll==null)return;
         Component view=appearanceScroll.getViewport().getView();
-        if(view instanceof Container ct&&findByName(ct,"northstar.glass.appearance")!=null)return;
+        if(!(view instanceof Container root))return;
+        if(findByName(root,"northstar.glass.appearance")!=null)return;
+
+        JLabel themeLabel=findLabel(root,"Interface theme");
+        Container themeSection=themeLabel==null?null:nearestRoundedPanel(themeLabel);
+        if(themeSection!=null && themeSection.getLayout() instanceof GridBagLayout){
+            addGlassRowToThemeSection(themeSection);
+            themeSection.revalidate();themeSection.repaint();
+            return;
+        }
+
         JPanel wrapper=new JPanel(new BorderLayout(0,12));wrapper.setOpaque(false);wrapper.setName("northstar.glass.appearance.wrapper");
         appearanceScroll.getViewport().setView(wrapper);wrapper.add(view,BorderLayout.CENTER);wrapper.add(glassAppearanceCard(),BorderLayout.SOUTH);
         wrapper.revalidate();wrapper.repaint();
     }
+
+    private static void addGlassRowToThemeSection(Container section){
+        if(findByName(section,"northstar.glass.appearance")!=null)return;
+        GridBagLayout layout=(GridBagLayout)section.getLayout();
+        int maxY=0;
+        for(Component c:section.getComponents()){
+            GridBagConstraints gc=layout.getConstraints(c);
+            maxY=Math.max(maxY,gc.gridy);
+        }
+        JLabel label=new JLabel("Glass surfaces");label.setForeground(Theme.text());label.setFont(new Font(Font.SANS_SERIF,Font.PLAIN,11));
+        GridBagConstraints lc=new GridBagConstraints();lc.gridx=0;lc.gridy=maxY+1;lc.insets=new Insets(10,0,4,14);lc.anchor=GridBagConstraints.WEST;
+        section.add(label,lc);
+
+        JPanel row=new JPanel(new BorderLayout(12,0));row.setName("northstar.glass.appearance");row.setOpaque(false);
+        JPanel words=new JPanel();words.setOpaque(false);words.setLayout(new BoxLayout(words,BoxLayout.Y_AXIS));
+        JCheckBox toggle=new JCheckBox("Enable Glass Surfaces",IntelligenceGlassSettings.enabled());toggle.setOpaque(false);toggle.setForeground(Theme.text());
+        JLabel note=new JLabel("Applies the current theme through translucent, highlighted NorthStar surfaces.");note.setForeground(Theme.muted());note.setFont(new Font(Font.SANS_SERIF,Font.PLAIN,9));
+        words.add(toggle);words.add(Box.createVerticalStrut(2));words.add(note);row.add(words,BorderLayout.CENTER);
+        toggle.addActionListener(e->{IntelligenceGlassSettings.setEnabled(toggle.isSelected());for(Window w:Window.getWindows())if(w!=null&&w.isDisplayable())w.repaint();});
+        GridBagConstraints rc=new GridBagConstraints();rc.gridx=1;rc.gridy=maxY+1;rc.weightx=1;rc.fill=GridBagConstraints.HORIZONTAL;rc.insets=new Insets(10,0,4,0);rc.anchor=GridBagConstraints.WEST;
+        section.add(row,rc);
+    }
+
+    private static JLabel findLabel(Container root,String text){for(Component c:root.getComponents()){if(c instanceof JLabel l&&l.getText()!=null&&l.getText().contains(text))return l;if(c instanceof Container ct){JLabel f=findLabel(ct,text);if(f!=null)return f;}}return null;}
+    private static Container nearestRoundedPanel(Component c){Container p=c.getParent();while(p!=null){if(p instanceof RoundedPanel)return p;p=p.getParent();}return null;}
     private static JScrollPane findAppearanceScroll(Container root){
         for(Component c:root.getComponents()){
             if(c instanceof JScrollPane sp){Component v=sp.getViewport().getView();if(v instanceof Container ct&&containsLabel(ct,"Appearance & Display")&&containsLabel(ct,"Startup Experience"))return sp;}
@@ -37,7 +72,7 @@ public final class AiEnabledMain {
     private static boolean containsLabel(Container root,String text){for(Component c:root.getComponents()){if(c instanceof JLabel l&&l.getText()!=null&&l.getText().contains(text))return true;if(c instanceof Container ct&&containsLabel(ct,text))return true;}return false;}
     private static JComponent glassAppearanceCard(){
         RoundedPanel card=new RoundedPanel(14);card.setName("northstar.glass.appearance");card.setLayout(new BorderLayout(16,0));card.setBackground(Theme.panel());card.putClientProperty("outlineColor",Theme.border());card.setBorder(new EmptyBorder(14,16,14,16));
-        JPanel words=new JPanel();words.setOpaque(false);words.setLayout(new BoxLayout(words,BoxLayout.Y_AXIS));JLabel t=new JLabel("GLASS SURFACES");t.setForeground(Theme.text());t.setFont(new Font(Font.SANS_SERIF,Font.BOLD,12));JLabel d=new JLabel("Modern translucent surface treatment for dashboard cards and NorthStar Intelligence analysis.");d.setForeground(Theme.muted());d.setFont(new Font(Font.SANS_SERIF,Font.PLAIN,10));words.add(t);words.add(Box.createVerticalStrut(3));words.add(d);card.add(words,BorderLayout.CENTER);
+        JPanel words=new JPanel();words.setOpaque(false);words.setLayout(new BoxLayout(words,BoxLayout.Y_AXIS));JLabel t=new JLabel("GLASS SURFACES");t.setForeground(Theme.text());t.setFont(new Font(Font.SANS_SERIF,Font.BOLD,12));JLabel d=new JLabel("Modern translucent surface treatment across compatible NorthStar cards and panels for every theme.");d.setForeground(Theme.muted());d.setFont(new Font(Font.SANS_SERIF,Font.PLAIN,10));words.add(t);words.add(Box.createVerticalStrut(3));words.add(d);card.add(words,BorderLayout.CENTER);
         JCheckBox toggle=new JCheckBox("Enable Glass Surfaces",IntelligenceGlassSettings.enabled());toggle.setOpaque(false);toggle.setForeground(Theme.text());toggle.addActionListener(e->{IntelligenceGlassSettings.setEnabled(toggle.isSelected());for(Window w:Window.getWindows())if(w!=null&&w.isDisplayable())w.repaint();});card.add(toggle,BorderLayout.EAST);return card;
     }
     private static JTabbedPane findTabs(Container root){for(Component c:root.getComponents()){if(c instanceof JTabbedPane t)return t;if(c instanceof Container child){JTabbedPane t=findTabs(child);if(t!=null)return t;}}return null;}
