@@ -4,11 +4,14 @@ import javax.swing.*;
 import javax.swing.border.*;
 import javax.swing.plaf.basic.BasicTabbedPaneUI;
 import java.awt.*;
+import java.util.Locale;
 
 /**
  * Recursively applies the active application theme to Swing component trees.
- * v2.1.15 preserves sidebar-route ownership across theme/config refreshes so
- * generic JButton styling can never reintroduce inactive route outlines.
+ * v2.1.16 makes sidebar-route detection intrinsic instead of timing dependent:
+ * native RoundedSidebarButton instances and late injected Data Collection /
+ * NorthStar Intelligence buttons are recognized before generic JButton
+ * styling can ever add an inactive outline during startup or config refresh.
  */
 public final class ThemeStyler {
     private ThemeStyler(){}
@@ -68,10 +71,8 @@ public final class ThemeStyler {
         }else if(component instanceof JRadioButton radio){
             radio.setForeground(text); radio.setBackground(bg); radio.setOpaque(false);
         }else if(component instanceof JButton button){
-            if(Boolean.TRUE.equals(button.getClientProperty("northstar.sidebar.route"))){
-                // Sidebar routes have their own painter. Generic JButton theme
-                // borders/content fills are the source of the all-tabs-outlined
-                // regression after Appearance/Main Showcase config changes.
+            if(isSidebarRouteButton(button)){
+                button.putClientProperty("northstar.sidebar.route",Boolean.TRUE);
                 button.setFocusPainted(false);
                 button.setFocusable(false);
                 button.setRolloverEnabled(false);
@@ -147,6 +148,17 @@ public final class ThemeStyler {
         if(component instanceof Container container){
             for(Component child:container.getComponents())applyRecursive(child,theme);
         }
+    }
+
+    private static boolean isSidebarRouteButton(JButton button){
+        if(Boolean.TRUE.equals(button.getClientProperty("northstar.sidebar.route")))return true;
+        String className=button.getClass().getName();
+        if(className.contains("OperationsWorkspaceFrame$RoundedSidebarButton"))return true;
+        String text=button.getText();
+        if(text==null)return false;
+        String normalized=text.replaceAll("\\s+"," ").trim().toLowerCase(Locale.ROOT);
+        return normalized.contains("data collection")
+                ||normalized.contains("northstar intelligence");
     }
 
     private static void styleTextField(JTextField field,AppTheme theme){
