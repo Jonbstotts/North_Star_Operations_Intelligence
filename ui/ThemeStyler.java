@@ -4,13 +4,15 @@ import javax.swing.*;
 import javax.swing.border.*;
 import javax.swing.plaf.basic.BasicTabbedPaneUI;
 import java.awt.*;
+import java.util.Locale;
 
 /**
  * Recursively applies the active application theme to Swing component trees.
  *
- * This deliberately styles nested settings/dialog content too. New settings
- * pages should be able to use ordinary Swing components without falling back
- * to the host operating system's light/default appearance.
+ * Sidebar routes are owned by OperationsWorkspaceFrame / the module lifecycle,
+ * not by the generic button theme. They are identified intrinsically so a
+ * settings save, theme refresh, or late module injection can never turn them
+ * into outlined NorthStar control buttons.
  */
 public final class ThemeStyler {
     private ThemeStyler(){}
@@ -23,7 +25,6 @@ public final class ThemeStyler {
         Color panel=theme.panel();
         Color panel2=theme.panel2();
         Color text=theme.text();
-        Color muted=theme.muted();
         Color border=theme.border();
 
         if(component instanceof JLabel label){
@@ -68,20 +69,36 @@ public final class ThemeStyler {
             radio.setBackground(bg);
             radio.setOpaque(false);
         }else if(component instanceof JButton button){
-            boolean primary=Boolean.TRUE.equals(
-                    button.getClientProperty("primaryAction"));
-            button.setForeground(primary
-                    ?readableText(theme.accent())
-                    :text);
-            button.setBackground(primary?theme.accent():panel2);
-            button.setFocusPainted(false);
-            button.setOpaque(true);
-            button.setContentAreaFilled(true);
-            button.setBorder(BorderFactory.createCompoundBorder(
-                    BorderFactory.createLineBorder(
-                            primary?theme.accent():border,1,true),
-                    new EmptyBorder(7,12,7,12)
-            ));
+            if(isSidebarRouteButton(button)){
+                button.putClientProperty("northstar.ui.skip",Boolean.TRUE);
+                button.putClientProperty("northstar.sidebar.route",Boolean.TRUE);
+                button.setFocusPainted(false);
+                button.setFocusable(false);
+                button.setRolloverEnabled(false);
+                button.getModel().setRollover(false);
+                button.getModel().setArmed(false);
+                button.getModel().setPressed(false);
+                button.setOpaque(false);
+                button.setContentAreaFilled(false);
+                button.setBorderPainted(false);
+                button.setBorder(new EmptyBorder(9,12,9,12));
+            }else{
+                boolean primary=Boolean.TRUE.equals(
+                        button.getClientProperty("primaryAction"));
+                button.setForeground(primary
+                        ?readableText(theme.accent())
+                        :text);
+                button.setBackground(primary?theme.accent():panel2);
+                button.setFocusPainted(false);
+                button.setOpaque(true);
+                button.setContentAreaFilled(true);
+                button.setBorderPainted(true);
+                button.setBorder(BorderFactory.createCompoundBorder(
+                        BorderFactory.createLineBorder(
+                                primary?theme.accent():border,1,true),
+                        new EmptyBorder(7,12,7,12)
+                ));
+            }
         }else if(component instanceof JTable table){
             table.setBackground(panel);
             table.setForeground(text);
@@ -179,6 +196,16 @@ public final class ThemeStyler {
             for(Component child:container.getComponents())
                 apply(child,theme);
         }
+    }
+
+    private static boolean isSidebarRouteButton(JButton button){
+        if(Boolean.TRUE.equals(button.getClientProperty("northstar.sidebar.route")))return true;
+        if(button.getClass().getName().contains("OperationsWorkspaceFrame$RoundedSidebarButton"))return true;
+        String text=button.getText();
+        if(text==null)return false;
+        String normalized=text.replaceAll("\\s+"," ").trim().toLowerCase(Locale.ROOT);
+        return normalized.contains("data collection")
+                ||normalized.contains("northstar intelligence");
     }
 
     private static Color readableText(Color background){
