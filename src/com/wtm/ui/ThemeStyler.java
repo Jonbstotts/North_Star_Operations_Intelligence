@@ -16,6 +16,7 @@ public final class ThemeStyler {
     private ThemeStyler(){}
 
     public static void apply(Component component,AppTheme theme){
+        UiFinalPolish.start();
         if(component==null)return;
 
         Color bg=theme.bg();
@@ -35,6 +36,15 @@ public final class ThemeStyler {
             area.setSelectionColor(theme.accent());
             area.setSelectedTextColor(readableText(theme.accent()));
             area.setBorder(fieldBorder(border));
+        }else if(component instanceof JPasswordField field){
+            field.setBackground(panel2);
+            field.setForeground(text);
+            field.setCaretColor(text);
+            field.setSelectionColor(theme.accent());
+            field.setSelectedTextColor(readableText(theme.accent()));
+            field.setBorder(fieldBorder(border));
+            field.setOpaque(true);
+            normalizeHeight(field,38);
         }else if(component instanceof JTextField field){
             field.setBackground(panel2);
             field.setForeground(text);
@@ -44,15 +54,6 @@ public final class ThemeStyler {
             field.setBorder(fieldBorder(border));
             field.setOpaque(true);
             normalizeHeight(field,38);
-            normalizeHeight(field,38);
-        }else if(component instanceof JPasswordField field){
-            field.setBackground(panel2);
-            field.setForeground(text);
-            field.setCaretColor(text);
-            field.setSelectionColor(theme.accent());
-            field.setSelectedTextColor(readableText(theme.accent()));
-            field.setBorder(fieldBorder(border));
-            field.setOpaque(true);
         }else if(component instanceof JComboBox<?> box){
             box.setBackground(panel2);
             box.setForeground(text);
