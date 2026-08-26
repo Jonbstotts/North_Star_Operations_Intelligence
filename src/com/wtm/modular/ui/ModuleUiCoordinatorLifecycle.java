@@ -3,6 +3,7 @@ package com.wtm.modular.ui;
 import com.wtm.modular.core.ModuleRegistry;
 
 import javax.swing.*;
+import javax.swing.border.EmptyBorder;
 import java.awt.*;
 import java.awt.event.WindowEvent;
 import java.lang.reflect.Field;
@@ -14,12 +15,12 @@ import java.util.concurrent.atomic.AtomicBoolean;
 /**
  * Event-driven module/sidebar lifecycle.
  *
- * v2.1.12 finalizes the first-paint sidebar path. The old coordinator is still
- * reused for route injection and permissions, but its 350 ms polling timer is
- * never started. On the first workspace-open event we temporarily cover the
- * workspace with a themed preparation pane, synchronously install/apply every
- * sidebar route, clear stale rollover state caused by button reflow, validate
- * the final geometry, and only then uncover the frame.
+ * v2.1.13 keeps the completed first-paint sidebar path and normalizes the
+ * final sidebar visual state after module injection. Injected routes can carry
+ * a real Swing border from their source button implementation; disabling only
+ * rollover is therefore insufficient. All sidebar route buttons use the same
+ * empty layout border, while active selection remains owned by the NorthStar
+ * sidebar painter/client property.
  */
 public final class ModuleUiCoordinatorLifecycle {
     private static final AtomicBoolean STARTED=new AtomicBoolean(false);
@@ -103,7 +104,7 @@ public final class ModuleUiCoordinatorLifecycle {
                 installed.add(frame);
             }
             apply.invoke(coordinator,frame);
-            clearSidebarRollover(frame);
+            normalizeSidebarVisualState(frame);
 
             frame.getRootPane().revalidate();
             frame.validate();
@@ -117,7 +118,7 @@ public final class ModuleUiCoordinatorLifecycle {
                 JComponent finalPreviousGlass=previousGlass;
                 boolean finalPreviousVisible=previousGlassVisible;
                 SwingUtilities.invokeLater(()->{
-                    clearSidebarRollover(frame);
+                    normalizeSidebarVisualState(frame);
                     finalPreparation.setVisible(false);
                     if(finalPreviousGlass!=null&&finalPreviousGlass!=finalPreparation){
                         frame.setGlassPane(finalPreviousGlass);
@@ -141,7 +142,13 @@ public final class ModuleUiCoordinatorLifecycle {
         return pane;
     }
 
-    private static void clearSidebarRollover(JFrame frame){
+    /**
+     * Remove stale rollover/focus state and real Swing borders from every route
+     * button. The selected blue state is painted from northstar.sidebar.active,
+     * so borderPainted is not part of route selection and must not remain as an
+     * accidental inactive highlight on injected routes such as Intelligence.
+     */
+    private static void normalizeSidebarVisualState(JFrame frame){
         if(routeButtonsField==null)return;
         try{
             Object value=routeButtonsField.get(frame);
@@ -150,8 +157,12 @@ public final class ModuleUiCoordinatorLifecycle {
                 if(!(item instanceof JButton button))continue;
                 button.setRolloverEnabled(false);
                 button.getModel().setRollover(false);
+                button.getModel().setArmed(false);
+                button.getModel().setPressed(false);
                 button.setFocusPainted(false);
                 button.setFocusable(false);
+                button.setBorder(new EmptyBorder(9,12,9,12));
+                button.setBorderPainted(false);
                 button.repaint();
             }
         }catch(Exception ignored){}
