@@ -5,6 +5,7 @@ import com.wtm.modular.core.ModuleRegistry;
 import javax.swing.*;
 import javax.swing.border.EmptyBorder;
 import java.awt.*;
+import java.awt.event.ContainerEvent;
 import java.awt.event.WindowEvent;
 import java.lang.reflect.Field;
 import java.lang.reflect.Method;
@@ -15,10 +16,11 @@ import java.util.concurrent.atomic.AtomicBoolean;
 /**
  * Event-driven module/sidebar lifecycle.
  *
- * v2.1.15 marks every sidebar route with a persistent client property so the
- * shared ThemeStyler can recognize route buttons during later theme/config
- * refreshes. This prevents generic JButton borders from being reapplied when
- * Main Showcase or Operations Calendar settings change.
+ * v2.1.16 makes sidebar visual ownership durable at both startup and runtime.
+ * A lightweight COMPONENT_ADDED listener only normalizes newly mounted route
+ * buttons; it performs no module adaptation or structural mutation. This keeps
+ * late Data Collection / NorthStar Intelligence routes flat immediately and
+ * prevents theme/config refreshes from falling back to generic JButton style.
  */
 public final class ModuleUiCoordinatorLifecycle {
     private static final AtomicBoolean STARTED=new AtomicBoolean(false);
@@ -46,8 +48,11 @@ public final class ModuleUiCoordinatorLifecycle {
                     &&we.getID()==WindowEvent.WINDOW_OPENED
                     &&we.getWindow() instanceof JFrame frame){
                 installFrame(frame,true);
+            }else if(event instanceof ContainerEvent ce
+                    &&ce.getID()==ContainerEvent.COMPONENT_ADDED){
+                normalizeAddedComponent(ce.getChild());
             }
-        },AWTEvent.WINDOW_EVENT_MASK);
+        },AWTEvent.WINDOW_EVENT_MASK|AWTEvent.CONTAINER_EVENT_MASK);
     }
 
     private static void resolveCoordinator(){
@@ -157,14 +162,23 @@ public final class ModuleUiCoordinatorLifecycle {
             }catch(Exception ignored){}
         }
 
-        normalizeInjectedRoutes(frame.getContentPane());
+        normalizeAddedComponent(frame.getContentPane());
     }
 
-    private static void normalizeInjectedRoutes(Component component){
-        if(component instanceof JButton button&&isInjectedSidebarRoute(button))
+    private static void normalizeAddedComponent(Component component){
+        if(component==null)return;
+        if(component instanceof JButton button&&isSidebarRouteCandidate(button)){
             normalizeRouteButton(button);
+            return;
+        }
         if(component instanceof Container container)
-            for(Component child:container.getComponents())normalizeInjectedRoutes(child);
+            for(Component child:container.getComponents())normalizeAddedComponent(child);
+    }
+
+    private static boolean isSidebarRouteCandidate(JButton button){
+        if(Boolean.TRUE.equals(button.getClientProperty("northstar.sidebar.route")))return true;
+        if(button.getClass().getName().contains("OperationsWorkspaceFrame$RoundedSidebarButton"))return true;
+        return isInjectedSidebarRoute(button);
     }
 
     private static boolean isInjectedSidebarRoute(JButton button){
@@ -176,7 +190,6 @@ public final class ModuleUiCoordinatorLifecycle {
     }
 
     private static void normalizeRouteButton(JButton button){
-        // Persistent identity consumed by ThemeStyler on all later refreshes.
         button.putClientProperty("northstar.sidebar.route",Boolean.TRUE);
         button.setRolloverEnabled(false);
         ButtonModel model=button.getModel();
