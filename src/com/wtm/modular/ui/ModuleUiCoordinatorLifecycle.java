@@ -15,11 +15,10 @@ import java.util.concurrent.atomic.AtomicBoolean;
 /**
  * Event-driven module/sidebar lifecycle.
  *
- * v2.1.14 finalizes sidebar visual normalization for both core routes and
- * routes injected by later feature bootstraps (notably Data Collection and
- * NorthStar Intelligence). Those injected buttons are not guaranteed to live
- * in OperationsWorkspaceFrame.sidebarRouteButtons, so the previous map-only
- * cleanup could leave their native Swing border visible after startup.
+ * v2.1.15 marks every sidebar route with a persistent client property so the
+ * shared ThemeStyler can recognize route buttons during later theme/config
+ * refreshes. This prevents generic JButton borders from being reapplied when
+ * Main Showcase or Operations Calendar settings change.
  */
 public final class ModuleUiCoordinatorLifecycle {
     private static final AtomicBoolean STARTED=new AtomicBoolean(false);
@@ -117,10 +116,6 @@ public final class ModuleUiCoordinatorLifecycle {
                 JComponent finalPreviousGlass=previousGlass;
                 boolean finalPreviousVisible=previousGlassVisible;
 
-                // Feature bootstraps add their routes with invokeLater(). Keep
-                // the preparation layer up for two EDT turns, normalize again,
-                // and only then reveal the finished sidebar. This is event-
-                // driven (no timer/polling) and prevents a visible startup snap.
                 SwingUtilities.invokeLater(()->{
                     normalizeSidebarVisualState(frame);
                     SwingUtilities.invokeLater(()->{
@@ -149,11 +144,6 @@ public final class ModuleUiCoordinatorLifecycle {
         return pane;
     }
 
-    /**
-     * Normalize both registered route buttons and late-injected sidebar routes.
-     * Active selection is painted by the NorthStar sidebar active property, not
-     * by Swing's native border/rollover state.
-     */
     private static void normalizeSidebarVisualState(JFrame frame){
         if(frame==null)return;
 
@@ -167,9 +157,6 @@ public final class ModuleUiCoordinatorLifecycle {
             }catch(Exception ignored){}
         }
 
-        // Data Collection and NorthStar Intelligence are injected by feature
-        // bootstraps and may not be registered in sidebarRouteButtons. Find
-        // those concrete route buttons in the live component tree as well.
         normalizeInjectedRoutes(frame.getContentPane());
     }
 
@@ -189,6 +176,8 @@ public final class ModuleUiCoordinatorLifecycle {
     }
 
     private static void normalizeRouteButton(JButton button){
+        // Persistent identity consumed by ThemeStyler on all later refreshes.
+        button.putClientProperty("northstar.sidebar.route",Boolean.TRUE);
         button.setRolloverEnabled(false);
         ButtonModel model=button.getModel();
         model.setRollover(false);
@@ -196,6 +185,8 @@ public final class ModuleUiCoordinatorLifecycle {
         model.setPressed(false);
         button.setFocusPainted(false);
         button.setFocusable(false);
+        button.setOpaque(false);
+        button.setContentAreaFilled(false);
         button.setBorder(new EmptyBorder(9,12,9,12));
         button.setBorderPainted(false);
         button.repaint();
