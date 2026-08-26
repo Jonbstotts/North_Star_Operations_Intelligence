@@ -31,6 +31,14 @@ public final class ThemeCoreV216 {
                 }
             }
         },AWTEvent.WINDOW_EVENT_MASK);
+        SwingUtilities.invokeLater(()->{
+            Timer watcher=new Timer(300,e->{
+                for(Window window:Window.getWindows())
+                    if(window!=null&&window.isDisplayable())applyImmediate(window);
+            });
+            watcher.setInitialDelay(0);
+            watcher.start();
+        });
     }
 
     public static void applyImmediate(Component component){
