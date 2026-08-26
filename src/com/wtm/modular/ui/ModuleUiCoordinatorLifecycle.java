@@ -16,11 +16,12 @@ import java.util.concurrent.atomic.AtomicBoolean;
 /**
  * Event-driven module/sidebar lifecycle.
  *
- * v2.1.16 makes sidebar visual ownership durable at both startup and runtime.
- * A lightweight COMPONENT_ADDED listener only normalizes newly mounted route
- * buttons; it performs no module adaptation or structural mutation. This keeps
- * late Data Collection / NorthStar Intelligence routes flat immediately and
- * prevents theme/config refreshes from falling back to generic JButton style.
+ * v2.1.17 establishes sidebar visual ownership before UiFoundationRuntime can
+ * apply the shared NorthStarButtonUI delegate. The foundation engine correctly
+ * styles ordinary application buttons, but sidebar routes use a dedicated
+ * painter and must opt out through the northstar.ui.skip contract. Missing that
+ * property was the final source of startup outlines and the all-routes-card
+ * regression after Main Showcase Save & Apply rebuilt the workspace.
  */
 public final class ModuleUiCoordinatorLifecycle {
     private static final AtomicBoolean STARTED=new AtomicBoolean(false);
@@ -91,6 +92,10 @@ public final class ModuleUiCoordinatorLifecycle {
         boolean previousGlassVisible=false;
         JPanel preparation=null;
         try{
+            // Mark every existing route as foundation-exempt before any shared
+            // window-level styling pass can see the Operations workspace.
+            normalizeSidebarVisualState(frame);
+
             if(firstOpen){
                 Component glass=frame.getGlassPane();
                 if(glass instanceof JComponent jc){
@@ -178,10 +183,6 @@ public final class ModuleUiCoordinatorLifecycle {
     private static boolean isSidebarRouteCandidate(JButton button){
         if(Boolean.TRUE.equals(button.getClientProperty("northstar.sidebar.route")))return true;
         if(button.getClass().getName().contains("OperationsWorkspaceFrame$RoundedSidebarButton"))return true;
-        return isInjectedSidebarRoute(button);
-    }
-
-    private static boolean isInjectedSidebarRoute(JButton button){
         String text=button.getText();
         if(text==null)return false;
         String normalized=text.replaceAll("\\s+"," ").trim().toLowerCase();
@@ -190,6 +191,9 @@ public final class ModuleUiCoordinatorLifecycle {
     }
 
     private static void normalizeRouteButton(JButton button){
+        // UiFoundation.styleButton() checks northstar.ui.skip before installing
+        // NorthStarButtonUI. This property is the critical ownership boundary.
+        button.putClientProperty("northstar.ui.skip",Boolean.TRUE);
         button.putClientProperty("northstar.sidebar.route",Boolean.TRUE);
         button.setRolloverEnabled(false);
         ButtonModel model=button.getModel();
