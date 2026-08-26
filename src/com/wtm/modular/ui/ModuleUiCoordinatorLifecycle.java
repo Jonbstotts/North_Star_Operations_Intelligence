@@ -15,12 +15,11 @@ import java.util.concurrent.atomic.AtomicBoolean;
 /**
  * Event-driven module/sidebar lifecycle.
  *
- * v2.1.13 keeps the completed first-paint sidebar path and normalizes the
- * final sidebar visual state after module injection. Injected routes can carry
- * a real Swing border from their source button implementation; disabling only
- * rollover is therefore insufficient. All sidebar route buttons use the same
- * empty layout border, while active selection remains owned by the NorthStar
- * sidebar painter/client property.
+ * v2.1.14 finalizes sidebar visual normalization for both core routes and
+ * routes injected by later feature bootstraps (notably Data Collection and
+ * NorthStar Intelligence). Those injected buttons are not guaranteed to live
+ * in OperationsWorkspaceFrame.sidebarRouteButtons, so the previous map-only
+ * cleanup could leave their native Swing border visible after startup.
  */
 public final class ModuleUiCoordinatorLifecycle {
     private static final AtomicBoolean STARTED=new AtomicBoolean(false);
@@ -117,15 +116,23 @@ public final class ModuleUiCoordinatorLifecycle {
                 JPanel finalPreparation=preparation;
                 JComponent finalPreviousGlass=previousGlass;
                 boolean finalPreviousVisible=previousGlassVisible;
+
+                // Feature bootstraps add their routes with invokeLater(). Keep
+                // the preparation layer up for two EDT turns, normalize again,
+                // and only then reveal the finished sidebar. This is event-
+                // driven (no timer/polling) and prevents a visible startup snap.
                 SwingUtilities.invokeLater(()->{
                     normalizeSidebarVisualState(frame);
-                    finalPreparation.setVisible(false);
-                    if(finalPreviousGlass!=null&&finalPreviousGlass!=finalPreparation){
-                        frame.setGlassPane(finalPreviousGlass);
-                        finalPreviousGlass.setVisible(finalPreviousVisible);
-                    }
-                    frame.getRootPane().revalidate();
-                    frame.repaint();
+                    SwingUtilities.invokeLater(()->{
+                        normalizeSidebarVisualState(frame);
+                        finalPreparation.setVisible(false);
+                        if(finalPreviousGlass!=null&&finalPreviousGlass!=finalPreparation){
+                            frame.setGlassPane(finalPreviousGlass);
+                            finalPreviousGlass.setVisible(finalPreviousVisible);
+                        }
+                        frame.getRootPane().revalidate();
+                        frame.repaint();
+                    });
                 });
             }
         }
@@ -143,28 +150,54 @@ public final class ModuleUiCoordinatorLifecycle {
     }
 
     /**
-     * Remove stale rollover/focus state and real Swing borders from every route
-     * button. The selected blue state is painted from northstar.sidebar.active,
-     * so borderPainted is not part of route selection and must not remain as an
-     * accidental inactive highlight on injected routes such as Intelligence.
+     * Normalize both registered route buttons and late-injected sidebar routes.
+     * Active selection is painted by the NorthStar sidebar active property, not
+     * by Swing's native border/rollover state.
      */
     private static void normalizeSidebarVisualState(JFrame frame){
-        if(routeButtonsField==null)return;
-        try{
-            Object value=routeButtonsField.get(frame);
-            if(!(value instanceof Map<?,?> map))return;
-            for(Object item:map.values()){
-                if(!(item instanceof JButton button))continue;
-                button.setRolloverEnabled(false);
-                button.getModel().setRollover(false);
-                button.getModel().setArmed(false);
-                button.getModel().setPressed(false);
-                button.setFocusPainted(false);
-                button.setFocusable(false);
-                button.setBorder(new EmptyBorder(9,12,9,12));
-                button.setBorderPainted(false);
-                button.repaint();
-            }
-        }catch(Exception ignored){}
+        if(frame==null)return;
+
+        if(routeButtonsField!=null){
+            try{
+                Object value=routeButtonsField.get(frame);
+                if(value instanceof Map<?,?> map){
+                    for(Object item:map.values())
+                        if(item instanceof JButton button)normalizeRouteButton(button);
+                }
+            }catch(Exception ignored){}
+        }
+
+        // Data Collection and NorthStar Intelligence are injected by feature
+        // bootstraps and may not be registered in sidebarRouteButtons. Find
+        // those concrete route buttons in the live component tree as well.
+        normalizeInjectedRoutes(frame.getContentPane());
+    }
+
+    private static void normalizeInjectedRoutes(Component component){
+        if(component instanceof JButton button&&isInjectedSidebarRoute(button))
+            normalizeRouteButton(button);
+        if(component instanceof Container container)
+            for(Component child:container.getComponents())normalizeInjectedRoutes(child);
+    }
+
+    private static boolean isInjectedSidebarRoute(JButton button){
+        String text=button.getText();
+        if(text==null)return false;
+        String normalized=text.replaceAll("\\s+"," ").trim().toLowerCase();
+        return normalized.contains("data collection")
+                ||normalized.contains("northstar intelligence");
+    }
+
+    private static void normalizeRouteButton(JButton button){
+        button.setRolloverEnabled(false);
+        ButtonModel model=button.getModel();
+        model.setRollover(false);
+        model.setArmed(false);
+        model.setPressed(false);
+        button.setFocusPainted(false);
+        button.setFocusable(false);
+        button.setBorder(new EmptyBorder(9,12,9,12));
+        button.setBorderPainted(false);
+        button.repaint();
     }
 }
