@@ -7,8 +7,8 @@ import java.awt.*;
 
 /**
  * Recursively applies the active application theme to Swing component trees.
- * v2.1.10 performs exactly one ThemeCore handoff per root instead of once per
- * descendant, eliminating repeated lifecycle work while a route is loading.
+ * v2.1.15 preserves sidebar-route ownership across theme/config refreshes so
+ * generic JButton styling can never reintroduce inactive route outlines.
  */
 public final class ThemeStyler {
     private ThemeStyler(){}
@@ -68,13 +68,30 @@ public final class ThemeStyler {
         }else if(component instanceof JRadioButton radio){
             radio.setForeground(text); radio.setBackground(bg); radio.setOpaque(false);
         }else if(component instanceof JButton button){
-            boolean primary=Boolean.TRUE.equals(button.getClientProperty("primaryAction"));
-            button.setForeground(primary?readableText(theme.accent()):text);
-            button.setBackground(primary?theme.accent():panel2);
-            button.setFocusPainted(false); button.setOpaque(true); button.setContentAreaFilled(true);
-            button.setBorder(BorderFactory.createCompoundBorder(
-                    BorderFactory.createLineBorder(primary?theme.accent():border,1,true),
-                    new EmptyBorder(7,12,7,12)));
+            if(Boolean.TRUE.equals(button.getClientProperty("northstar.sidebar.route"))){
+                // Sidebar routes have their own painter. Generic JButton theme
+                // borders/content fills are the source of the all-tabs-outlined
+                // regression after Appearance/Main Showcase config changes.
+                button.setFocusPainted(false);
+                button.setFocusable(false);
+                button.setRolloverEnabled(false);
+                button.getModel().setRollover(false);
+                button.getModel().setArmed(false);
+                button.getModel().setPressed(false);
+                button.setOpaque(false);
+                button.setContentAreaFilled(false);
+                button.setBorderPainted(false);
+                button.setBorder(new EmptyBorder(9,12,9,12));
+            }else{
+                boolean primary=Boolean.TRUE.equals(button.getClientProperty("primaryAction"));
+                button.setForeground(primary?readableText(theme.accent()):text);
+                button.setBackground(primary?theme.accent():panel2);
+                button.setFocusPainted(false); button.setOpaque(true); button.setContentAreaFilled(true);
+                button.setBorderPainted(true);
+                button.setBorder(BorderFactory.createCompoundBorder(
+                        BorderFactory.createLineBorder(primary?theme.accent():border,1,true),
+                        new EmptyBorder(7,12,7,12)));
+            }
         }else if(component instanceof JTable table){
             table.setBackground(panel); table.setForeground(text);
             table.setSelectionBackground(theme.accent()); table.setSelectionForeground(readableText(theme.accent()));
