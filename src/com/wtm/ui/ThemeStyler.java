@@ -7,26 +7,51 @@ import java.awt.*;
 
 /**
  * Recursively applies the active application theme to Swing component trees.
- *
- * This deliberately styles nested settings/dialog content too. New settings
- * pages should be able to use ordinary Swing components without falling back
- * to the host operating system's light/default appearance.
+ * Theme-core ownership includes root/layered panes and JOptionPane surfaces so
+ * platform-created dialogs cannot fall back to native light backgrounds.
  */
 public final class ThemeStyler {
     private ThemeStyler(){}
 
     public static void apply(Component component,AppTheme theme){
         UiFinalPolish.start();
+        ThemeCoreV216.start();
         if(component==null)return;
+        if(theme==null)theme=Theme.active();
 
         Color bg=theme.bg();
         Color panel=theme.panel();
         Color panel2=theme.panel2();
         Color text=theme.text();
-        Color muted=theme.muted();
         Color border=theme.border();
 
-        if(component instanceof JLabel label){
+        if(component instanceof JDialog dialog){
+            dialog.setBackground(bg);
+            if(dialog.getRootPane()!=null){
+                dialog.getRootPane().setOpaque(true);
+                dialog.getRootPane().setBackground(bg);
+                dialog.getRootPane().setBorder(BorderFactory.createEmptyBorder());
+            }
+            if(dialog.getLayeredPane()!=null){
+                dialog.getLayeredPane().setOpaque(true);
+                dialog.getLayeredPane().setBackground(bg);
+            }
+            if(dialog.getContentPane()!=null)dialog.getContentPane().setBackground(bg);
+        }
+
+        if(component instanceof JOptionPane pane){
+            pane.setOpaque(true);
+            pane.setBackground(bg);
+            pane.setForeground(text);
+            pane.setBorder(new EmptyBorder(14,16,12,16));
+        }else if(component instanceof JRootPane root){
+            root.setOpaque(true);
+            root.setBackground(bg);
+            root.setBorder(BorderFactory.createEmptyBorder());
+        }else if(component instanceof JLayeredPane layered){
+            layered.setOpaque(true);
+            layered.setBackground(bg);
+        }else if(component instanceof JLabel label){
             label.setForeground(text);
             label.setOpaque(false);
         }else if(component instanceof JTextArea area){
@@ -37,23 +62,9 @@ public final class ThemeStyler {
             area.setSelectedTextColor(readableText(theme.accent()));
             area.setBorder(fieldBorder(border));
         }else if(component instanceof JPasswordField field){
-            field.setBackground(panel2);
-            field.setForeground(text);
-            field.setCaretColor(text);
-            field.setSelectionColor(theme.accent());
-            field.setSelectedTextColor(readableText(theme.accent()));
-            field.setBorder(fieldBorder(border));
-            field.setOpaque(true);
-            normalizeHeight(field,38);
+            styleTextField(field,theme);
         }else if(component instanceof JTextField field){
-            field.setBackground(panel2);
-            field.setForeground(text);
-            field.setCaretColor(text);
-            field.setSelectionColor(theme.accent());
-            field.setSelectedTextColor(readableText(theme.accent()));
-            field.setBorder(fieldBorder(border));
-            field.setOpaque(true);
-            normalizeHeight(field,38);
+            styleTextField(field,theme);
         }else if(component instanceof JComboBox<?> box){
             box.setBackground(panel2);
             box.setForeground(text);
@@ -68,20 +79,15 @@ public final class ThemeStyler {
             radio.setBackground(bg);
             radio.setOpaque(false);
         }else if(component instanceof JButton button){
-            boolean primary=Boolean.TRUE.equals(
-                    button.getClientProperty("primaryAction"));
-            button.setForeground(primary
-                    ?readableText(theme.accent())
-                    :text);
+            boolean primary=Boolean.TRUE.equals(button.getClientProperty("primaryAction"));
+            button.setForeground(primary?readableText(theme.accent()):text);
             button.setBackground(primary?theme.accent():panel2);
             button.setFocusPainted(false);
             button.setOpaque(true);
             button.setContentAreaFilled(true);
             button.setBorder(BorderFactory.createCompoundBorder(
-                    BorderFactory.createLineBorder(
-                            primary?theme.accent():border,1,true),
-                    new EmptyBorder(7,12,7,12)
-            ));
+                    BorderFactory.createLineBorder(primary?theme.accent():border,1,true),
+                    new EmptyBorder(7,12,7,12)));
         }else if(component instanceof JTable table){
             table.setBackground(panel);
             table.setForeground(text);
@@ -96,9 +102,7 @@ public final class ThemeStyler {
             if(table.getTableHeader()!=null){
                 table.getTableHeader().setBackground(panel2);
                 table.getTableHeader().setForeground(text);
-                table.getTableHeader().setBorder(
-                        BorderFactory.createMatteBorder(
-                                0,0,1,0,border));
+                table.getTableHeader().setBorder(BorderFactory.createMatteBorder(0,0,1,0,border));
             }
         }else if(component instanceof JList<?> list){
             list.setBackground(panel);
@@ -108,8 +112,9 @@ public final class ThemeStyler {
         }else if(component instanceof JTabbedPane tabs){
             tabs.setBackground(bg);
             tabs.setForeground(text);
-            tabs.setOpaque(true);
-            tabs.setBorder(BorderFactory.createLineBorder(border,1,true));
+            tabs.setOpaque(false);
+            tabs.setBorder(BorderFactory.createEmptyBorder());
+            final AppTheme t=theme;
             tabs.setUI(new BasicTabbedPaneUI(){
                 @Override protected void installDefaults(){
                     super.installDefaults();
@@ -117,40 +122,14 @@ public final class ThemeStyler {
                     selectedTabPadInsets=new Insets(0,0,0,0);
                     contentBorderInsets=new Insets(1,0,0,0);
                 }
-
-                @Override protected void paintTabBackground(
-                        Graphics g,int tabPlacement,int tabIndex,
-                        int x,int y,int w,int h,boolean selected){
-                    g.setColor(selected?theme.panel2():theme.panel());
-                    g.fillRoundRect(x+2,y+2,w-4,h-3,8,8);
+                @Override protected void paintTabBackground(Graphics g,int tp,int ti,int x,int y,int w,int h,boolean selected){
+                    g.setColor(selected?t.panel2():t.panel()); g.fillRoundRect(x+2,y+2,w-4,h-3,8,8);
                 }
-
-                @Override protected void paintTabBorder(
-                        Graphics g,int tabPlacement,int tabIndex,
-                        int x,int y,int w,int h,boolean selected){
-                    g.setColor(selected?theme.accent():border);
-                    g.drawRoundRect(x+2,y+2,w-5,h-4,8,8);
+                @Override protected void paintTabBorder(Graphics g,int tp,int ti,int x,int y,int w,int h,boolean selected){
+                    g.setColor(selected?t.accent():t.border()); g.drawRoundRect(x+2,y+2,w-5,h-4,8,8);
                 }
-
-                @Override protected void paintContentBorder(
-                        Graphics g,int tabPlacement,int selectedIndex){
-                    g.setColor(border);
-                    g.drawRect(
-                            0,
-                            calculateTabAreaHeight(
-                                    tabPlacement,runCount,maxTabHeight),
-                            tabs.getWidth()-1,
-                            tabs.getHeight()-calculateTabAreaHeight(
-                                    tabPlacement,runCount,maxTabHeight)-1
-                    );
-                }
-
-                @Override protected void paintFocusIndicator(
-                        Graphics g,int tabPlacement,Rectangle[] rects,
-                        int tabIndex,Rectangle iconRect,
-                        Rectangle textRect,boolean isSelected){
-                    // No native dotted focus ring; selected outline is enough.
-                }
+                @Override protected void paintContentBorder(Graphics g,int tabPlacement,int selectedIndex){}
+                @Override protected void paintFocusIndicator(Graphics g,int tp,Rectangle[] r,int ti,Rectangle ir,Rectangle tr,boolean s){}
             });
         }else if(component instanceof JSplitPane split){
             split.setBackground(bg);
@@ -159,7 +138,7 @@ public final class ThemeStyler {
             split.setContinuousLayout(true);
         }else if(component instanceof JScrollPane scroll){
             scroll.setBackground(bg);
-            scroll.setBorder(BorderFactory.createLineBorder(border,1,true));
+            scroll.setBorder(new RoundedOutlineBorder(border,12));
             scroll.getViewport().setBackground(panel);
             scroll.getVerticalScrollBar().setUnitIncrement(18);
             scroll.getHorizontalScrollBar().setUnitIncrement(18);
@@ -168,33 +147,40 @@ public final class ThemeStyler {
             spinner.setForeground(text);
             spinner.setBorder(fieldBorder(border));
             normalizeHeight(spinner,38);
-            if(spinner.getEditor() instanceof JSpinner.DefaultEditor editor){
-                apply(editor.getTextField(),theme);
-            }
+            if(spinner.getEditor() instanceof JSpinner.DefaultEditor editor)apply(editor.getTextField(),theme);
         }else if(component instanceof JSeparator separator){
             separator.setForeground(border);
             separator.setBackground(border);
         }else if(component instanceof RoundedPanel rounded){
             rounded.setBackground(panel);
             rounded.putClientProperty("outlineColor",border);
-        }else if(component instanceof JPanel panelComponent){
-            panelComponent.setBackground(bg);
+        }else if(component instanceof JPanel p){
+            if(p.isOpaque())p.setBackground(bg);
         }else if(component instanceof JViewport viewport){
             viewport.setBackground(panel);
         }
 
         if(component instanceof Container container){
-            for(Component child:container.getComponents())
-                apply(child,theme);
+            for(Component child:container.getComponents())apply(child,theme);
         }
+
+        ThemeCoreV216.applyImmediate(component);
+    }
+
+    private static void styleTextField(JTextField field,AppTheme theme){
+        field.setBackground(theme.panel2());
+        field.setForeground(theme.text());
+        field.setCaretColor(theme.text());
+        field.setSelectionColor(theme.accent());
+        field.setSelectedTextColor(readableText(theme.accent()));
+        field.setBorder(fieldBorder(theme.border()));
+        field.setOpaque(true);
+        normalizeHeight(field,38);
     }
 
     private static Color readableText(Color background){
         if(background==null)return Color.WHITE;
-        double luminance=
-                (0.2126*background.getRed())
-                +(0.7152*background.getGreen())
-                +(0.0722*background.getBlue());
+        double luminance=(0.2126*background.getRed())+(0.7152*background.getGreen())+(0.0722*background.getBlue());
         return luminance>150?new Color(20,22,24):Color.WHITE;
     }
 
@@ -207,9 +193,18 @@ public final class ThemeStyler {
     }
 
     private static Border fieldBorder(Color border){
-        return BorderFactory.createCompoundBorder(
-                BorderFactory.createLineBorder(border,1,true),
-                new EmptyBorder(7,9,7,9)
-        );
+        return BorderFactory.createCompoundBorder(BorderFactory.createLineBorder(border,1,true),new EmptyBorder(7,9,7,9));
+    }
+
+    private static final class RoundedOutlineBorder extends AbstractBorder {
+        private final Color color; private final int radius;
+        private RoundedOutlineBorder(Color color,int radius){this.color=color;this.radius=radius;}
+        @Override public Insets getBorderInsets(Component c){return new Insets(1,1,1,1);}
+        @Override public Insets getBorderInsets(Component c,Insets i){i.set(1,1,1,1);return i;}
+        @Override public void paintBorder(Component c,Graphics g,int x,int y,int w,int h){
+            Graphics2D g2=(Graphics2D)g.create();
+            g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING,RenderingHints.VALUE_ANTIALIAS_ON);
+            g2.setColor(color);g2.drawRoundRect(x,y,w-1,h-1,radius,radius);g2.dispose();
+        }
     }
 }
