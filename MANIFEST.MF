@@ -1,4 +1,4 @@
 Manifest-Version: 1.0
 Main-Class: com.wtm.app.NorthStarMainStable
 Implementation-Title: North Star Operations Intelligence
-Implementation-Version: 2.1.29-dashboard-glyph-art
+Implementation-Version: 2.1.30-music-audio-apple-music-phase1
