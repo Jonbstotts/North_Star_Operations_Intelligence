@@ -1,4 +1,4 @@
 Manifest-Version: 1.0
 Main-Class: com.wtm.app.NorthStarMainStable
 Implementation-Title: North Star Operations Intelligence
-Implementation-Version: 2.1.26-modules-glyph-sync
+Implementation-Version: 2.1.27-trusted-email-senders
