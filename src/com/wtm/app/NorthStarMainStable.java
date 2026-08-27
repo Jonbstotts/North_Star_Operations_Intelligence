@@ -21,6 +21,7 @@ public final class NorthStarMainStable {
         invoke("com.wtm.modular.ui.DashboardGlyphArtGuard","install");
         invoke("com.wtm.modular.ui.MusicModuleGuard","install");
         invoke("com.wtm.modular.ui.MusicWorkspacePolishGuard","install");
+        invoke("com.wtm.modular.ui.StartupDashboardReadyGuard","install");
         invoke("com.wtm.modular.core.ModularBootstrap","start");
         invoke("com.wtm.firstparty.NetworkGeocodingService","start");
         Main.main(args);
