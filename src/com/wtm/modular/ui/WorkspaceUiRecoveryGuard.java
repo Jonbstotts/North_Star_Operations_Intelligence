@@ -48,11 +48,11 @@ public final class WorkspaceUiRecoveryGuard {
                 String text = button.getText() == null ? "" : button.getText().trim();
                 if ("Save & Apply".equalsIgnoreCase(text)) {
                     Window window = SwingUtilities.getWindowAncestor(button);
-                    if (isSettings(window)) {
+                    if (isNorthStarWindow(window)) {
                         SwingUtilities.invokeLater(() -> {
                             persistIntelligenceSelection(window);
-                            Window owner = window.getOwner();
-                            schedule(owner, 220);
+                            Window target = isWorkspace(window) ? window : window.getOwner();
+                            schedule(target, 220);
                         });
                     }
                 }
@@ -99,12 +99,12 @@ public final class WorkspaceUiRecoveryGuard {
             return;
         }
         if (isWorkspace(window) && window instanceof JFrame frame) {
+            injectWorkspaceIntelligenceCheckbox(frame);
             restoreDynamicSidebar(frame);
             restoreDashboardIntelligence(frame);
         }
     }
 
-    /** Force a fresh coordinator install when a newly rebuilt sidebar lost Modules. */
     private static void restoreDynamicSidebar(JFrame frame) {
         try {
             Class<?> coordinatorType = Class.forName("com.wtm.modular.ui.ModuleUiCoordinator");
@@ -185,7 +185,7 @@ public final class WorkspaceUiRecoveryGuard {
         PREFS.putBoolean(PREF_INTELLIGENCE, enabled);
         setSettingsModuleToken(settings, enabled);
 
-        Object cfg = fieldValue(settings, "cfg");
+        Object cfg = configObject(settings);
         if (cfg != null) {
             try {
                 Class<?> service = Class.forName("com.wtm.config.ConfigService");
@@ -198,8 +198,17 @@ public final class WorkspaceUiRecoveryGuard {
     }
 
     private static void setSettingsModuleToken(Window settings, boolean enabled) {
-        Object cfg = fieldValue(settings, "cfg");
-        setModuleToken(cfg, enabled);
+        setModuleToken(configObject(settings), enabled);
+    }
+
+    private static Object configObject(Window window) {
+        if (window == null) return null;
+        Object cfg = fieldValue(window, "cfg");
+        if (cfg != null) return cfg;
+        cfg = fieldValue(window, "config");
+        if (cfg != null) return cfg;
+        Object embedded = fieldValue(window, "embeddedSettingsSession");
+        return fieldValue(embedded, "cfg");
     }
 
     private static void setWorkspaceModuleToken(JFrame frame, boolean enabled) {
