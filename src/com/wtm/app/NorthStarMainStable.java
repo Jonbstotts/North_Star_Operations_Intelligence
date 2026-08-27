@@ -17,6 +17,7 @@ public final class NorthStarMainStable {
         invoke("com.wtm.modular.ui.StartupUiGuard","install");
         invoke("com.wtm.modular.ui.WorkspaceUiRecoveryGuard","install");
         invoke("com.wtm.modular.ui.SidebarModulesGlyphGuard","install");
+        invoke("com.wtm.modular.ui.TrustedEmailUiGuard","install");
         invoke("com.wtm.modular.core.ModularBootstrap","start");
         invoke("com.wtm.firstparty.NetworkGeocodingService","start");
         Main.main(args);
