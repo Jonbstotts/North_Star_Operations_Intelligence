@@ -16,11 +16,12 @@ import java.util.concurrent.atomic.AtomicBoolean;
 /**
  * Event-driven module/sidebar lifecycle.
  *
- * v2.1.19 keeps sidebar visual ownership lightweight. Container-add events are
- * allowed to normalize the component that was added, but they MUST NOT rebuild
- * or re-inject the workspace sidebar. Main Showcase and other settings pages
- * create large component trees; restoring the entire sidebar for every child
- * addition caused an O(n^2)-style EDT storm and made navigation appear frozen.
+ * v2.1.20 keeps child component handling lightweight while recognizing the one
+ * structural event that is safe and necessary: OperationsWorkspaceFrame swaps
+ * its top-level content pane during Settings Save & Apply. The finished modular
+ * sidebar is restored synchronously for that root replacement before Swing gets
+ * a chance to paint the legacy/base sidebar. Ordinary child additions only get
+ * visual normalization, preserving the v2.1.19 Main Showcase freeze fix.
  */
 public final class ModuleUiCoordinatorLifecycle {
     private static final AtomicBoolean STARTED=new AtomicBoolean(false);
@@ -52,10 +53,16 @@ public final class ModuleUiCoordinatorLifecycle {
                 installFrame(frame,true);
             }else if(event instanceof ContainerEvent ce
                     &&ce.getID()==ContainerEvent.COMPONENT_ADDED){
-                // Visual normalization only. Never call restoreWorkspaceSidebar()
-                // from component construction; doing so recursively re-ran module
-                // injectors while Main Showcase/Settings were still being built.
-                normalizeAddedComponent(ce.getChild());
+                Component child=ce.getChild();
+                normalizeAddedComponent(child);
+
+                // Save & Apply replaces the OperationsWorkspaceFrame content
+                // pane. That one root-level event is safe to restore immediately
+                // and prevents the obsolete/base sidebar from ever being painted.
+                // All nested module construction remains normalization-only.
+                JFrame frame=findWorkspaceFrame(ce.getContainer());
+                if(frame!=null&&isWorkspaceRootReplacement(frame,child))
+                    restoreWorkspaceSidebar(frame);
             }
         },AWTEvent.WINDOW_EVENT_MASK|AWTEvent.CONTAINER_EVENT_MASK);
     }
@@ -156,8 +163,9 @@ public final class ModuleUiCoordinatorLifecycle {
     }
 
     /**
-     * Full route injection is intentionally restricted to workspace installation.
-     * It is never called from a child COMPONENT_ADDED event.
+     * Full route injection is restricted to workspace installation and complete
+     * top-level content-pane replacement. It is never run for nested controls,
+     * tabs, cards, or settings fields while those trees are being constructed.
      */
     private static void restoreWorkspaceSidebar(JFrame frame){
         if(!isWorkspaceFrame(frame)||Boolean.TRUE.equals(RESTORING.get()))return;
@@ -251,6 +259,24 @@ public final class ModuleUiCoordinatorLifecycle {
         button.setBorder(new EmptyBorder(9,12,9,12));
         button.setBorderPainted(false);
         button.repaint();
+    }
+
+    private static JFrame findWorkspaceFrame(Component component){
+        Component current=component;
+        while(current!=null){
+            if(current instanceof JFrame frame&&isWorkspaceFrame(frame))return frame;
+            current=current.getParent();
+        }
+        Window window=component==null?null:SwingUtilities.getWindowAncestor(component);
+        return window instanceof JFrame frame&&isWorkspaceFrame(frame)?frame:null;
+    }
+
+    private static boolean isWorkspaceRootReplacement(JFrame frame,Component child){
+        if(frame==null||child==null)return false;
+        // JRootPane.setContentPane() installs the new content pane into the
+        // frame's layered pane. By the time COMPONENT_ADDED fires,
+        // frame.getContentPane() already points at that same child.
+        return child==frame.getContentPane();
     }
 
     private static boolean isWorkspaceFrame(JFrame frame){
