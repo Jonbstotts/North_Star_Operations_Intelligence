@@ -5,10 +5,9 @@ import java.lang.reflect.Method;
 /**
  * Canonical NorthStar launcher.
  *
- * This replaces the accumulated NorthStarMain18xx wrapper chain. Runtime
- * services are started once, event-driven, before the workspace is created.
- * Optional services are invoked reflectively so source builds stay tolerant of
- * modules that are intentionally packaged separately.
+ * Runtime services are started once before the workspace is created. Optional
+ * services are invoked reflectively so source builds stay tolerant of modules
+ * intentionally packaged separately.
  */
 public final class NorthStarMainStable {
     private NorthStarMainStable(){}
@@ -16,6 +15,7 @@ public final class NorthStarMainStable {
     public static void main(String[] args){
         invoke("com.wtm.modular.ui.AnnouncementBorderGuard","install");
         invoke("com.wtm.modular.ui.StartupUiGuard","install");
+        invoke("com.wtm.modular.ui.WorkspaceUiRecoveryGuard","install");
         invoke("com.wtm.modular.core.ModularBootstrap","start");
         invoke("com.wtm.firstparty.NetworkGeocodingService","start");
         Main.main(args);
