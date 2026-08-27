@@ -15,13 +15,10 @@ public final class NorthStarMainStable {
     public static void main(String[] args){
         invoke("com.wtm.modular.ui.AnnouncementBorderGuard","install");
         invoke("com.wtm.modular.ui.StartupUiGuard","install");
-        invoke("com.wtm.modular.ui.WorkspaceUiRecoveryGuard","install");
         invoke("com.wtm.modular.ui.SidebarModulesGlyphGuard","install");
         invoke("com.wtm.modular.ui.TrustedEmailUiGuard","install");
         invoke("com.wtm.modular.ui.DashboardGlyphArtGuard","install");
-        invoke("com.wtm.modular.ui.MusicModuleGuard","install");
-        invoke("com.wtm.modular.ui.MusicWorkspacePolishGuard","install");
-        invoke("com.wtm.modular.ui.StartupDashboardReadyGuard","install");
+        invoke("com.wtm.modular.ui.WorkspaceLifecycleV3","install");
         invoke("com.wtm.modular.core.ModularBootstrap","start");
         invoke("com.wtm.firstparty.NetworkGeocodingService","start");
         Main.main(args);
