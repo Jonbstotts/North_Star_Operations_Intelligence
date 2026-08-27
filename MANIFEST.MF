@@ -1,5 +1,4 @@
 Manifest-Version: 1.0
-Main-Class: com.wtm.app.Main
+Main-Class: com.wtm.app.NorthStarMainStable
 Implementation-Title: North Star Operations Intelligence
-Implementation-Version: 1.6.0
-
+Implementation-Version: 2.1.21-source-of-truth-cleanup
