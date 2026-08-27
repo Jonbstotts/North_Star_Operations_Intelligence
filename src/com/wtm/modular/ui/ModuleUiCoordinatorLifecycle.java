@@ -7,6 +7,8 @@ import javax.swing.border.EmptyBorder;
 import java.awt.*;
 import java.awt.event.ContainerEvent;
 import java.awt.event.WindowEvent;
+import java.beans.PropertyChangeEvent;
+import java.beans.PropertyChangeListener;
 import java.lang.reflect.Field;
 import java.lang.reflect.Method;
 import java.util.Map;
@@ -16,22 +18,21 @@ import java.util.concurrent.atomic.AtomicBoolean;
 /**
  * Event-driven module/sidebar lifecycle.
  *
- * v2.1.20 keeps child component handling lightweight while recognizing the one
- * structural event that is safe and necessary: OperationsWorkspaceFrame swaps
- * its top-level content pane during Settings Save & Apply. The finished modular
- * sidebar is restored synchronously for that root replacement before Swing gets
- * a chance to paint the legacy/base sidebar. Ordinary child additions only get
- * visual normalization, preserving the v2.1.19 Main Showcase freeze fix.
+ * v2.1.21 owns sidebar visuals permanently, restores dynamic routes only at
+ * safe workspace lifecycle boundaries, and adapts Locations & Routes without
+ * re-enabling the retired polling injector.
  */
 public final class ModuleUiCoordinatorLifecycle {
     private static final AtomicBoolean STARTED=new AtomicBoolean(false);
     private static final ThreadLocal<Boolean> RESTORING=ThreadLocal.withInitial(()->Boolean.FALSE);
+    private static final String ROUTE_GUARD="northstar.sidebar.visualGuard";
     private static Object coordinator;
     private static Method install;
     private static Method apply;
     private static Set<JFrame> installed;
     private static Field routeButtonsField;
     private static Field activeRouteField;
+    private static Field workspaceHostField;
 
     private ModuleUiCoordinatorLifecycle(){}
 
@@ -53,16 +54,16 @@ public final class ModuleUiCoordinatorLifecycle {
                 installFrame(frame,true);
             }else if(event instanceof ContainerEvent ce
                     &&ce.getID()==ContainerEvent.COMPONENT_ADDED){
-                Component child=ce.getChild();
-                normalizeAddedComponent(child);
-
-                // Save & Apply replaces the OperationsWorkspaceFrame content
-                // pane. That one root-level event is safe to restore immediately
-                // and prevents the obsolete/base sidebar from ever being painted.
-                // All nested module construction remains normalization-only.
-                JFrame frame=findWorkspaceFrame(ce.getContainer());
-                if(frame!=null&&isWorkspaceRootReplacement(frame,child))
-                    restoreWorkspaceSidebar(frame);
+                Component added=ce.getChild();
+                normalizeAddedComponent(added);
+                JFrame frame=workspaceFrame(added);
+                if(frame!=null){
+                    if(isDirectWorkspaceRootReplacement(frame,ce.getContainer())){
+                        restoreWorkspaceSidebar(frame);
+                    }else if(isWorkspaceHostAdd(frame,ce.getContainer())){
+                        adaptCurrentWorkspaceRoute(frame);
+                    }
+                }
             }
         },AWTEvent.WINDOW_EVENT_MASK|AWTEvent.CONTAINER_EVENT_MASK);
     }
@@ -90,6 +91,8 @@ public final class ModuleUiCoordinatorLifecycle {
             routeButtonsField.setAccessible(true);
             activeRouteField=workspace.getDeclaredField("activeWorkspaceRoute");
             activeRouteField.setAccessible(true);
+            workspaceHostField=workspace.getDeclaredField("workspaceContentHost");
+            workspaceHostField.setAccessible(true);
         }catch(Exception ex){
             coordinator=null;
             System.err.println("NorthStar module lifecycle initialization failed: "+ex.getMessage());
@@ -122,6 +125,7 @@ public final class ModuleUiCoordinatorLifecycle {
                 installed.add(frame);
             }
             restoreWorkspaceSidebar(frame);
+            adaptCurrentWorkspaceRoute(frame);
 
             frame.getRootPane().revalidate();
             frame.validate();
@@ -136,6 +140,7 @@ public final class ModuleUiCoordinatorLifecycle {
                 boolean finalPreviousVisible=previousGlassVisible;
                 SwingUtilities.invokeLater(()->{
                     normalizeSidebarVisualState(frame);
+                    adaptCurrentWorkspaceRoute(frame);
                     SwingUtilities.invokeLater(()->{
                         normalizeSidebarVisualState(frame);
                         finalPreparation.setVisible(false);
@@ -162,17 +167,13 @@ public final class ModuleUiCoordinatorLifecycle {
         return pane;
     }
 
-    /**
-     * Full route injection is restricted to workspace installation and complete
-     * top-level content-pane replacement. It is never run for nested controls,
-     * tabs, cards, or settings fields while those trees are being constructed.
-     */
     private static void restoreWorkspaceSidebar(JFrame frame){
         if(!isWorkspaceFrame(frame)||Boolean.TRUE.equals(RESTORING.get()))return;
         RESTORING.set(Boolean.TRUE);
         try{
             if(coordinator!=null&&apply!=null)apply.invoke(coordinator,frame);
             invokePrivateStatic("com.wtm.app.AiEnabledMain","injectSidebar",frame);
+            invokePrivateStatic("com.wtm.app.AiEnabledMain","injectDashboard",frame);
             invokePrivateStatic("com.wtm.ui.DataIngestionInjector","inject",frame);
             invokePrivateStatic("com.wtm.modular.ui.ShowcaseModuleInjector","adapt",frame);
             normalizeSidebarVisualState(frame);
@@ -180,6 +181,15 @@ public final class ModuleUiCoordinatorLifecycle {
             normalizeSidebarVisualState(frame);
         }finally{
             RESTORING.set(Boolean.FALSE);
+        }
+    }
+
+    private static void adaptCurrentWorkspaceRoute(JFrame frame){
+        if(!isWorkspaceFrame(frame))return;
+        String active=activeRoute(frame).toLowerCase(java.util.Locale.ROOT);
+        if(active.contains("location")||active.contains("route")){
+            invokePrivateStatic("com.wtm.ui.LocationsNetworkInjector","adapt",frame);
+            normalizeSidebarVisualState(frame);
         }
     }
 
@@ -258,25 +268,41 @@ public final class ModuleUiCoordinatorLifecycle {
         button.setContentAreaFilled(false);
         button.setBorder(new EmptyBorder(9,12,9,12));
         button.setBorderPainted(false);
+        installVisualGuard(button);
         button.repaint();
     }
 
-    private static JFrame findWorkspaceFrame(Component component){
-        Component current=component;
-        while(current!=null){
-            if(current instanceof JFrame frame&&isWorkspaceFrame(frame))return frame;
-            current=current.getParent();
-        }
-        Window window=component==null?null:SwingUtilities.getWindowAncestor(component);
+    private static void installVisualGuard(JButton button){
+        if(Boolean.TRUE.equals(button.getClientProperty(ROUTE_GUARD)))return;
+        button.putClientProperty(ROUTE_GUARD,Boolean.TRUE);
+        PropertyChangeListener listener=(PropertyChangeEvent event)->{
+            String name=event.getPropertyName();
+            if(!"foreground".equals(name)
+                    &&!"northstar.sidebar.active".equals(name))return;
+            boolean active=Boolean.TRUE.equals(button.getClientProperty("northstar.sidebar.active"));
+            Color desired=active?Color.WHITE:com.wtm.ui.Theme.text();
+            if(!desired.equals(button.getForeground()))button.setForeground(desired);
+        };
+        button.addPropertyChangeListener(listener);
+    }
+
+    private static JFrame workspaceFrame(Component component){
+        if(component==null)return null;
+        Window window=SwingUtilities.getWindowAncestor(component);
         return window instanceof JFrame frame&&isWorkspaceFrame(frame)?frame:null;
     }
 
-    private static boolean isWorkspaceRootReplacement(JFrame frame,Component child){
-        if(frame==null||child==null)return false;
-        // JRootPane.setContentPane() installs the new content pane into the
-        // frame's layered pane. By the time COMPONENT_ADDED fires,
-        // frame.getContentPane() already points at that same child.
-        return child==frame.getContentPane();
+    private static boolean isDirectWorkspaceRootReplacement(JFrame frame,Container container){
+        if(frame==null||container==null)return false;
+        return container==frame.getRootPane()
+                ||container==frame.getLayeredPane()
+                ||container==frame.getContentPane();
+    }
+
+    private static boolean isWorkspaceHostAdd(JFrame frame,Container container){
+        if(frame==null||container==null||workspaceHostField==null)return false;
+        try{return workspaceHostField.get(frame)==container;}
+        catch(Exception ignored){return false;}
     }
 
     private static boolean isWorkspaceFrame(JFrame frame){
