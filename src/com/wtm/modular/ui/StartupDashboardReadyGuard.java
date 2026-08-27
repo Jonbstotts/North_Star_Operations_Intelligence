@@ -2,23 +2,30 @@ package com.wtm.modular.ui;
 
 import javax.swing.*;
 import java.awt.*;
-import java.awt.event.AWTEventListener;
-import java.awt.event.WindowEvent;
+import java.awt.event.*;
+import java.lang.reflect.Field;
 import java.lang.reflect.Method;
+import java.util.Map;
+import java.util.WeakHashMap;
 
 /**
- * Ensures the initial Dashboard is rebuilt once after the workspace window is
- * actually displayable. OperationsWorkspaceFrame creates its first dashboard
- * from an invokeLater during construction, which can run before startup/login
- * presentation has fully exposed and laid out the frame. A later route switch
- * naturally rebuilds the dashboard and was masking that timing race.
+ * Stabilizes the Dashboard after the workspace becomes visible and after a
+ * Settings Save & Apply completes.
  *
- * This guard is intentionally startup-only. It does not listen to ordinary
- * component additions and therefore cannot reintroduce the historical sidebar
- * rebuild/jump or module navigation freeze.
+ * IMPORTANT: this guard never calls showDashboardRoute(). The previous
+ * implementation rebuilt the Dashboard shortly after the native workspace had
+ * already mounted it. That second structural rebuild raced the post-login
+ * transition and Settings rebuild lifecycle, producing the blank Dashboard
+ * observed until the user navigated away and back.
+ *
+ * This version only refreshes/validates the already-mounted Dashboard and asks
+ * dynamic Dashboard extensions (NorthStar Intelligence and Music) to attach to
+ * that stable tree. It is intentionally limited to window-open and Save & Apply
+ * lifecycle boundaries; ordinary navigation/component creation is untouched.
  */
 public final class StartupDashboardReadyGuard {
     private static final String WORKSPACE_CLASS = "com.wtm.ui.OperationsWorkspaceFrame";
+    private static final Map<Window, Timer[]> PASSES = new WeakHashMap<>();
     private static boolean installed;
 
     private StartupDashboardReadyGuard() {}
@@ -27,16 +34,27 @@ public final class StartupDashboardReadyGuard {
         if (installed) return;
         installed = true;
 
-        AWTEventListener listener = event -> {
-            if (!(event instanceof WindowEvent we)
-                    || we.getID() != WindowEvent.WINDOW_OPENED
-                    || !isWorkspace(we.getWindow())) return;
-            scheduleReadyPass(we.getWindow());
-        };
-        Toolkit.getDefaultToolkit().addAWTEventListener(listener, AWTEvent.WINDOW_EVENT_MASK);
+        Toolkit.getDefaultToolkit().addAWTEventListener(event -> {
+            if (event instanceof WindowEvent we
+                    && we.getID() == WindowEvent.WINDOW_OPENED
+                    && isWorkspace(we.getWindow())) {
+                schedulePasses(we.getWindow());
+                return;
+            }
+
+            if (event instanceof ActionEvent ae
+                    && ae.getSource() instanceof AbstractButton button
+                    && "Save & Apply".equalsIgnoreCase(clean(button.getText()))) {
+                Window workspace = findWorkspace(SwingUtilities.getWindowAncestor(button));
+                if (workspace != null) {
+                    // Let Settings finish config persistence/buildUi first.
+                    SwingUtilities.invokeLater(() -> schedulePasses(workspace));
+                }
+            }
+        }, AWTEvent.WINDOW_EVENT_MASK | AWTEvent.ACTION_EVENT_MASK);
 
         for (Window window : Window.getWindows()) {
-            if (isWorkspace(window) && window.isShowing()) scheduleReadyPass(window);
+            if (isWorkspace(window) && window.isShowing()) schedulePasses(window);
         }
     }
 
@@ -44,37 +62,85 @@ public final class StartupDashboardReadyGuard {
         return window != null && WORKSPACE_CLASS.equals(window.getClass().getName());
     }
 
-    private static void scheduleReadyPass(Window window) {
+    private static Window findWorkspace(Window source) {
+        if (isWorkspace(source)) return source;
+        for (Window owner = source == null ? null : source.getOwner();
+             owner != null;
+             owner = owner.getOwner()) {
+            if (isWorkspace(owner)) return owner;
+        }
+        for (Window window : Window.getWindows()) {
+            if (isWorkspace(window) && window.isDisplayable()) return window;
+        }
+        return null;
+    }
+
+    private static void schedulePasses(Window window) {
         if (!(window instanceof JFrame frame)) return;
-        javax.swing.Timer timer = new javax.swing.Timer(140, e -> {
-            ((javax.swing.Timer) e.getSource()).stop();
-            if (!frame.isDisplayable() || !frame.isShowing()) return;
-            if (!"Dashboard".equalsIgnoreCase(activeRoute(frame))) return;
+        if (!SwingUtilities.isEventDispatchThread()) {
+            SwingUtilities.invokeLater(() -> schedulePasses(window));
+            return;
+        }
 
-            // Rebuild once now that the frame has real display geometry.
-            invoke(frame, "showDashboardRoute");
+        Timer[] previous = PASSES.remove(window);
+        if (previous != null) for (Timer timer : previous) if (timer != null) timer.stop();
 
-            // Let the native dashboard mount, then restore dynamic additions.
-            SwingUtilities.invokeLater(() -> SwingUtilities.invokeLater(() -> {
-                invokeStaticFrame("com.wtm.app.AiEnabledMain", "injectDashboard", frame);
-                invokeStaticWindow("com.wtm.modular.ui.MusicModuleGuard", "installWorkspace", frame);
-                frame.getRootPane().revalidate();
-                frame.validate();
-                frame.repaint();
-            }));
-        });
-        timer.setRepeats(false);
-        timer.start();
+        // Multiple bounded passes cover macOS post-login/window geometry and
+        // the asynchronous Settings buildUi() completion without polling.
+        int[] delays = {180, 420, 850};
+        Timer[] timers = new Timer[delays.length];
+        for (int i = 0; i < delays.length; i++) {
+            Timer timer = new Timer(delays[i], e -> {
+                ((Timer)e.getSource()).stop();
+                stabilize(frame);
+            });
+            timer.setRepeats(false);
+            timers[i] = timer;
+            timer.start();
+        }
+        PASSES.put(window, timers);
+    }
+
+    private static void stabilize(JFrame frame) {
+        if (!frame.isDisplayable() || !frame.isShowing()) return;
+        if (!"Dashboard".equalsIgnoreCase(activeRoute(frame))) return;
+
+        Object body = field(frame, "dashboardBody");
+        Object host = field(frame, "workspaceContentHost");
+        if (!(body instanceof JComponent dashboard)
+                || !(host instanceof JComponent workspaceHost)
+                || dashboard.getParent() == null) {
+            // Native buildUi/showDashboardRoute may still be queued. A later
+            // bounded pass will pick it up; do not create a competing tree.
+            return;
+        }
+
+        invoke(frame, "refreshVisibleModules");
+        invokeStaticFrame("com.wtm.app.AiEnabledMain", "injectDashboard", frame);
+        invokeStaticWindow("com.wtm.modular.ui.MusicModuleGuard", "installWorkspace", frame);
+
+        dashboard.revalidate();
+        workspaceHost.revalidate();
+        frame.getRootPane().revalidate();
+        frame.validate();
+        dashboard.repaint();
+        workspaceHost.repaint();
+        frame.repaint();
     }
 
     private static String activeRoute(JFrame frame) {
+        Object value = field(frame, "activeWorkspaceRoute");
+        return value == null ? "" : value.toString();
+    }
+
+    private static Object field(Object target, String name) {
+        if (target == null) return null;
         try {
-            var field = frame.getClass().getDeclaredField("activeWorkspaceRoute");
+            Field field = target.getClass().getDeclaredField(name);
             field.setAccessible(true);
-            Object value = field.get(frame);
-            return value == null ? "" : value.toString();
+            return field.get(target);
         } catch (ReflectiveOperationException ex) {
-            return "";
+            return null;
         }
     }
 
@@ -105,5 +171,9 @@ public final class StartupDashboardReadyGuard {
             method.invoke(null, window);
         } catch (ReflectiveOperationException ignored) {
         }
+    }
+
+    private static String clean(String text) {
+        return text == null ? "" : text.trim();
     }
 }
