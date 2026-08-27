@@ -9,17 +9,28 @@ jobs:
   build:
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout canonical source
+      - name: Checkout canonical source and retained runtime history
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
       - name: Set up Java 21
         uses: actions/setup-java@v4
         with:
           distribution: temurin
           java-version: '21'
-      - name: Build NorthStar
+      - name: Build v2.1.30 runtime overlay
         run: |
-          chmod +x build.sh
-          ./build.sh
+          set -euo pipefail
+          git show origin/migration/modular-core-v2:NorthStarOperations.jar > NorthStarRuntimeBase.jar
+          rm -rf out
+          mkdir -p out
+          javac --release 21 -encoding UTF-8 -cp NorthStarRuntimeBase.jar -d out $(find src -name '*.java')
+          if [ -d resources ]; then cp -R resources/. out/; fi
+          cp NorthStarRuntimeBase.jar NorthStarOperations.jar
+          jar --update --file NorthStarOperations.jar --manifest MANIFEST.MF -C out .
+          DUPLICATES=$(zipinfo -1 NorthStarOperations.jar | sort | uniq -d | wc -l | tr -d ' ')
+          test "$DUPLICATES" = "0"
+          unzip -tq NorthStarOperations.jar >/dev/null
           sha256sum NorthStarOperations.jar > NorthStar-v2.1.30-SHA256SUMS.txt
       - name: Upload release candidate
         uses: actions/upload-artifact@v4
