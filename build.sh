@@ -14,6 +14,16 @@ if command -v git >/dev/null 2>&1 && git rev-parse --is-inside-work-tree >/dev/n
   fi
 fi
 
+# No duplicate top-level Java source trees may compete with src/. Historical
+# copies live under legacy_source_snapshot/ and are intentionally excluded.
+LEGACY_ROOTS=(alerts callin config employee importer location map media model net radar security service sports traffic truck ui usage util weather)
+for d in "${LEGACY_ROOTS[@]}"; do
+  if [ -d "$d" ] && find "$d" -name '*.java' -print -quit | grep -q .; then
+    echo "ERROR: legacy Java source tree '$d/' exists at repository root. Move it under legacy_source_snapshot/." >&2
+    exit 1
+  fi
+done
+
 if find src/com/wtm/app -maxdepth 1 -name 'NorthStarMain18*.java' -print -quit | grep -q .; then
   echo "ERROR: legacy NorthStarMain18xx launcher wrapper found. Use NorthStarMainStable only." >&2
   exit 1
@@ -24,9 +34,23 @@ if ! grep -q '^Main-Class: com.wtm.app.NorthStarMainStable$' MANIFEST.MF; then
   exit 1
 fi
 
-if [ ! -f src/com/wtm/modular/ui/WorkspaceUiRecoveryGuard.java ] || \
-   ! grep -q 'WorkspaceUiRecoveryGuard' src/com/wtm/app/NorthStarMainStable.java; then
-  echo "ERROR: workspace recovery guard is missing from the canonical startup path." >&2
+if [ ! -f src/com/wtm/modular/ui/WorkspaceLifecycleV3.java ] || \
+   ! grep -q 'WorkspaceLifecycleV3' src/com/wtm/app/NorthStarMainStable.java; then
+  echo "ERROR: consolidated WorkspaceLifecycleV3 is missing from the canonical startup path." >&2
+  exit 1
+fi
+
+# Retired overlapping structural guards must stay out of the launcher. Their
+# source may remain temporarily for history/reconciliation, but installing them
+# reintroduces competing Dashboard/sidebar rebuild lifecycles.
+for retired in WorkspaceUiRecoveryGuard MusicWorkspacePolishGuard StartupDashboardReadyGuard; do
+  if grep -q "${retired}.*install" src/com/wtm/app/NorthStarMainStable.java; then
+    echo "ERROR: retired lifecycle guard '$retired' is installed by NorthStarMainStable." >&2
+    exit 1
+  fi
+done
+if grep -q 'MusicModuleGuard.*install' src/com/wtm/app/NorthStarMainStable.java; then
+  echo "ERROR: MusicModuleGuard.install must not be called; WorkspaceLifecycleV3 owns provider lifecycle boundaries." >&2
   exit 1
 fi
 
@@ -43,4 +67,5 @@ if [ "$DUPLICATES" != "0" ]; then
 fi
 
 unzip -tq NorthStarOperations.jar >/dev/null
+
 echo "Built NorthStarOperations.jar from canonical master src tree"
