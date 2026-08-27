@@ -1,9 +1,21 @@
 # North Star Operations Intelligence — Codebase Guide
 
+## Source of truth
+
+- `src/` is the canonical editable source tree.
+- `com.wtm.app.NorthStarMainStable` is the only supported packaged entry point.
+- Do **not** reintroduce numbered `NorthStarMain18xx` launcher wrappers. They represented incremental compatibility patches and caused old startup/UI behavior to re-enter newer builds.
+- Do **not** commit generated runtime JARs into the repository as source-of-truth artifacts. Build output belongs outside the editable source tree and must be regenerated from the current source/manifest.
+- `build.sh` rejects numbered legacy launcher wrappers, verifies the canonical manifest entry point, ZIP integrity, and duplicate archive entries.
+
+When repairing an older module, port the behavior into the current lifecycle/core rather than restoring an obsolete polling launcher or delayed injector.
+
 ## Startup and UI shell
 
-- `com.wtm.app.Main` — application bootstrap, splash/login sequencing, configuration load, and launch.
+- `com.wtm.app.NorthStarMainStable` — canonical runtime-service/bootstrap entry point.
+- `com.wtm.app.Main` — application splash/login sequencing, configuration load, and workspace launch.
 - `com.wtm.ui.OperationsWorkspaceFrame` — primary application shell, navigation, dashboard composition, provider refresh scheduling, and module lifecycle.
+- `com.wtm.modular.ui.ModuleUiCoordinatorLifecycle` — event-driven sidebar/module integration. Structural restoration is allowed only at safe workspace boundaries; ordinary component-add events must remain visual-only.
 - `com.wtm.ui.SettingsDialog` — centralized settings model and the embedded settings pages used by sidebar routes.
 
 Swing components must remain responsive: network and filesystem work belongs off the Event Dispatch Thread (EDT); only component mutations return to the EDT through `SwingUtilities.invokeLater`/`SwingWorker.done`.
@@ -46,9 +58,9 @@ Provider code should translate remote responses into model records. UI code shou
 - Swing EDT: layout, rendering, input, short state updates only.
 - Scheduled refresh executor: provider refresh cadence.
 - Java 21 virtual threads: map tile downloads and webhook request handling.
-- Swing timers: visual animation/tickers only.
+- Swing timers: visual animation/tickers only. Do not use repeating Swing timers to discover, rebuild, or restyle module structure.
 
-Never block the EDT on HTTP, CSV parsing, large image decode, or disk traversal.
+Never block the EDT on HTTP, CSV parsing, large image decode, disk traversal, or recursive module reinjection.
 
 ## Adding a feature
 
@@ -57,4 +69,5 @@ Never block the EDT on HTTP, CSV parsing, large image decode, or disk traversal.
 3. Add permission enforcement to the action/service boundary.
 4. Persist ordinary settings through `ConfigService` and secrets through `ApiCredentialService`.
 5. Keep UI construction in the `ui` package and marshal background results back to the EDT.
-6. Add a short architectural comment only where behavior or security reasoning is not obvious from the code.
+6. Integrate navigation/module behavior through the current event-driven lifecycle, not a new polling injector.
+7. Add a short architectural comment only where behavior or security reasoning is not obvious from the code.
