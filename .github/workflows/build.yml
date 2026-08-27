@@ -1,4 +1,4 @@
-name: NorthStar Canonical Build
+name: NorthStar Canonical Source Validation
 
 on:
   push:
@@ -6,10 +6,10 @@ on:
   workflow_dispatch:
 
 jobs:
-  build:
+  validate:
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout canonical source and retained runtime history
+      - name: Checkout canonical master
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
@@ -18,48 +18,24 @@ jobs:
         with:
           distribution: temurin
           java-version: '21'
-      - name: Build v2.1.30 runtime overlay
+      - name: Regression loop 1 - clean canonical source compile
         run: |
           set -euo pipefail
           test "$(git branch --show-current)" = "master"
-          git show origin/migration/modular-core-v2:NorthStarOperations.jar > NorthStarRuntimeBase.jar
           rm -rf out
           mkdir -p out
-          javac --release 21 -encoding UTF-8 -cp NorthStarRuntimeBase.jar -d out $(find src -name '*.java')
-          if [ -d resources ]; then cp -R resources/. out/; fi
-          if [ -d brand ]; then mkdir -p out/brand && cp -R brand/. out/brand/; fi
-          if [ -d glyphs ]; then mkdir -p out/glyphs && cp -R glyphs/. out/glyphs/; fi
-          cp NorthStarRuntimeBase.jar NorthStarOperations.jar
-          jar --update --file NorthStarOperations.jar --manifest MANIFEST.MF -C out .
-          sha256sum NorthStarOperations.jar > NorthStar-v2.1.30-SHA256SUMS.txt
-      - name: Regression loop 1 - package and feature integrity
-        run: |
-          set -euo pipefail
-          DUPLICATES=$(zipinfo -1 NorthStarOperations.jar | sort | uniq -d | wc -l | tr -d ' ')
-          test "$DUPLICATES" = "0"
-          unzip -tq NorthStarOperations.jar >/dev/null
-          unzip -p NorthStarOperations.jar META-INF/MANIFEST.MF | grep -q '^Main-Class: com.wtm.app.NorthStarMainStable'
-          unzip -p NorthStarOperations.jar META-INF/MANIFEST.MF | grep -q '^Implementation-Version: 2.1.30-music-audio-apple-music-phase1'
-          for entry in \
-            com/wtm/app/NorthStarMainStable.class \
-            com/wtm/modular/ui/MusicModuleGuard.class \
-            com/wtm/modular/ui/MusicModuleGuard\$MusicProvider.class \
-            com/wtm/modular/ui/MusicModuleGuard\$MusicPlaylist.class \
-            com/wtm/modular/ui/MusicModuleGuard\$PlaybackState.class \
-            com/wtm/modular/ui/WorkspaceUiRecoveryGuard.class \
-            com/wtm/modular/ui/SidebarModulesGlyphGuard.class \
-            com/wtm/modular/ui/TrustedEmailUiGuard.class \
-            com/wtm/modular/ui/DashboardGlyphArtGuard.class \
-            brand/northstar_primary_logo_exact.png \
-            brand/northstar_app_icon_exact.png; do
-            jar tf NorthStarOperations.jar | grep -Fxq "$entry"
-          done
+          javac --release 21 -encoding UTF-8 -d out $(find src -name '*.java')
+          test -f out/com/wtm/modular/ui/MusicModuleGuard.class
+          test -f out/com/wtm/modular/ui/WorkspaceUiRecoveryGuard.class
+          test -f out/com/wtm/modular/ui/SidebarModulesGlyphGuard.class
+          test -f out/com/wtm/modular/ui/TrustedEmailUiGuard.class
+          test -f out/com/wtm/modular/ui/DashboardGlyphArtGuard.class
           grep -q '127.0.0.1' src/com/wtm/modular/ui/MusicModuleGuard.java
           grep -q 'MusicKit' src/com/wtm/modular/ui/MusicModuleGuard.java
           grep -q 'NorthStar never receives your Apple ID password' src/com/wtm/modular/ui/MusicModuleGuard.java
           grep -q 'MusicModuleGuard' src/com/wtm/app/NorthStarMainStable.java
-          echo "REGRESSION_LOOP_1_OK"
-      - name: Regression loop 2 - clean canonical source build
+          echo "REGRESSION_LOOP_1_SOURCE_OK"
+      - name: Regression loop 2 - clean source package integrity
         run: |
           set -euo pipefail
           rm -rf out-second
@@ -68,11 +44,11 @@ jobs:
           if [ -d resources ]; then cp -R resources/. out-second/; fi
           if [ -d brand ]; then mkdir -p out-second/brand && cp -R brand/. out-second/brand/; fi
           if [ -d glyphs ]; then mkdir -p out-second/glyphs && cp -R glyphs/. out-second/glyphs/; fi
-          jar --create --file NorthStarOperations-source-only.jar --manifest MANIFEST.MF -C out-second .
-          DUPLICATES=$(zipinfo -1 NorthStarOperations-source-only.jar | sort | uniq -d | wc -l | tr -d ' ')
+          jar --create --file NorthStar-source-validation.jar --manifest MANIFEST.MF -C out-second .
+          DUPLICATES=$(zipinfo -1 NorthStar-source-validation.jar | sort | uniq -d | wc -l | tr -d ' ')
           test "$DUPLICATES" = "0"
-          unzip -tq NorthStarOperations-source-only.jar >/dev/null
-          unzip -p NorthStarOperations-source-only.jar META-INF/MANIFEST.MF | grep -q '^Implementation-Version: 2.1.30-music-audio-apple-music-phase1'
+          unzip -tq NorthStar-source-validation.jar >/dev/null
+          unzip -p NorthStar-source-validation.jar META-INF/MANIFEST.MF | grep -q '^Implementation-Version: 2.1.30-music-audio-apple-music-phase1'
           for entry in \
             com/wtm/modular/ui/MusicModuleGuard.class \
             com/wtm/modular/ui/WorkspaceUiRecoveryGuard.class \
@@ -80,15 +56,13 @@ jobs:
             com/wtm/modular/ui/TrustedEmailUiGuard.class \
             com/wtm/modular/ui/DashboardGlyphArtGuard.class \
             brand/northstar_primary_logo_exact.png; do
-            jar tf NorthStarOperations-source-only.jar | grep -Fxq "$entry"
+            jar tf NorthStar-source-validation.jar | grep -Fxq "$entry"
           done
-          echo "REGRESSION_LOOP_2_SOURCE_ONLY_OK"
-      - name: Upload release candidate
-        uses: actions/upload-artifact@v4
-        with:
-          name: NorthStar-v2.1.30-music-audio
-          path: |
-            NorthStarOperations.jar
-            NorthStarOperations-source-only.jar
-            NorthStar-v2.1.30-SHA256SUMS.txt
-          if-no-files-found: error
+          echo "REGRESSION_LOOP_2_SOURCE_OK"
+
+# Important: this workflow intentionally validates source only and does not
+# publish a runnable release artifact. The current stable runtime contains
+# stabilized classes from v2.1.29 that are still being reconciled back into
+# canonical Java source. Publishing a JAR from an older migration baseline
+# would silently remove those fixes. Release packaging must therefore preserve
+# the verified v2.1.29 runtime baseline until source reconciliation is complete.
