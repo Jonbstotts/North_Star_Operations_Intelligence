@@ -13,6 +13,7 @@ public final class NorthStarMainStable {
     private NorthStarMainStable(){}
 
     public static void main(String[] args){
+        invoke("com.wtm.security.LocalSecurityHardening","install");
         invoke("com.wtm.modular.ui.AnnouncementBorderGuard","install");
         invoke("com.wtm.modular.ui.StartupUiGuard","install");
         invoke("com.wtm.modular.ui.SidebarModulesGlyphGuard","install");
