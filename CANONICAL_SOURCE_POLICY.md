@@ -4,33 +4,53 @@
 
 `master` is the only canonical development and release-source branch for NorthStar Operations Intelligence.
 
-All new source changes, manifests, lifecycle guards, provider integrations, and release metadata must land on `master`. Recovery and migration branches are historical inputs only and must never be merged wholesale into a release.
+All new source changes, manifests, lifecycle code, provider integrations, and release metadata must land on `master`. Recovery and migration branches are historical inputs only and must never be merged wholesale into a release.
+
+The only compilable Java source root is `src/`. IntelliJ and `build.sh` both point at that tree.
+
+## Archived legacy source
+
+Older duplicate top-level Java source trees have been moved under `legacy_source_snapshot/` so they remain available for history and selective reconciliation without competing with the canonical `src/` tree.
+
+Files under `legacy_source_snapshot/` are **not release source** and must never be added to an IDE source root or passed to `javac`. If a useful implementation exists only in the archive, reconcile it deliberately into `src/` after comparing it with the current runtime behavior.
+
+A pre-cleanup safety branch, `archive/pre-clean-sweep-2026-08-27`, preserves the repository state from immediately before this source-root cleanup.
 
 ## Verified runtime baseline during reconciliation
 
-The stabilized v2.1.29 runtime is the current binary compatibility baseline while the remaining runtime-only classes are reconciled back into canonical Java source. A release must preserve that verified runtime baseline and overlay only intentionally reviewed current changes until source reconciliation is complete.
+The stabilized runtime remains a binary compatibility reference while any remaining runtime-only classes are reconciled into canonical Java source. Release packaging must never replace current stabilized behavior with an older migration/recovery branch implementation merely because that branch contains more files.
 
-This is deliberately safer than rebuilding a runnable application from `migration/modular-core-v2`: that historical runtime predates multiple UI, NorthStar Intelligence, Data Collection, Modules, Truck Tracking, startup, and dashboard stabilization fixes. Using it as a release base can silently reintroduce old behavior.
-
-The GitHub Actions workflow therefore performs two clean `master` source-validation passes but intentionally does **not** publish a runnable release JAR from the migration runtime. This prevents an incomplete historical runtime from being mistaken for the current product.
+The GitHub Actions workflow performs clean `master` source-validation passes. Historical migration/recovery branches are not release inputs.
 
 ## Recovery and migration branches
 
 `migration/modular-core-v2` and `recovery/v1.6.3` are retained for history and selective source reconciliation. They intentionally remain separate because they diverged before the current UI stabilization work and contain legacy launcher wrappers and older UI implementations.
 
-When a still-active source file exists only on one of these branches, reconcile that file selectively into `master` after comparing it against the verified current runtime behavior. Do not replace a current file with an older branch version merely because the historical branch contains more files.
+Do not merge either branch wholesale into `master`.
 
-## Workspace UI extensions
+## Workspace lifecycle ownership
 
-Dynamic workspace extensions must survive a Settings `Save & Apply` rebuild. `WorkspaceUiRecoveryGuard` remains part of the canonical startup path and is responsible for restoring dynamic sidebar routes and NorthStar Intelligence after the workspace content tree is replaced.
+`ModuleUiCoordinatorLifecycle` owns modular sidebar restoration and route adaptation at safe workspace boundaries.
 
-The guard also supplies the NorthStar Intelligence dashboard visibility checkbox in Workspace Setup and preserves that selection independently of Main Showcase announcement settings.
+`WorkspaceLifecycleV3` owns the remaining dynamic workspace additions that are not yet native to `OperationsWorkspaceFrame`: the NorthStar Intelligence Workspace Setup toggle, Music Compact Player toggle, Music & Audio route/dashboard synchronization, and the one deliberate Dashboard remount after first workspace activation or Settings `Save & Apply`.
 
-`SidebarModulesGlyphGuard`, `TrustedEmailUiGuard`, `DashboardGlyphArtGuard`, and the Music & Audio provider module remain explicit startup services. Changes to these lifecycle components must not reintroduce broad structural rebuilding on ordinary module navigation.
+The retired `WorkspaceUiRecoveryGuard`, `MusicWorkspacePolishGuard`, and `StartupDashboardReadyGuard` must not be installed by the canonical launcher. `MusicModuleGuard.install()` must also not be called because its historical global COMPONENT_ADDED listener performs structural injection. `WorkspaceLifecycleV3` invokes only its bounded provider/sidebar/dashboard methods at explicit lifecycle boundaries.
+
+**Rule:** ordinary `COMPONENT_ADDED` events may perform cosmetic normalization only. They must never trigger a workspace rebuild, sidebar reinstall, Dashboard route change, or module coordinator reinstall.
+
+`SidebarModulesGlyphGuard`, `TrustedEmailUiGuard`, and `DashboardGlyphArtGuard` remain cosmetic/configuration startup services.
 
 ## Music & Audio
 
-The first Music & Audio provider is Apple Music through MusicKit. NorthStar does not store music files or Apple ID passwords. Playback is delegated to Apple Music through the local loopback control bridge, while playlist editing remains in the account holder's Apple Music service.
+The first Music & Audio provider is Apple Music through MusicKit. NorthStar does not download/store music or collect Apple ID passwords. Playback is delegated to Apple Music through a loopback-only control bridge, while playlist editing remains in Apple Music.
+
+Music settings are local configuration and must be stored with owner-only permissions where supported.
+
+## Secrets and local security
+
+API credentials must use `ApiCredentialService`/`SecureFiles` rather than ordinary configuration. OAuth/token files and any provider credential files must live in private application-data directories and use owner-only file permissions where the operating system supports them.
+
+Gmail DataPath document ingestion is fail-closed: at least one exact trusted sender must be configured before attachments are queried/imported.
 
 ## Legacy launchers
 
