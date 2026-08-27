@@ -5,15 +5,16 @@ import javax.swing.border.EmptyBorder;
 import java.awt.*;
 import java.awt.event.AWTEventListener;
 import java.awt.event.ActionEvent;
+import java.awt.event.ContainerEvent;
 import java.awt.event.WindowEvent;
 
 /**
  * Cosmetic-only guard for the dynamically injected Modules sidebar route.
  *
- * The modular coordinator may recreate the Modules component during a Settings
- * Save & Apply rebuild. That recreation can briefly restore the legacy plain
- * "Modules" text. This guard never rebuilds the sidebar; it only reapplies the
- * canonical glyph/text/geometry after real workspace lifecycle boundaries.
+ * Native sidebar routes are created with their glyph already present. Modules
+ * is still supplied by the modular coordinator, so every newly created Modules
+ * component is normalized immediately when it is inserted into the workspace.
+ * No module/sidebar reconstruction is performed here.
  */
 public final class SidebarModulesGlyphGuard {
     private static final String WORKSPACE_CLASS = "com.wtm.ui.OperationsWorkspaceFrame";
@@ -26,6 +27,13 @@ public final class SidebarModulesGlyphGuard {
         installed = true;
 
         AWTEventListener listener = event -> {
+            if (event instanceof ContainerEvent ce && ce.getID() == ContainerEvent.COMPONENT_ADDED) {
+                Component added = ce.getChild();
+                Window workspace = SwingUtilities.getWindowAncestor(added);
+                if (isWorkspace(workspace)) normalizeAddedComponent(added);
+                return;
+            }
+
             if (event instanceof WindowEvent we && we.getID() == WindowEvent.WINDOW_OPENED) {
                 Window window = we.getWindow();
                 if (isWorkspace(window)) stabilize(window);
@@ -44,12 +52,29 @@ public final class SidebarModulesGlyphGuard {
 
         Toolkit.getDefaultToolkit().addAWTEventListener(
                 listener,
-                AWTEvent.WINDOW_EVENT_MASK | AWTEvent.ACTION_EVENT_MASK
+                AWTEvent.CONTAINER_EVENT_MASK | AWTEvent.WINDOW_EVENT_MASK | AWTEvent.ACTION_EVENT_MASK
         );
 
         for (Window window : Window.getWindows()) {
             if (isWorkspace(window)) stabilize(window);
         }
+    }
+
+    private static void normalizeAddedComponent(Component component) {
+        if (component instanceof AbstractButton button && isModulesText(button.getText())) {
+            normalizeButton(button);
+            Container parent = button.getParent();
+            if (parent != null) {
+                parent.revalidate();
+                parent.repaint();
+            }
+            return;
+        }
+        if (component instanceof JLabel label && isModulesText(label.getText())) {
+            label.setText("▦  Modules");
+            return;
+        }
+        if (component instanceof Container child) normalizeModules(child);
     }
 
     private static Window findWorkspace(Window sourceWindow) {
@@ -69,11 +94,6 @@ public final class SidebarModulesGlyphGuard {
         return window != null && WORKSPACE_CLASS.equals(window.getClass().getName());
     }
 
-    /**
-     * Run several cosmetic passes because Save & Apply replaces the workspace
-     * tree and the modular coordinator may insert Modules on a later EDT turn.
-     * No structural injector/coordinator calls are made here.
-     */
     private static void stabilize(Window window) {
         if (window == null) return;
         runPass(window);
@@ -83,9 +103,13 @@ public final class SidebarModulesGlyphGuard {
         t1.setRepeats(false);
         t1.start();
 
-        Timer t2 = new Timer(220, e -> runPass(window));
+        Timer t2 = new Timer(260, e -> runPass(window));
         t2.setRepeats(false);
         t2.start();
+
+        Timer t3 = new Timer(600, e -> runPass(window));
+        t3.setRepeats(false);
+        t3.start();
     }
 
     private static void runPass(Window window) {
