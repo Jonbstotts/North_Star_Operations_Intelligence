@@ -84,6 +84,52 @@ public final class HttpService {
         return sendText(builder.build(),uri,url);
     }
 
+
+    /** HTTPS JSON POST with validated provider-specific headers. */
+    public String postJson(
+            String url,String json,java.util.Map<String,String> headers)
+            throws IOException,InterruptedException {
+        URI uri=validatedHttpsUri(url);
+        HttpRequest.Builder builder=HttpRequest.newBuilder(uri)
+                .timeout(REQUEST_TIMEOUT)
+                .header("User-Agent",UA)
+                .header("Accept","application/json")
+                .header("Content-Type","application/json")
+                .POST(HttpRequest.BodyPublishers.ofString(
+                        json==null?"":json,StandardCharsets.UTF_8));
+        applyHeaders(builder,headers);
+        return sendText(builder.build(),uri,url);
+    }
+
+    /** HTTPS form POST used by OAuth token endpoints. */
+    public String postForm(
+            String url,String form,java.util.Map<String,String> headers)
+            throws IOException,InterruptedException {
+        URI uri=validatedHttpsUri(url);
+        HttpRequest.Builder builder=HttpRequest.newBuilder(uri)
+                .timeout(REQUEST_TIMEOUT)
+                .header("User-Agent",UA)
+                .header("Accept","application/json")
+                .header("Content-Type","application/x-www-form-urlencoded")
+                .POST(HttpRequest.BodyPublishers.ofString(
+                        form==null?"":form,StandardCharsets.UTF_8));
+        applyHeaders(builder,headers);
+        return sendText(builder.build(),uri,url);
+    }
+
+    private static void applyHeaders(
+            HttpRequest.Builder builder,java.util.Map<String,String> headers)
+            throws IOException {
+        if(headers==null)return;
+        for(java.util.Map.Entry<String,String> entry:headers.entrySet()){
+            if(entry.getKey()==null||entry.getKey().isBlank()
+                    ||entry.getValue()==null||entry.getValue().isBlank())continue;
+            if(!HEADER_NAME.matcher(entry.getKey()).matches())
+                throw new IOException("Invalid HTTP header name.");
+            builder.header(entry.getKey(),cleanHeaderValue(entry.getValue()));
+        }
+    }
+
     public byte[] getBytes(String url) throws IOException,InterruptedException {
         URI uri=validatedHttpsUri(url);
 
