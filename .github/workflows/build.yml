@@ -27,68 +27,68 @@ jobs:
           mkdir -p out
           javac --release 21 -encoding UTF-8 -cp NorthStarRuntimeBase.jar -d out $(find src -name '*.java')
           if [ -d resources ]; then cp -R resources/. out/; fi
+          if [ -d brand ]; then mkdir -p out/brand && cp -R brand/. out/brand/; fi
+          if [ -d glyphs ]; then mkdir -p out/glyphs && cp -R glyphs/. out/glyphs/; fi
           cp NorthStarRuntimeBase.jar NorthStarOperations.jar
           jar --update --file NorthStarOperations.jar --manifest MANIFEST.MF -C out .
           sha256sum NorthStarOperations.jar > NorthStar-v2.1.30-SHA256SUMS.txt
       - name: Regression loop 1 - package and feature integrity
         run: |
           set -euo pipefail
-          verify_release() {
-            DUPLICATES=$(zipinfo -1 NorthStarOperations.jar | sort | uniq -d | wc -l | tr -d ' ')
-            test "$DUPLICATES" = "0"
-            unzip -tq NorthStarOperations.jar >/dev/null
-            unzip -p NorthStarOperations.jar META-INF/MANIFEST.MF | grep -q '^Main-Class: com.wtm.app.NorthStarMainStable'
-            unzip -p NorthStarOperations.jar META-INF/MANIFEST.MF | grep -q '^Implementation-Version: 2.1.30-music-audio-apple-music-phase1'
-            for cls in \
-              com/wtm/app/NorthStarMainStable.class \
-              com/wtm/modular/ui/MusicModuleGuard.class \
-              com/wtm/modular/ui/MusicModuleGuard\$MusicProvider.class \
-              com/wtm/modular/ui/MusicModuleGuard\$MusicPlaylist.class \
-              com/wtm/modular/ui/MusicModuleGuard\$PlaybackState.class \
-              com/wtm/modular/ui/WorkspaceUiRecoveryGuard.class \
-              com/wtm/modular/ui/SidebarModulesGlyphGuard.class \
-              com/wtm/modular/ui/TrustedEmailUiGuard.class \
-              com/wtm/modular/ui/DashboardGlyphArtGuard.class; do
-              jar tf NorthStarOperations.jar | grep -Fxq "$cls"
-            done
-            grep -q '127.0.0.1' src/com/wtm/modular/ui/MusicModuleGuard.java
-            grep -q 'MusicKit' src/com/wtm/modular/ui/MusicModuleGuard.java
-            grep -q 'NorthStar never receives your Apple ID password' src/com/wtm/modular/ui/MusicModuleGuard.java
-            grep -q 'MusicModuleGuard' src/com/wtm/app/NorthStarMainStable.java
-          }
-          verify_release
+          DUPLICATES=$(zipinfo -1 NorthStarOperations.jar | sort | uniq -d | wc -l | tr -d ' ')
+          test "$DUPLICATES" = "0"
+          unzip -tq NorthStarOperations.jar >/dev/null
+          unzip -p NorthStarOperations.jar META-INF/MANIFEST.MF | grep -q '^Main-Class: com.wtm.app.NorthStarMainStable'
+          unzip -p NorthStarOperations.jar META-INF/MANIFEST.MF | grep -q '^Implementation-Version: 2.1.30-music-audio-apple-music-phase1'
+          for entry in \
+            com/wtm/app/NorthStarMainStable.class \
+            com/wtm/modular/ui/MusicModuleGuard.class \
+            com/wtm/modular/ui/MusicModuleGuard\$MusicProvider.class \
+            com/wtm/modular/ui/MusicModuleGuard\$MusicPlaylist.class \
+            com/wtm/modular/ui/MusicModuleGuard\$PlaybackState.class \
+            com/wtm/modular/ui/WorkspaceUiRecoveryGuard.class \
+            com/wtm/modular/ui/SidebarModulesGlyphGuard.class \
+            com/wtm/modular/ui/TrustedEmailUiGuard.class \
+            com/wtm/modular/ui/DashboardGlyphArtGuard.class \
+            brand/northstar_primary_logo_exact.png \
+            brand/northstar_app_icon_exact.png; do
+            jar tf NorthStarOperations.jar | grep -Fxq "$entry"
+          done
+          grep -q '127.0.0.1' src/com/wtm/modular/ui/MusicModuleGuard.java
+          grep -q 'MusicKit' src/com/wtm/modular/ui/MusicModuleGuard.java
+          grep -q 'NorthStar never receives your Apple ID password' src/com/wtm/modular/ui/MusicModuleGuard.java
+          grep -q 'MusicModuleGuard' src/com/wtm/app/NorthStarMainStable.java
           echo "REGRESSION_LOOP_1_OK"
-      - name: Regression loop 2 - clean rebuild and repeat verification
+      - name: Regression loop 2 - clean canonical source build
         run: |
           set -euo pipefail
-          FIRST=$(sha256sum NorthStarOperations.jar | awk '{print $1}')
           rm -rf out-second
           mkdir -p out-second
-          javac --release 21 -encoding UTF-8 -cp NorthStarRuntimeBase.jar -d out-second $(find src -name '*.java')
+          javac --release 21 -encoding UTF-8 -d out-second $(find src -name '*.java')
           if [ -d resources ]; then cp -R resources/. out-second/; fi
-          cp NorthStarRuntimeBase.jar NorthStarOperations-second.jar
-          jar --update --file NorthStarOperations-second.jar --manifest MANIFEST.MF -C out-second .
-          DUPLICATES=$(zipinfo -1 NorthStarOperations-second.jar | sort | uniq -d | wc -l | tr -d ' ')
+          if [ -d brand ]; then mkdir -p out-second/brand && cp -R brand/. out-second/brand/; fi
+          if [ -d glyphs ]; then mkdir -p out-second/glyphs && cp -R glyphs/. out-second/glyphs/; fi
+          jar --create --file NorthStarOperations-source-only.jar --manifest MANIFEST.MF -C out-second .
+          DUPLICATES=$(zipinfo -1 NorthStarOperations-source-only.jar | sort | uniq -d | wc -l | tr -d ' ')
           test "$DUPLICATES" = "0"
-          unzip -tq NorthStarOperations-second.jar >/dev/null
-          unzip -p NorthStarOperations-second.jar META-INF/MANIFEST.MF | grep -q '^Implementation-Version: 2.1.30-music-audio-apple-music-phase1'
-          for cls in \
+          unzip -tq NorthStarOperations-source-only.jar >/dev/null
+          unzip -p NorthStarOperations-source-only.jar META-INF/MANIFEST.MF | grep -q '^Implementation-Version: 2.1.30-music-audio-apple-music-phase1'
+          for entry in \
             com/wtm/modular/ui/MusicModuleGuard.class \
             com/wtm/modular/ui/WorkspaceUiRecoveryGuard.class \
             com/wtm/modular/ui/SidebarModulesGlyphGuard.class \
             com/wtm/modular/ui/TrustedEmailUiGuard.class \
-            com/wtm/modular/ui/DashboardGlyphArtGuard.class; do
-            jar tf NorthStarOperations-second.jar | grep -Fxq "$cls"
+            com/wtm/modular/ui/DashboardGlyphArtGuard.class \
+            brand/northstar_primary_logo_exact.png; do
+            jar tf NorthStarOperations-source-only.jar | grep -Fxq "$entry"
           done
-          SECOND=$(sha256sum NorthStarOperations-second.jar | awk '{print $1}')
-          echo "first-build-sha=$FIRST"
-          echo "second-build-sha=$SECOND"
-          echo "REGRESSION_LOOP_2_OK"
+          echo "REGRESSION_LOOP_2_SOURCE_ONLY_OK"
       - name: Upload release candidate
         uses: actions/upload-artifact@v4
         with:
           name: NorthStar-v2.1.30-music-audio
           path: |
             NorthStarOperations.jar
+            NorthStarOperations-source-only.jar
             NorthStar-v2.1.30-SHA256SUMS.txt
           if-no-files-found: error
