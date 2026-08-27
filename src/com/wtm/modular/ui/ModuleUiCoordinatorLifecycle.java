@@ -13,7 +13,15 @@ import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.atomic.AtomicBoolean;
 
-/** Event-driven module/sidebar lifecycle. */
+/**
+ * Event-driven module/sidebar lifecycle.
+ *
+ * v2.1.19 keeps sidebar visual ownership lightweight. Container-add events are
+ * allowed to normalize the component that was added, but they MUST NOT rebuild
+ * or re-inject the workspace sidebar. Main Showcase and other settings pages
+ * create large component trees; restoring the entire sidebar for every child
+ * addition caused an O(n^2)-style EDT storm and made navigation appear frozen.
+ */
 public final class ModuleUiCoordinatorLifecycle {
     private static final AtomicBoolean STARTED=new AtomicBoolean(false);
     private static final ThreadLocal<Boolean> RESTORING=ThreadLocal.withInitial(()->Boolean.FALSE);
@@ -44,10 +52,10 @@ public final class ModuleUiCoordinatorLifecycle {
                 installFrame(frame,true);
             }else if(event instanceof ContainerEvent ce
                     &&ce.getID()==ContainerEvent.COMPONENT_ADDED){
-                Component child=ce.getChild();
-                normalizeAddedComponent(child);
-                JFrame frame=findWorkspaceFrame(ce.getContainer());
-                if(frame!=null)restoreWorkspaceSidebar(frame);
+                // Visual normalization only. Never call restoreWorkspaceSidebar()
+                // from component construction; doing so recursively re-ran module
+                // injectors while Main Showcase/Settings were still being built.
+                normalizeAddedComponent(ce.getChild());
             }
         },AWTEvent.WINDOW_EVENT_MASK|AWTEvent.CONTAINER_EVENT_MASK);
     }
@@ -120,9 +128,9 @@ public final class ModuleUiCoordinatorLifecycle {
                 JComponent finalPreviousGlass=previousGlass;
                 boolean finalPreviousVisible=previousGlassVisible;
                 SwingUtilities.invokeLater(()->{
-                    restoreWorkspaceSidebar(frame);
+                    normalizeSidebarVisualState(frame);
                     SwingUtilities.invokeLater(()->{
-                        restoreWorkspaceSidebar(frame);
+                        normalizeSidebarVisualState(frame);
                         finalPreparation.setVisible(false);
                         if(finalPreviousGlass!=null&&finalPreviousGlass!=finalPreparation){
                             frame.setGlassPane(finalPreviousGlass);
@@ -147,6 +155,10 @@ public final class ModuleUiCoordinatorLifecycle {
         return pane;
     }
 
+    /**
+     * Full route injection is intentionally restricted to workspace installation.
+     * It is never called from a child COMPONENT_ADDED event.
+     */
     private static void restoreWorkspaceSidebar(JFrame frame){
         if(!isWorkspaceFrame(frame)||Boolean.TRUE.equals(RESTORING.get()))return;
         RESTORING.set(Boolean.TRUE);
@@ -239,16 +251,6 @@ public final class ModuleUiCoordinatorLifecycle {
         button.setBorder(new EmptyBorder(9,12,9,12));
         button.setBorderPainted(false);
         button.repaint();
-    }
-
-    private static JFrame findWorkspaceFrame(Component component){
-        Component p=component;
-        while(p!=null){
-            if(p instanceof JFrame frame&&isWorkspaceFrame(frame))return frame;
-            p=p.getParent();
-        }
-        Window window=component==null?null:SwingUtilities.getWindowAncestor(component);
-        return window instanceof JFrame frame&&isWorkspaceFrame(frame)?frame:null;
     }
 
     private static boolean isWorkspaceFrame(JFrame frame){
