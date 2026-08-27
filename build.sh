@@ -2,6 +2,18 @@
 set -euo pipefail
 cd "$(dirname "$0")"
 
+# The master branch is the only canonical release source. Recovery/migration
+# branches are retained for history and source reconciliation only; they must
+# never be used accidentally to produce a release build.
+if command -v git >/dev/null 2>&1 && git rev-parse --is-inside-work-tree >/dev/null 2>&1; then
+  BRANCH=$(git symbolic-ref --quiet --short HEAD 2>/dev/null || true)
+  if [ -n "$BRANCH" ] && [ "$BRANCH" != "master" ] && [ "${NORTHSTAR_ALLOW_NONCANONICAL_BRANCH:-0}" != "1" ]; then
+    echo "ERROR: refusing release build from non-canonical branch '$BRANCH'. Checkout master first." >&2
+    echo "Set NORTHSTAR_ALLOW_NONCANONICAL_BRANCH=1 only for deliberate development testing." >&2
+    exit 1
+  fi
+fi
+
 if find src/com/wtm/app -maxdepth 1 -name 'NorthStarMain18*.java' -print -quit | grep -q .; then
   echo "ERROR: legacy NorthStarMain18xx launcher wrapper found. Use NorthStarMainStable only." >&2
   exit 1
@@ -9,6 +21,12 @@ fi
 
 if ! grep -q '^Main-Class: com.wtm.app.NorthStarMainStable$' MANIFEST.MF; then
   echo "ERROR: MANIFEST.MF is not pointing at the canonical NorthStarMainStable launcher." >&2
+  exit 1
+fi
+
+if [ ! -f src/com/wtm/modular/ui/WorkspaceUiRecoveryGuard.java ] || \
+   ! grep -q 'WorkspaceUiRecoveryGuard' src/com/wtm/app/NorthStarMainStable.java; then
+  echo "ERROR: workspace recovery guard is missing from the canonical startup path." >&2
   exit 1
 fi
 
@@ -25,4 +43,4 @@ if [ "$DUPLICATES" != "0" ]; then
 fi
 
 unzip -tq NorthStarOperations.jar >/dev/null
-echo "Built NorthStarOperations.jar from canonical src tree"
+echo "Built NorthStarOperations.jar from canonical master src tree"
