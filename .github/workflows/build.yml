@@ -21,6 +21,7 @@ jobs:
       - name: Build v2.1.30 runtime overlay
         run: |
           set -euo pipefail
+          test "$(git branch --show-current)" = "master"
           git show origin/migration/modular-core-v2:NorthStarOperations.jar > NorthStarRuntimeBase.jar
           rm -rf out
           mkdir -p out
@@ -28,10 +29,61 @@ jobs:
           if [ -d resources ]; then cp -R resources/. out/; fi
           cp NorthStarRuntimeBase.jar NorthStarOperations.jar
           jar --update --file NorthStarOperations.jar --manifest MANIFEST.MF -C out .
-          DUPLICATES=$(zipinfo -1 NorthStarOperations.jar | sort | uniq -d | wc -l | tr -d ' ')
-          test "$DUPLICATES" = "0"
-          unzip -tq NorthStarOperations.jar >/dev/null
           sha256sum NorthStarOperations.jar > NorthStar-v2.1.30-SHA256SUMS.txt
+      - name: Regression loop 1 - package and feature integrity
+        run: |
+          set -euo pipefail
+          verify_release() {
+            DUPLICATES=$(zipinfo -1 NorthStarOperations.jar | sort | uniq -d | wc -l | tr -d ' ')
+            test "$DUPLICATES" = "0"
+            unzip -tq NorthStarOperations.jar >/dev/null
+            unzip -p NorthStarOperations.jar META-INF/MANIFEST.MF | grep -q '^Main-Class: com.wtm.app.NorthStarMainStable'
+            unzip -p NorthStarOperations.jar META-INF/MANIFEST.MF | grep -q '^Implementation-Version: 2.1.30-music-audio-apple-music-phase1'
+            for cls in \
+              com/wtm/app/NorthStarMainStable.class \
+              com/wtm/modular/ui/MusicModuleGuard.class \
+              com/wtm/modular/ui/MusicModuleGuard\$MusicProvider.class \
+              com/wtm/modular/ui/MusicModuleGuard\$MusicPlaylist.class \
+              com/wtm/modular/ui/MusicModuleGuard\$PlaybackState.class \
+              com/wtm/modular/ui/WorkspaceUiRecoveryGuard.class \
+              com/wtm/modular/ui/SidebarModulesGlyphGuard.class \
+              com/wtm/modular/ui/TrustedEmailUiGuard.class \
+              com/wtm/modular/ui/DashboardGlyphArtGuard.class; do
+              jar tf NorthStarOperations.jar | grep -Fxq "$cls"
+            done
+            grep -q '127.0.0.1' src/com/wtm/modular/ui/MusicModuleGuard.java
+            grep -q 'MusicKit' src/com/wtm/modular/ui/MusicModuleGuard.java
+            grep -q 'NorthStar never receives your Apple ID password' src/com/wtm/modular/ui/MusicModuleGuard.java
+            grep -q 'MusicModuleGuard' src/com/wtm/app/NorthStarMainStable.java
+          }
+          verify_release
+          echo "REGRESSION_LOOP_1_OK"
+      - name: Regression loop 2 - clean rebuild and repeat verification
+        run: |
+          set -euo pipefail
+          FIRST=$(sha256sum NorthStarOperations.jar | awk '{print $1}')
+          rm -rf out-second
+          mkdir -p out-second
+          javac --release 21 -encoding UTF-8 -cp NorthStarRuntimeBase.jar -d out-second $(find src -name '*.java')
+          if [ -d resources ]; then cp -R resources/. out-second/; fi
+          cp NorthStarRuntimeBase.jar NorthStarOperations-second.jar
+          jar --update --file NorthStarOperations-second.jar --manifest MANIFEST.MF -C out-second .
+          DUPLICATES=$(zipinfo -1 NorthStarOperations-second.jar | sort | uniq -d | wc -l | tr -d ' ')
+          test "$DUPLICATES" = "0"
+          unzip -tq NorthStarOperations-second.jar >/dev/null
+          unzip -p NorthStarOperations-second.jar META-INF/MANIFEST.MF | grep -q '^Implementation-Version: 2.1.30-music-audio-apple-music-phase1'
+          for cls in \
+            com/wtm/modular/ui/MusicModuleGuard.class \
+            com/wtm/modular/ui/WorkspaceUiRecoveryGuard.class \
+            com/wtm/modular/ui/SidebarModulesGlyphGuard.class \
+            com/wtm/modular/ui/TrustedEmailUiGuard.class \
+            com/wtm/modular/ui/DashboardGlyphArtGuard.class; do
+            jar tf NorthStarOperations-second.jar | grep -Fxq "$cls"
+          done
+          SECOND=$(sha256sum NorthStarOperations-second.jar | awk '{print $1}')
+          echo "first-build-sha=$FIRST"
+          echo "second-build-sha=$SECOND"
+          echo "REGRESSION_LOOP_2_OK"
       - name: Upload release candidate
         uses: actions/upload-artifact@v4
         with:
