@@ -2,16 +2,24 @@ package com.wtm.modular.ui;
 
 import com.wtm.ingest.GmailDataPathService;
 import com.wtm.ingest.TrustedSenderPolicy;
+import com.wtm.ui.NorthStarThemeCompliance;
+import com.wtm.ui.Theme;
 
 import javax.swing.*;
+import javax.swing.border.EmptyBorder;
 import java.awt.*;
 import java.awt.event.*;
+import java.util.Set;
 
 /**
- * UI companion for the fail-closed Gmail trusted-sender policy.
- * Cosmetic and validation only; it performs no workspace/sidebar mutation.
+ * Visible trusted-sender management for the Gmail DataPath connector.
+ *
+ * Security remains fail-closed: no configured trusted senders means Gmail
+ * document ingestion is blocked. This class only adds/maintains the Data
+ * Collection UI and never mutates workspace/sidebar structure.
  */
 public final class TrustedEmailUiGuard {
+    private static final String INSTALLED = "northstar.gmail.trustedSenderUi";
     private static boolean installed;
 
     private TrustedEmailUiGuard() {}
@@ -23,68 +31,197 @@ public final class TrustedEmailUiGuard {
         Toolkit.getDefaultToolkit().addAWTEventListener(event -> {
             if (event instanceof ContainerEvent ce && ce.getID() == ContainerEvent.COMPONENT_ADDED) {
                 Component child = ce.getChild();
-                if (child != null) SwingUtilities.invokeLater(() -> normalize(child));
+                if (child != null) SwingUtilities.invokeLater(() -> scan(child));
             }
-            if (event instanceof ActionEvent ae && ae.getSource() instanceof JTextField field) {
-                if (isTrustedSenderField(field)) validateAndSave(field);
-            }
-        }, AWTEvent.CONTAINER_EVENT_MASK | AWTEvent.ACTION_EVENT_MASK);
+        }, AWTEvent.CONTAINER_EVENT_MASK);
 
         for (Window window : Window.getWindows()) {
-            if (window instanceof Container c) normalize(c);
+            scan(window);
         }
     }
 
-    private static void normalize(Component component) {
-        if (component instanceof JLabel label) {
-            String text = label.getText();
-            if ("Approved senders".equalsIgnoreCase(text)) {
-                label.setText("Trusted senders");
-                label.setToolTipText("Only exact email addresses in this list may submit CSV documents.");
-            } else if (text != null && text.startsWith("Blank approved-sender list accepts")) {
-                label.setText(
-                        "Trusted senders are required. Separate exact email addresses with commas or semicolons. " +
-                        "Mail from all other senders is ignored."
-                );
+    private static void scan(Component component) {
+        if (component == null) return;
+
+        if (component instanceof JComponent jc
+                && Boolean.TRUE.equals(jc.getClientProperty(INSTALLED))) {
+            return;
+        }
+
+        if (component instanceof Container container) {
+            if (isGmailDataPathCard(container)) {
+                installTrustedSenderUi(container);
+                return;
             }
-        }
-
-        if (component instanceof JTextField field && isTrustedSenderField(field)) {
-            field.setToolTipText("Required. Example: manager@company.com, reports@company.com");
-        }
-
-        if (component instanceof Container c) {
-            for (Component child : c.getComponents()) normalize(child);
+            for (Component child : container.getComponents()) scan(child);
         }
     }
 
-    private static boolean isTrustedSenderField(JTextField field) {
-        Container parent = field.getParent();
-        if (parent == null) return false;
+    private static boolean isGmailDataPathCard(Container container) {
+        if (!"com.wtm.ui.GlassSurfacePanel".equals(container.getClass().getName())) return false;
+        return containsLabel(container, "GMAIL DATAPATH");
+    }
 
-        for (Component sibling : parent.getComponents()) {
-            if (sibling instanceof JLabel label) {
+    private static boolean containsLabel(Container container, String needle) {
+        for (Component child : container.getComponents()) {
+            if (child instanceof JLabel label) {
                 String text = label.getText();
-                if ("Approved senders".equalsIgnoreCase(text)
-                        || "Trusted senders".equalsIgnoreCase(text)) {
-                    return true;
-                }
+                if (text != null && text.toUpperCase().contains(needle)) return true;
             }
+            if (child instanceof Container nested && containsLabel(nested, needle)) return true;
         }
         return false;
     }
 
-    private static void validateAndSave(JTextField field) {
+    private static void installTrustedSenderUi(Container card) {
+        if (!(card instanceof JComponent jc)) return;
+        if (Boolean.TRUE.equals(jc.getClientProperty(INSTALLED))) return;
+        if (!(card.getLayout() instanceof BorderLayout)) return;
+
+        jc.putClientProperty(INSTALLED, Boolean.TRUE);
+        JComponent security = buildTrustedSenderPanel();
+        card.add(security, BorderLayout.SOUTH);
+        NorthStarThemeCompliance.apply(security);
+        card.revalidate();
+        card.repaint();
+    }
+
+    private static JComponent buildTrustedSenderPanel() {
+        GmailDataPathService gmail = GmailDataPathService.get();
+
+        JPanel root = new JPanel(new BorderLayout(10, 10));
+        root.setOpaque(false);
+        root.setBorder(new EmptyBorder(14, 0, 0, 0));
+
+        JPanel heading = new JPanel(new BorderLayout(8, 4));
+        heading.setOpaque(false);
+        JLabel title = new JLabel("TRUSTED EMAIL SENDERS");
+        title.setForeground(Theme.text());
+        title.setFont(new Font(Font.SANS_SERIF, Font.BOLD, 13));
+        JLabel help = new JLabel(
+                "<html>Only exact addresses in this list may submit Gmail DataPath CSV documents. " +
+                "If the list is empty, email document import is blocked.</html>"
+        );
+        help.setForeground(Theme.muted());
+        heading.add(title, BorderLayout.NORTH);
+        heading.add(help, BorderLayout.CENTER);
+        root.add(heading, BorderLayout.NORTH);
+
+        DefaultListModel<String> model = new DefaultListModel<>();
         try {
-            String raw = field.getText();
-            TrustedSenderPolicy.parse(raw);
-            GmailDataPathService.get().setApprovedSenders(raw);
-            field.setToolTipText(raw == null || raw.isBlank()
-                    ? "No trusted senders configured: email document import is blocked."
-                    : "Trusted sender list saved.");
-        } catch (RuntimeException ex) {
-            field.setToolTipText(ex.getMessage());
-            Toolkit.getDefaultToolkit().beep();
+            for (String sender : TrustedSenderPolicy.parse(gmail.approvedSenders())) {
+                model.addElement(sender);
+            }
+        } catch (RuntimeException ignored) {
+            // Keep the visible list empty if old preferences contain invalid data.
+            // The fail-closed ingestion policy still prevents unsafe imports.
         }
+
+        JList<String> list = new JList<>(model);
+        list.setVisibleRowCount(3);
+        list.setSelectionMode(ListSelectionModel.SINGLE_SELECTION);
+        JScrollPane scroll = new JScrollPane(list);
+        scroll.setPreferredSize(new Dimension(320, 82));
+        root.add(scroll, BorderLayout.CENTER);
+
+        JPanel controls = new JPanel();
+        controls.setOpaque(false);
+        controls.setLayout(new BoxLayout(controls, BoxLayout.Y_AXIS));
+
+        JPanel inputRow = new JPanel(new BorderLayout(8, 0));
+        inputRow.setOpaque(false);
+        JLabel inputLabel = new JLabel("Email address");
+        inputLabel.setForeground(Theme.text());
+        JTextField input = new JTextField();
+        input.setToolTipText("Enter one complete email address, for example manager@company.com");
+        JButton add = new JButton("Add Trusted Sender");
+        inputRow.add(inputLabel, BorderLayout.WEST);
+        inputRow.add(input, BorderLayout.CENTER);
+        inputRow.add(add, BorderLayout.EAST);
+
+        JPanel actionRow = new JPanel(new FlowLayout(FlowLayout.LEFT, 8, 6));
+        actionRow.setOpaque(false);
+        JButton remove = new JButton("Remove Selected");
+        JButton save = new JButton("Save Trusted Senders");
+        JLabel state = new JLabel();
+        actionRow.add(remove);
+        actionRow.add(save);
+        actionRow.add(state);
+
+        controls.add(inputRow);
+        controls.add(actionRow);
+        root.add(controls, BorderLayout.SOUTH);
+
+        Runnable refreshState = () -> {
+            int count = model.getSize();
+            if (count == 0) {
+                state.setText("BLOCKED • no trusted senders configured");
+                state.setForeground(new Color(224, 170, 75));
+            } else {
+                state.setText("PROTECTED • " + count + (count == 1 ? " trusted sender" : " trusted senders"));
+                state.setForeground(new Color(40, 205, 150));
+            }
+        };
+
+        Runnable persist = () -> {
+            StringBuilder raw = new StringBuilder();
+            for (int i = 0; i < model.size(); i++) {
+                if (i > 0) raw.append(", ");
+                raw.append(model.get(i));
+            }
+            gmail.setApprovedSenders(raw.toString());
+            refreshState.run();
+        };
+
+        ActionListener addSender = e -> {
+            try {
+                Set<String> parsed = TrustedSenderPolicy.parse(input.getText());
+                if (parsed.size() != 1) {
+                    throw new SecurityException("Enter one complete email address.");
+                }
+                String sender = parsed.iterator().next();
+                if (!contains(model, sender)) model.addElement(sender);
+                input.setText("");
+                persist.run();
+            } catch (RuntimeException ex) {
+                JOptionPane.showMessageDialog(
+                        root,
+                        ex.getMessage(),
+                        "Trusted Email Sender",
+                        JOptionPane.WARNING_MESSAGE
+                );
+            }
+        };
+
+        add.addActionListener(addSender);
+        input.addActionListener(addSender);
+        remove.addActionListener(e -> {
+            int selected = list.getSelectedIndex();
+            if (selected >= 0) {
+                model.remove(selected);
+                persist.run();
+            }
+        });
+        save.addActionListener(e -> {
+            persist.run();
+            JOptionPane.showMessageDialog(
+                    root,
+                    model.isEmpty()
+                            ? "Trusted sender list saved. Gmail document ingestion remains blocked until at least one sender is added."
+                            : "Trusted sender list saved. Only listed addresses may submit Gmail DataPath documents.",
+                    "Trusted Email Senders",
+                    JOptionPane.INFORMATION_MESSAGE
+            );
+        });
+
+        refreshState.run();
+        return root;
+    }
+
+    private static boolean contains(DefaultListModel<String> model, String value) {
+        for (int i = 0; i < model.size(); i++) {
+            if (value.equalsIgnoreCase(model.get(i))) return true;
+        }
+        return false;
     }
 }
