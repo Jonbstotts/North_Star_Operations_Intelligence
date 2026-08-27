@@ -5,27 +5,29 @@ import java.awt.*;
 import java.awt.event.*;
 import java.lang.reflect.Field;
 import java.lang.reflect.Method;
-import java.util.Map;
 import java.util.WeakHashMap;
 
 /**
- * Stabilizes the Dashboard after the workspace becomes visible and after a
- * Settings Save & Apply completes.
+ * Condition-driven Dashboard readiness guard.
  *
- * IMPORTANT: this guard never calls showDashboardRoute(). The previous
- * implementation rebuilt the Dashboard shortly after the native workspace had
- * already mounted it. That second structural rebuild raced the post-login
- * transition and Settings rebuild lifecycle, producing the blank Dashboard
- * observed until the user navigated away and back.
+ * The native workspace intentionally queues its first Dashboard route with
+ * invokeLater().  During post-login transition and Settings Save & Apply, later
+ * workspace lifecycle work can replace that first tree.  The visible symptom
+ * is a blank Dashboard that repairs itself as soon as the user navigates away
+ * and back.
  *
- * This version only refreshes/validates the already-mounted Dashboard and asks
- * dynamic Dashboard extensions (NorthStar Intelligence and Music) to attach to
- * that stable tree. It is intentionally limited to window-open and Save & Apply
- * lifecycle boundaries; ordinary navigation/component creation is untouched.
+ * This guard mirrors that successful manual recovery, but only when the
+ * Dashboard is genuinely unhealthy.  It watches startup/save for a bounded
+ * period, verifies that dashboardBody is attached beneath workspaceContentHost,
+ * and calls showDashboardRoute() only if that invariant is broken.  Once the
+ * native Dashboard is healthy it performs cosmetic/data refresh plus dynamic
+ * Intelligence/Music attachment and stops.  Ordinary navigation is never
+ * monitored.
  */
 public final class StartupDashboardReadyGuard {
     private static final String WORKSPACE_CLASS = "com.wtm.ui.OperationsWorkspaceFrame";
-    private static final Map<Window, Timer[]> PASSES = new WeakHashMap<>();
+    private static final String MINI_MARK = "northstar.music.mini";
+    private static final WeakHashMap<Window, Timer> WATCHES = new WeakHashMap<>();
     private static boolean installed;
 
     private StartupDashboardReadyGuard() {}
@@ -38,7 +40,7 @@ public final class StartupDashboardReadyGuard {
             if (event instanceof WindowEvent we
                     && we.getID() == WindowEvent.WINDOW_OPENED
                     && isWorkspace(we.getWindow())) {
-                schedulePasses(we.getWindow());
+                startWatch(we.getWindow());
                 return;
             }
 
@@ -46,15 +48,12 @@ public final class StartupDashboardReadyGuard {
                     && ae.getSource() instanceof AbstractButton button
                     && "Save & Apply".equalsIgnoreCase(clean(button.getText()))) {
                 Window workspace = findWorkspace(SwingUtilities.getWindowAncestor(button));
-                if (workspace != null) {
-                    // Let Settings finish config persistence/buildUi first.
-                    SwingUtilities.invokeLater(() -> schedulePasses(workspace));
-                }
+                if (workspace != null) SwingUtilities.invokeLater(() -> startWatch(workspace));
             }
         }, AWTEvent.WINDOW_EVENT_MASK | AWTEvent.ACTION_EVENT_MASK);
 
         for (Window window : Window.getWindows()) {
-            if (isWorkspace(window) && window.isShowing()) schedulePasses(window);
+            if (isWorkspace(window) && window.isShowing()) startWatch(window);
         }
     }
 
@@ -75,57 +74,132 @@ public final class StartupDashboardReadyGuard {
         return null;
     }
 
-    private static void schedulePasses(Window window) {
+    private static void startWatch(Window window) {
         if (!(window instanceof JFrame frame)) return;
         if (!SwingUtilities.isEventDispatchThread()) {
-            SwingUtilities.invokeLater(() -> schedulePasses(window));
+            SwingUtilities.invokeLater(() -> startWatch(window));
             return;
         }
 
-        Timer[] previous = PASSES.remove(window);
-        if (previous != null) for (Timer timer : previous) if (timer != null) timer.stop();
+        Timer old = WATCHES.remove(window);
+        if (old != null) old.stop();
 
-        // Multiple bounded passes cover macOS post-login/window geometry and
-        // the asynchronous Settings buildUi() completion without polling.
-        int[] delays = {180, 420, 850};
-        Timer[] timers = new Timer[delays.length];
-        for (int i = 0; i < delays.length; i++) {
-            Timer timer = new Timer(delays[i], e -> {
-                ((Timer)e.getSource()).stop();
-                stabilize(frame);
-            });
-            timer.setRepeats(false);
-            timers[i] = timer;
-            timer.start();
-        }
-        PASSES.put(window, timers);
+        final long deadline = System.currentTimeMillis() + 6500L;
+        final int[] repairs = {0};
+        final int[] healthyPasses = {0};
+
+        Timer watch = new Timer(140, null);
+        watch.addActionListener(e -> {
+            if (!frame.isDisplayable() || !frame.isShowing()) {
+                watch.stop();
+                WATCHES.remove(window);
+                return;
+            }
+
+            String route = activeRoute(frame);
+            if (!"Dashboard".equalsIgnoreCase(route)) {
+                if (System.currentTimeMillis() >= deadline) {
+                    watch.stop();
+                    WATCHES.remove(window);
+                }
+                return;
+            }
+
+            if (!dashboardHealthy(frame)) {
+                healthyPasses[0] = 0;
+                if (repairs[0] < 3) {
+                    repairs[0]++;
+                    invoke(frame, "showDashboardRoute");
+                }
+            } else {
+                syncDashboard(frame);
+                healthyPasses[0]++;
+                // Require two consecutive healthy observations so a later
+                // post-login/settings lifecycle replacement cannot win the race.
+                if (healthyPasses[0] >= 2) {
+                    watch.stop();
+                    WATCHES.remove(window);
+                    return;
+                }
+            }
+
+            if (System.currentTimeMillis() >= deadline) {
+                // Final safe attempt only if the Dashboard is still broken.
+                if (!dashboardHealthy(frame) && repairs[0] < 4) {
+                    invoke(frame, "showDashboardRoute");
+                    syncDashboard(frame);
+                }
+                watch.stop();
+                WATCHES.remove(window);
+            }
+        });
+        watch.setInitialDelay(120);
+        watch.setRepeats(true);
+        WATCHES.put(window, watch);
+        watch.start();
     }
 
-    private static void stabilize(JFrame frame) {
-        if (!frame.isDisplayable() || !frame.isShowing()) return;
-        if (!"Dashboard".equalsIgnoreCase(activeRoute(frame))) return;
+    private static boolean dashboardHealthy(JFrame frame) {
+        Object bodyValue = field(frame, "dashboardBody");
+        Object hostValue = field(frame, "workspaceContentHost");
+        if (!(bodyValue instanceof JPanel body) || !(hostValue instanceof JPanel host)) return false;
+        if (body.getParent() == null || host.getComponentCount() == 0) return false;
+        if (!javax.swing.SwingUtilities.isDescendingFrom(body, host)) return false;
+        // Native Dashboard always contains summary + spacer + module grid.
+        return body.getComponentCount() >= 3 && body.getWidth() > 0 && body.getHeight() > 0;
+    }
+
+    private static void syncDashboard(JFrame frame) {
+        invoke(frame, "refreshVisibleModules");
+        invokeStaticFrame("com.wtm.app.AiEnabledMain", "injectDashboard", frame);
+
+        if (musicDashboardEnabled()) {
+            invokeStaticWindow("com.wtm.modular.ui.MusicModuleGuard", "injectDashboardPlayer", frame);
+        } else {
+            removeMarked((Container) frame, MINI_MARK);
+        }
 
         Object body = field(frame, "dashboardBody");
         Object host = field(frame, "workspaceContentHost");
-        if (!(body instanceof JComponent dashboard)
-                || !(host instanceof JComponent workspaceHost)
-                || dashboard.getParent() == null) {
-            // Native buildUi/showDashboardRoute may still be queued. A later
-            // bounded pass will pick it up; do not create a competing tree.
-            return;
-        }
-
-        invoke(frame, "refreshVisibleModules");
-        invokeStaticFrame("com.wtm.app.AiEnabledMain", "injectDashboard", frame);
-        invokeStaticWindow("com.wtm.modular.ui.MusicModuleGuard", "installWorkspace", frame);
-
-        dashboard.revalidate();
-        workspaceHost.revalidate();
+        if (body instanceof JComponent c) c.revalidate();
+        if (host instanceof JComponent c) c.revalidate();
         frame.getRootPane().revalidate();
         frame.validate();
-        dashboard.repaint();
-        workspaceHost.repaint();
+        if (body instanceof JComponent c) c.repaint();
+        if (host instanceof JComponent c) c.repaint();
         frame.repaint();
+    }
+
+    private static boolean musicDashboardEnabled() {
+        try {
+            Class<?> serviceClass = Class.forName("com.wtm.modular.ui.MusicModuleGuard$MusicService");
+            Method instance = serviceClass.getDeclaredMethod("instance");
+            instance.setAccessible(true);
+            Object service = instance.invoke(null);
+            Field settingsField = serviceClass.getDeclaredField("settings");
+            settingsField.setAccessible(true);
+            Object settings = settingsField.get(service);
+            Field dashboard = settings.getClass().getDeclaredField("dashboardPlayer");
+            dashboard.setAccessible(true);
+            return dashboard.getBoolean(settings);
+        } catch (ReflectiveOperationException ex) {
+            return true;
+        }
+    }
+
+    private static void removeMarked(Container root, String marker) {
+        for (Component component : root.getComponents()) {
+            if (component instanceof JComponent jc
+                    && Boolean.TRUE.equals(jc.getClientProperty(marker))
+                    && component.getParent() != null) {
+                Container parent = component.getParent();
+                parent.remove(component);
+                parent.revalidate();
+                parent.repaint();
+                return;
+            }
+            if (component instanceof Container child) removeMarked(child, marker);
+        }
     }
 
     private static String activeRoute(JFrame frame) {
