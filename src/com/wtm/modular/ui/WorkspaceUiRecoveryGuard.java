@@ -1,6 +1,7 @@
 package com.wtm.modular.ui;
 
 import javax.swing.*;
+import javax.swing.border.EmptyBorder;
 import java.awt.*;
 import java.awt.event.*;
 import java.lang.reflect.*;
@@ -11,11 +12,10 @@ import java.util.prefs.Preferences;
 /**
  * Event-driven recovery guard for dynamic NorthStar workspace extensions.
  *
- * The core workspace rebuilds its content tree after Settings Save & Apply.
- * Dynamic routes (Modules, NorthStar Intelligence, Data Collection) therefore
- * have to be reattached to the new tree after the rebuild has completed. This
- * guard debounces component bursts so restoration happens once, after the new
- * UI is stable, instead of during intermediate layout states.
+ * Recovery is intentionally limited to real workspace lifecycle boundaries:
+ * initial window open and Settings Save & Apply. Ordinary module navigation
+ * must never trigger a structural sidebar reinstall; doing so causes the
+ * visible "jump" that earlier stabilization builds exhibited.
  */
 public final class WorkspaceUiRecoveryGuard {
     private static final String WORKSPACE_CLASS = "com.wtm.ui.OperationsWorkspaceFrame";
@@ -39,11 +39,6 @@ public final class WorkspaceUiRecoveryGuard {
                 schedule(we.getWindow(), 80);
                 return;
             }
-            if (event instanceof ContainerEvent ce && ce.getID() == ContainerEvent.COMPONENT_ADDED) {
-                Window window = SwingUtilities.getWindowAncestor(ce.getChild());
-                if (isNorthStarWindow(window)) schedule(window, 160);
-                return;
-            }
             if (event instanceof ActionEvent ae && ae.getSource() instanceof AbstractButton button) {
                 String text = button.getText() == null ? "" : button.getText().trim();
                 if ("Save & Apply".equalsIgnoreCase(text)) {
@@ -57,7 +52,7 @@ public final class WorkspaceUiRecoveryGuard {
                     }
                 }
             }
-        }, AWTEvent.WINDOW_EVENT_MASK | AWTEvent.CONTAINER_EVENT_MASK | AWTEvent.ACTION_EVENT_MASK);
+        }, AWTEvent.WINDOW_EVENT_MASK | AWTEvent.ACTION_EVENT_MASK);
 
         for (Window window : Window.getWindows()) {
             if (isNorthStarWindow(window)) schedule(window, 40);
@@ -233,17 +228,42 @@ public final class WorkspaceUiRecoveryGuard {
         Object raw = fieldValue(frame, "sidebarRouteButtons");
         String active = String.valueOf(fieldValue(frame, "activeWorkspaceRoute"));
         if (!(raw instanceof Map<?, ?> map)) return;
+
         for (Map.Entry<?, ?> entry : map.entrySet()) {
             if (!(entry.getValue() instanceof JButton button)) continue;
-            boolean selected = entry.getKey() != null
-                    && entry.getKey().toString().equalsIgnoreCase(active);
+            String route = entry.getKey() == null ? "" : entry.getKey().toString();
+            boolean selected = route.equalsIgnoreCase(active);
+
             button.putClientProperty("northstar.sidebar.active", selected);
             button.setEnabled(true);
             button.setFocusable(false);
             button.setFocusPainted(false);
+
+            if ("Modules".equalsIgnoreCase(route)) {
+                normalizeModulesRoute(button);
+            }
+
             if (!selected) button.getModel().setRollover(false);
             button.repaint();
         }
+    }
+
+    /**
+     * Modules is injected by the modular coordinator rather than by the base
+     * workspace. Give it exactly the same geometry and leading-glyph treatment
+     * as the native sidebar routes so it never changes width/indentation after
+     * selection and cannot cause a sidebar layout jump.
+     */
+    private static void normalizeModulesRoute(JButton button) {
+        button.setText("▦  Modules");
+        button.setHorizontalAlignment(SwingConstants.LEFT);
+        button.setFont(new Font(Font.SANS_SERIF, Font.PLAIN, 12));
+        button.setBorder(new EmptyBorder(9, 12, 9, 12));
+        button.setMaximumSize(new Dimension(Integer.MAX_VALUE, 42));
+        button.setPreferredSize(new Dimension(button.getPreferredSize().width, 42));
+        button.setAlignmentX(Component.LEFT_ALIGNMENT);
+        button.putClientProperty("northstar.sidebar.route", Boolean.TRUE);
+        button.putClientProperty("northstar.ui.skip", Boolean.TRUE);
     }
 
     private static void removeNamedComponent(Container root, String name) {
