@@ -1,0 +1,73 @@
+name: One-shot Music module rename
+
+on:
+  push:
+    branches: [ master ]
+    paths:
+      - '.github/workflows/one-shot-music-module-rename.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  rename:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: master
+          fetch-depth: 0
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '21'
+      - name: Rename Music module and source/build references
+        run: |
+          set -euo pipefail
+          old='src/com/wtm/modular/ui/MusicModuleGuard.java'
+          new='src/com/wtm/modular/ui/MusicWorkspaceModule.java'
+          test -f "$old"
+          test ! -e "$new"
+          git mv "$old" "$new"
+          python3 - <<'PY'
+          from pathlib import Path
+          targets=[Path('src/com/wtm/modular/ui/MusicWorkspaceModule.java'),
+                   Path('src/com/wtm/modular/ui/WorkspaceLifecycleV3.java'),
+                   Path('build.sh')]
+          for p in targets:
+              s=p.read_text()
+              if 'MusicModuleGuard' in s:
+                  s=s.replace('MusicModuleGuard','MusicWorkspaceModule')
+              p.write_text(s)
+          music=Path('src/com/wtm/modular/ui/MusicWorkspaceModule.java')
+          s=music.read_text()
+          if 'public final class MusicWorkspaceModule' not in s:
+              raise SystemExit('renamed class declaration missing')
+          if 'private MusicWorkspaceModule(){}' not in s:
+              raise SystemExit('renamed constructor missing')
+          lifecycle=Path('src/com/wtm/modular/ui/WorkspaceLifecycleV3.java').read_text()
+          if 'MusicModuleGuard' in lifecycle:
+              raise SystemExit('old MusicModuleGuard reference remains in lifecycle')
+          build=Path('build.sh').read_text()
+          if 'src/com/wtm/modular/ui/MusicModuleGuard.java' in build:
+              raise SystemExit('old MusicModuleGuard path remains in build.sh')
+          if 'MusicWorkspaceModule' not in build:
+              raise SystemExit('new MusicWorkspaceModule gates missing from build.sh')
+          PY
+          if grep -R -n --include='*.java' 'MusicModuleGuard' src; then
+            echo 'Old MusicModuleGuard symbol remains in canonical source.' >&2
+            exit 1
+          fi
+          git diff --check
+          rm -rf /tmp/ns-out && mkdir -p /tmp/ns-out
+          javac --release 21 -encoding UTF-8 -d /tmp/ns-out $(find src -name '*.java')
+          test -f /tmp/ns-out/com/wtm/modular/ui/MusicWorkspaceModule.class
+          bash build.sh
+      - name: Commit Music module rename
+        run: |
+          set -euo pipefail
+          git config user.name 'NorthStar Cleanup Bot'
+          git config user.email 'actions@users.noreply.github.com'
+          git add -A src/com/wtm/modular/ui build.sh
+          git commit -m 'Rename Music guard to source-owned workspace module'
+          git push origin master
