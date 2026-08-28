@@ -48,7 +48,6 @@ public final class WorkspaceLifecycleV3 {
         AiEnabledMain.injectSidebar(workspace);
         MusicModuleGuard.installWorkspace(workspace);
         syncDynamicDashboard(workspace);
-        TrustedEmailUiGuard.apply(workspace);
         workspace.getRootPane().revalidate();
         workspace.validate();
         workspace.repaint();
@@ -63,7 +62,6 @@ public final class WorkspaceLifecycleV3 {
     /** Called after a non-Dashboard route is mounted. */
     public static void routeMounted(OperationsWorkspaceFrame workspace) {
         if (workspace == null) return;
-        TrustedEmailUiGuard.apply(workspace);
     }
 
     /** Called after Settings has built all authorized workspace controls. */

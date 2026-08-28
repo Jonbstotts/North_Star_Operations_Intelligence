@@ -328,6 +328,9 @@ public final class OperationsWorkspaceFrame extends JFrame {
         side.add(Box.createVerticalStrut(12));
         side.add(sideSectionLabel("ADMINISTRATION"));
 
+        if(AuthorizationService.allowed(Permission.DATA_REFRESH))
+            side.add(sideDataCollectionButton());
+
         /*
          * v1.0.7: Information Blocks and the former Operations Workspace page
          * are one Settings page now. The sidebar must route to the exact tab
@@ -386,6 +389,15 @@ public final class OperationsWorkspaceFrame extends JFrame {
         JButton button=createSidebarButton("▦  Dashboard",true);
         sidebarRouteButtons.put("Dashboard",button);
         button.addActionListener(e->showDashboardRoute());
+        updateSidebarSelection();
+        return button;
+    }
+
+    private JButton sideDataCollectionButton(){
+        JButton button=createSidebarButton("▣  Data Collection",false);
+        sidebarRouteButtons.put("Data Collection",button);
+        button.addActionListener(e->showWorkspaceExtensionRoute(
+                "Data Collection",new DataCollectionPanel()));
         updateSidebarSelection();
         return button;
     }
@@ -494,7 +506,6 @@ public final class OperationsWorkspaceFrame extends JFrame {
         workspaceContentHost.revalidate();
         workspaceContentHost.repaint();
         updateSidebarSelection();
-        WorkspaceLifecycleV3.routeMounted(this);
         return true;
     }
 
@@ -2871,7 +2882,6 @@ public final class OperationsWorkspaceFrame extends JFrame {
             workspaceContentHost.revalidate();
             workspaceContentHost.repaint();
         }
-        WorkspaceLifecycleV3.routeMounted(this);
     }
 
     private void releaseDashboardModules(){
