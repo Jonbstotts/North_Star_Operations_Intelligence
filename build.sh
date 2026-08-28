@@ -244,6 +244,21 @@ if grep -q 'restrictMusicStorage' src/com/wtm/modular/ui/WorkspaceLifecycleV3.ja
   exit 1
 fi
 
+# Canonical source must not rediscover UI/runtime ownership through reflection,
+# global AWT listeners, open-window scans, or class-name matching. getSimpleName
+# is intentionally excluded because it is used only for harmless error labels.
+if grep -R -n --include='*.java' -E 'Class\.forName|getClass\(\)\.getName|\.getName\(\)\.contains|addAWTEventListener|Window\.getWindows' src; then
+  echo "ERROR: dynamic/global runtime discovery returned to canonical source." >&2
+  exit 1
+fi
+
+# The retired standalone .northstar directory may appear only in the explicit
+# one-time Music migration path; active hardening/storage must use ConfigService.
+if grep -Fq 'Paths.get(System.getProperty("user.home"), ".northstar")' src/com/wtm/security/LocalSecurityHardening.java; then
+  echo "ERROR: LocalSecurityHardening still targets retired .northstar storage." >&2
+  exit 1
+fi
+
 rm -rf out
 mkdir -p out
 javac --release 21 -encoding UTF-8 -d out $(find src -name '*.java')
