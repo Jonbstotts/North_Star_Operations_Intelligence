@@ -23,6 +23,10 @@ public enum Permission {
     API_ADMINISTRATION("API providers / credentials"),
     API_USAGE("API usage"),
     DATA_REFRESH("Data & refresh"),
+    TRUCK_TRACKING("Truck tracking"),
+    AI_ASSISTANT("NorthStar Intelligence"),
+    AI_KNOWLEDGE_ADMIN("AI knowledge library administration"),
+    AI_EMPLOYEE_METRICS("AI access to employee metrics"),
     MANAGE_USERS("Users & access"),
     VIEW_AUDIT_LOG("Audit log");
 
