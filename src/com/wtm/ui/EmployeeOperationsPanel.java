@@ -133,23 +133,13 @@ public final class EmployeeOperationsPanel extends JPanel {
         setLayout(new BorderLayout(14,14));
         setBorder(new EmptyBorder(14,14,14,14));
 
-        JLabel heading=new JLabel("Employee Operations");
-        heading.setFont(new Font(Font.SANS_SERIF,Font.BOLD,22));
-
         JLabel description=new JLabel(
                 "<html>Management-only employee system of record for identity, "
                 +"recognition, qualifications, attendance/call-ins, performance "
                 +"and daily assignment eligibility.</html>"
         );
         description.setFont(new Font(Font.SANS_SERIF,Font.PLAIN,11));
-
-        JPanel header=new JPanel();
-        header.setOpaque(false);
-        header.setLayout(new BoxLayout(header,BoxLayout.Y_AXIS));
-        header.add(heading);
-        header.add(Box.createVerticalStrut(3));
-        header.add(description);
-        add(header,BorderLayout.NORTH);
+        add(description,BorderLayout.NORTH);
 
         JComponent directory=buildEmployeeDirectory();
         directory.setMinimumSize(new Dimension(390,0));
@@ -199,6 +189,16 @@ public final class EmployeeOperationsPanel extends JPanel {
 
         employeeTable.setRowHeight(28);
         employeeTable.setSelectionMode(ListSelectionModel.SINGLE_SELECTION);
+        hideDirectoryColumn("Employee #");
+        hideDirectoryColumn("Department");
+        hideDirectoryColumn("Shift");
+        try{
+            employeeTable.getColumn("Name").setPreferredWidth(210);
+            var activeColumn=employeeTable.getColumn("Active");
+            activeColumn.setMinWidth(70);
+            activeColumn.setPreferredWidth(80);
+            activeColumn.setMaxWidth(95);
+        }catch(IllegalArgumentException ignored){}
 
         JPanel buttons=new JPanel(new GridLayout(1,2,8,0));
         buttons.setOpaque(false);
@@ -216,6 +216,11 @@ public final class EmployeeOperationsPanel extends JPanel {
         card.add(new JScrollPane(employeeTable),BorderLayout.CENTER);
         card.add(buttons,BorderLayout.SOUTH);
         return card;
+    }
+
+    private void hideDirectoryColumn(String name){
+        try{ employeeTable.removeColumn(employeeTable.getColumn(name)); }
+        catch(IllegalArgumentException ignored){}
     }
 
     private JComponent buildEmployeeWorkspace(){

@@ -2,10 +2,7 @@ package com.wtm.ui;
 
 import javax.swing.*;
 import javax.swing.border.EmptyBorder;
-import javax.swing.table.TableColumn;
 import java.awt.*;
-import java.util.ArrayList;
-import java.util.List;
 
 /**
  * Shared NorthStar theme/layout core.
@@ -15,15 +12,12 @@ import java.util.List;
  * belongs to UiFoundationRuntime rather than a second global listener here.
  */
 public final class ThemeCoreV216 {
-    private static final String EMPLOYEE_PANEL_CLASS="com.wtm.ui.EmployeeOperationsPanel";
-
     private ThemeCoreV216(){}
 
     /** Called synchronously for the root passed to ThemeStyler. */
     public static void applyImmediate(Component component){
         if(component instanceof JDialog dialog)polishDialog(dialog);
         normalizeLocationsHeader(component);
-        normalizeEmployeeOperations(component);
     }
 
     /**
@@ -44,78 +38,6 @@ public final class ThemeCoreV216 {
         }
     }
 
-    /** Employee page compact directory treatment owned by the shared UI core. */
-    private static void normalizeEmployeeOperations(Component root){
-        Component found=findByClass(root,EMPLOYEE_PANEL_CLASS);
-        if(!(found instanceof Container employeePanel))return;
-        if(employeePanel instanceof JComponent jc
-                &&Boolean.TRUE.equals(jc.getClientProperty("northstar.employee.compactDirectory")))return;
-
-        // The workspace shell already owns the large page title. Keep the
-        // management-only explanatory sentence immediately below it.
-        for(JLabel label:labels(employeePanel)){
-            if("Employee Operations".equals(label.getText())
-                    &&label.getFont()!=null
-                    &&label.getFont().getSize()>=18){
-                label.setVisible(false);
-                label.setPreferredSize(new Dimension(0,0));
-                label.setMinimumSize(new Dimension(0,0));
-                label.setMaximumSize(new Dimension(0,0));
-            }
-        }
-
-        JTable directory=findEmployeeDirectoryTable(employeePanel);
-        if(directory!=null){
-            hideTableColumn(directory,"Employee #");
-            hideTableColumn(directory,"Department");
-            hideTableColumn(directory,"Shift");
-            try{
-                TableColumn name=directory.getColumn("Name");
-                name.setPreferredWidth(210);
-                TableColumn active=directory.getColumn("Active");
-                active.setMinWidth(70);
-                active.setPreferredWidth(80);
-                active.setMaxWidth(95);
-            }catch(IllegalArgumentException ignored){}
-        }
-
-        JSplitPane split=findFirst(employeePanel,JSplitPane.class);
-        if(split!=null){
-            split.setDividerSize(14);
-            split.setContinuousLayout(true);
-            split.setOpaque(false);
-            split.setBackground(Theme.bg());
-            if(split.getUI() instanceof javax.swing.plaf.basic.BasicSplitPaneUI ui
-                    &&ui.getDivider()!=null){
-                ui.getDivider().setBackground(Theme.bg());
-                ui.getDivider().setBorder(BorderFactory.createEmptyBorder());
-            }
-        }
-
-        if(employeePanel instanceof JComponent jc)
-            jc.putClientProperty("northstar.employee.compactDirectory",Boolean.TRUE);
-        employeePanel.invalidate();
-    }
-
-    private static JTable findEmployeeDirectoryTable(Container root){
-        for(JTable table:findAll(root,JTable.class)){
-            boolean name=false,active=false,employee=false;
-            for(int i=0;i<table.getModel().getColumnCount();i++){
-                String n=String.valueOf(table.getModel().getColumnName(i));
-                if("Name".equals(n))name=true;
-                if("Active".equals(n))active=true;
-                if("Employee #".equals(n))employee=true;
-            }
-            if(name&&active&&employee)return table;
-        }
-        return null;
-    }
-
-    private static void hideTableColumn(JTable table,String name){
-        try{ table.removeColumn(table.getColumn(name)); }
-        catch(IllegalArgumentException ignored){}
-    }
-
     private static Container findContainerContainingText(Component root,String text){
         if(root instanceof Container c){
             if(containsText(c,text)){
@@ -134,37 +56,6 @@ public final class ThemeCoreV216 {
         if(root instanceof Container c)
             for(Component child:c.getComponents()){
                 JLabel found=findLabel(child,text);
-                if(found!=null)return found;
-            }
-        return null;
-    }
-
-    private static List<JLabel> labels(Container root){ return findAll(root,JLabel.class); }
-
-    private static <T extends Component> T findFirst(Container root,Class<T> type){
-        List<T> all=findAll(root,type);
-        return all.isEmpty()?null:all.get(0);
-    }
-
-    private static <T extends Component> List<T> findAll(Component root,Class<T> type){
-        List<T> result=new ArrayList<>();
-        collect(root,type,result);
-        return result;
-    }
-
-    private static <T extends Component> void collect(Component root,Class<T> type,List<T> out){
-        if(root==null)return;
-        if(type.isInstance(root))out.add(type.cast(root));
-        if(root instanceof Container c)
-            for(Component child:c.getComponents())collect(child,type,out);
-    }
-
-    private static Component findByClass(Component root,String className){
-        if(root==null)return null;
-        if(className.equals(root.getClass().getName()))return root;
-        if(root instanceof Container c)
-            for(Component child:c.getComponents()){
-                Component found=findByClass(child,className);
                 if(found!=null)return found;
             }
         return null;
