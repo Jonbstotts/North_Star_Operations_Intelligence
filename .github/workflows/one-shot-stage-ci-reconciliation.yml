@@ -42,7 +42,7 @@ jobs:
           git diff --check
           grep -q 'mountDashboardExtension(String id' ci/build-next.yml
           grep -q 'registerWorkspaceModuleToggle' ci/build-next.yml
-          ! grep -q "grep -q 'dashboardBody' src/com/wtm/app/AiEnabledMain.java" ci/build-next.yml
+          grep -q "! grep -q 'dashboardBody' src/com/wtm/app/AiEnabledMain.java" ci/build-next.yml
       - name: Commit staged CI file
         run: |
           set -euo pipefail
