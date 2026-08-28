@@ -1,0 +1,61 @@
+name: Stage FlatLaf-aware canonical CI
+on:
+  push:
+    branches: [master]
+    paths:
+      - .github/workflows/one-shot-stage-flatlaf-ci.yml
+permissions:
+  contents: write
+jobs:
+  stage:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: master
+          fetch-depth: 0
+      - name: Build staged workflow
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p ci
+          cp .github/workflows/build.yml ci/build-next.yml
+          python3 - <<'PY'
+          from pathlib import Path
+          p=Path('ci/build-next.yml')
+          s=p.read_text()
+          old="javac --release 21 -encoding UTF-8 -d out $(find src -name '*.java')"
+          new="javac --release 21 -Xlint:unchecked -Werror -encoding UTF-8 -cp 'lib/*' -d out $(find src -name '*.java')"
+          if s.count(old)!=1: raise SystemExit('loop1 compile anchor mismatch')
+          s=s.replace(old,new,1)
+          old2="javac --release 21 -encoding UTF-8 -d out-second $(find src -name '*.java')"
+          new2="javac --release 21 -Xlint:unchecked -Werror -encoding UTF-8 -cp 'lib/*' -d out-second $(find src -name '*.java')"
+          if s.count(old2)!=1: raise SystemExit('loop2 compile anchor mismatch')
+          s=s.replace(old2,new2,1)
+          anchor="          if [ -d resources ]; then cp -R resources/. out-second/; fi\n"
+          extraction="""          for dep in lib/flatlaf-3.7.2.jar lib/flatlaf-intellij-themes-3.7.2.jar; do
+            (cd out-second && jar --extract --file "../$dep")
+          done
+          rm -f out-second/META-INF/MANIFEST.MF
+"""
+          if s.count(anchor)!=1: raise SystemExit('loop2 resource anchor mismatch')
+          s=s.replace(anchor,extraction+anchor,1)
+          entry="            com/wtm/app/AiEnabledMain.class \\\n"
+          add="            com/formdev/flatlaf/FlatLaf.class \\\n"
+          if s.count(entry)!=1: raise SystemExit('jar entry anchor mismatch')
+          s=s.replace(entry,entry+add,1)
+          policy="          grep -q '^Implementation-Version: 2.1.34-clean-sweep$' MANIFEST.MF\n"
+          deps="""          test -f lib/flatlaf-3.7.2.jar
+          test -f lib/flatlaf-intellij-themes-3.7.2.jar
+          test -f src/com/wtm/ui/ThemeManager.java
+"""
+          if s.count(policy)!=1: raise SystemExit('policy anchor mismatch')
+          s=s.replace(policy,policy+deps,1)
+          p.write_text(s)
+          PY
+          git diff --check
+          git config user.name 'NorthStar Cleanup Bot'
+          git config user.email 'actions@users.noreply.github.com'
+          git add ci/build-next.yml
+          git commit -m 'Stage FlatLaf-aware canonical CI'
+          git push origin master
