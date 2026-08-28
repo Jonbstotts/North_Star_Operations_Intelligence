@@ -45,6 +45,7 @@ jobs:
           ! grep -q 'MusicWorkspacePolishGuard.*install' src/com/wtm/app/NorthStarMainStable.java
           ! grep -q 'StartupDashboardReadyGuard.*install' src/com/wtm/app/NorthStarMainStable.java
           ! grep -q 'MusicModuleGuard.*install' src/com/wtm/app/NorthStarMainStable.java
+          ! grep -q 'DashboardGlyphArtGuard.*install' src/com/wtm/app/NorthStarMainStable.java
           ! grep -q 'AnnouncementBorderGuard' src/com/wtm/app/NorthStarMainStable.java
           ! grep -q 'StartupUiGuard' src/com/wtm/app/NorthStarMainStable.java
           ! grep -q 'NetworkGeocodingService' src/com/wtm/app/NorthStarMainStable.java
@@ -60,6 +61,10 @@ jobs:
           ! grep -q 'invokeStaticFrame' src/com/wtm/modular/ui/WorkspaceLifecycleV3.java
           grep -q 'AiEnabledMain.injectDashboard' src/com/wtm/modular/ui/WorkspaceLifecycleV3.java
           grep -q 'MusicModuleGuard.installWorkspace' src/com/wtm/modular/ui/WorkspaceLifecycleV3.java
+          grep -q 'DashboardGlyphArtGuard.apply' src/com/wtm/modular/ui/WorkspaceLifecycleV3.java
+          ! grep -q 'AWTEventListener' src/com/wtm/modular/ui/DashboardGlyphArtGuard.java
+          ! grep -q 'addAWTEventListener' src/com/wtm/modular/ui/DashboardGlyphArtGuard.java
+          ! grep -q 'new Timer' src/com/wtm/modular/ui/DashboardGlyphArtGuard.java
           ! grep -q 'AWTEventListener' src/com/wtm/modular/ui/MusicModuleGuard.java
           ! grep -q 'COMPONENT_ADDED' src/com/wtm/modular/ui/MusicModuleGuard.java
           ! grep -q 'new Timer' src/com/wtm/modular/ui/MusicModuleGuard.java
