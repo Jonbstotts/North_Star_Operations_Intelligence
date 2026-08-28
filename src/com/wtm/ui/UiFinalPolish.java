@@ -13,45 +13,12 @@ import java.awt.*;
  * change persisted/runtime feature configuration as part of a paint pass.
  */
 public final class UiFinalPolish {
-    private static final String EMPLOYEE_CLASS="com.wtm.ui.EmployeeOperationsPanel";
-
     private UiFinalPolish(){}
 
     static void prepareBeforePaint(Component component){
         if(component==null)return;
-        polishEmployeeLayout(component,false);
         polishAppearanceScroll(component);
         polishUiFoundation(component);
-    }
-
-    private static void polishEmployeeLayout(Component component,boolean inEmployees){
-        boolean employeeRoot=inEmployees||EMPLOYEE_CLASS.equals(component.getClass().getName());
-        if(employeeRoot&&component instanceof JSplitPane split){
-            split.setBorder(null);split.setContinuousLayout(true);split.setOpaque(false);
-            split.setBackground(Theme.bg());
-            if(split.getOrientation()==JSplitPane.HORIZONTAL_SPLIT){
-                addEmployeeColumnGap(split);
-                split.setResizeWeight(0.0);split.setDividerSize(0);
-                split.setDividerLocation(500);split.setLastDividerLocation(500);
-                Component left=split.getLeftComponent();
-                if(left instanceof JComponent jc){
-                    jc.setMinimumSize(new Dimension(390,0));
-                    Dimension pref=jc.getPreferredSize();
-                    jc.setPreferredSize(new Dimension(500,pref==null?1:Math.max(1,pref.height)));
-                }
-            }else split.setDividerSize(0);
-        }
-        if(component instanceof Container container)
-            for(Component child:container.getComponents())polishEmployeeLayout(child,employeeRoot);
-    }
-
-    private static void addEmployeeColumnGap(JSplitPane split){
-        if(Boolean.TRUE.equals(split.getClientProperty("northstar.employee.columnGap"))){split.setDividerSize(0);return;}
-        Component left=split.getLeftComponent();if(left==null)return;
-        JPanel wrapper=new JPanel(new BorderLayout());wrapper.setOpaque(false);
-        wrapper.setBorder(new EmptyBorder(0,0,0,18));
-        split.setLeftComponent(wrapper);wrapper.add(left,BorderLayout.CENTER);
-        split.setDividerSize(0);split.putClientProperty("northstar.employee.columnGap",Boolean.TRUE);
     }
 
     private static void polishAppearanceScroll(Component component){

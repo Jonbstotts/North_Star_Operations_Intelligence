@@ -151,13 +151,28 @@ public final class EmployeeOperationsPanel extends JPanel {
         header.add(description);
         add(header,BorderLayout.NORTH);
 
+        JComponent directory=buildEmployeeDirectory();
+        directory.setMinimumSize(new Dimension(390,0));
+        directory.setPreferredSize(new Dimension(500,1));
+
+        JPanel directoryColumn=new JPanel(new BorderLayout());
+        directoryColumn.setOpaque(false);
+        directoryColumn.setBorder(new EmptyBorder(0,0,0,18));
+        directoryColumn.setMinimumSize(new Dimension(390,0));
+        directoryColumn.setPreferredSize(new Dimension(500,1));
+        directoryColumn.add(directory,BorderLayout.CENTER);
+
         JSplitPane split=new JSplitPane(
                 JSplitPane.HORIZONTAL_SPLIT,
-                buildEmployeeDirectory(),
+                directoryColumn,
                 buildEmployeeWorkspace()
         );
-        split.setResizeWeight(.26);
-        split.setDividerLocation(300);
+        split.setResizeWeight(0.0);
+        split.setDividerSize(0);
+        split.setContinuousLayout(true);
+        split.setOpaque(false);
+        split.setDividerLocation(500);
+        split.setLastDividerLocation(500);
         split.setBorder(null);
         add(split,BorderLayout.CENTER);
 
