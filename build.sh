@@ -47,8 +47,8 @@ for retired in WorkspaceUiRecoveryGuard MusicWorkspacePolishGuard StartupDashboa
     exit 1
   fi
 done
-if grep -q 'MusicModuleGuard.*install' src/com/wtm/app/NorthStarMainStable.java; then
-  echo "ERROR: MusicModuleGuard.install must not be called; WorkspaceLifecycleV3 owns provider lifecycle boundaries." >&2
+if grep -q 'MusicWorkspaceModule.*install' src/com/wtm/app/NorthStarMainStable.java; then
+  echo "ERROR: MusicWorkspaceModule.install must not be called; WorkspaceLifecycleV3 owns provider lifecycle boundaries." >&2
   exit 1
 fi
 
@@ -186,7 +186,7 @@ fi
 # the same architecture.
 for file in \
   src/com/wtm/app/AiEnabledMain.java \
-  src/com/wtm/modular/ui/MusicModuleGuard.java \
+  src/com/wtm/modular/ui/MusicWorkspaceModule.java \
   src/com/wtm/modular/ui/WorkspaceLifecycleV3.java; do
   if grep -qE 'java\.lang\.reflect|getDeclaredField|getDeclaredMethod|setAccessible\(' "$file"; then
     echo "ERROR: private workspace reflection reintroduced in $file." >&2
@@ -225,7 +225,7 @@ for api in 'mountDashboardExtension(String id' 'removeDashboardExtension(String 
     exit 1
   fi
 done
-if grep -qE 'findByName|findMarked' src/com/wtm/app/AiEnabledMain.java src/com/wtm/modular/ui/MusicModuleGuard.java || \
+if grep -qE 'findByName|findMarked' src/com/wtm/app/AiEnabledMain.java src/com/wtm/modular/ui/MusicWorkspaceModule.java || \
    grep -qE 'findMarked|removeMarked|removeNamed' src/com/wtm/modular/ui/WorkspaceLifecycleV3.java; then
   echo "ERROR: recursive dashboard extension component discovery returned." >&2
   exit 1
@@ -234,8 +234,8 @@ fi
 # Music settings belong to the canonical application data directory and own
 # their own file hardening. Workspace lifecycle code must not reach through
 # into Music persistence details.
-if ! grep -Fq 'ConfigService.appDataDir().resolve("music.properties")' src/com/wtm/modular/ui/MusicModuleGuard.java || \
-   ! grep -Fq 'SecureFiles.storePropertiesAtomic(config,p,"NorthStar Music & Audio")' src/com/wtm/modular/ui/MusicModuleGuard.java; then
+if ! grep -Fq 'ConfigService.appDataDir().resolve("music.properties")' src/com/wtm/modular/ui/MusicWorkspaceModule.java || \
+   ! grep -Fq 'SecureFiles.storePropertiesAtomic(config,p,"NorthStar Music & Audio")' src/com/wtm/modular/ui/MusicWorkspaceModule.java; then
   echo "ERROR: Music settings are not using canonical hardened app storage." >&2
   exit 1
 fi

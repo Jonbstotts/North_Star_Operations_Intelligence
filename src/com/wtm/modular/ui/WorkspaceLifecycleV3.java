@@ -41,7 +41,7 @@ public final class WorkspaceLifecycleV3 {
     public static void initializeWorkspace(OperationsWorkspaceFrame workspace) {
         if (workspace == null) return;
         AiEnabledMain.injectSidebar(workspace);
-        MusicModuleGuard.installWorkspace(workspace);
+        MusicWorkspaceModule.installWorkspace(workspace);
         syncDynamicDashboard(workspace);
         workspace.getRootPane().revalidate();
         workspace.validate();
@@ -78,7 +78,7 @@ public final class WorkspaceLifecycleV3 {
         if (intelligenceEnabled()) AiEnabledMain.injectDashboard(workspace);
         else workspace.removeDashboardExtension("northstar.ai.compact");
 
-        MusicModuleGuard.installWorkspace(workspace);
+        MusicWorkspaceModule.installWorkspace(workspace);
         if (!musicDashboardEnabled()) workspace.removeDashboardExtension(MUSIC_MINI_MARKER);
 
         workspace.getRootPane().revalidate();
@@ -120,15 +120,15 @@ public final class WorkspaceLifecycleV3 {
     }
 
     private static void loadMusicSettings() {
-        MusicModuleGuard.loadSettings();
+        MusicWorkspaceModule.loadSettings();
     }
 
     private static boolean musicDashboardEnabled() {
-        return MusicModuleGuard.dashboardPlayerEnabled();
+        return MusicWorkspaceModule.dashboardPlayerEnabled();
     }
 
     private static void setMusicDashboardEnabled(boolean enabled) {
-        MusicModuleGuard.setDashboardPlayerEnabled(enabled);
+        MusicWorkspaceModule.setDashboardPlayerEnabled(enabled);
     }
 
 

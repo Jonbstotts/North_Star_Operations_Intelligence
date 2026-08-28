@@ -44,12 +44,12 @@ import java.util.concurrent.atomic.AtomicReference;
  * first provider. Playback is performed by MusicKit in a browser page served
  * only on 127.0.0.1; NorthStar never downloads or stores audio files.
  */
-public final class MusicModuleGuard {
+public final class MusicWorkspaceModule {
     private static final String ROUTE="Music & Audio";
     private static final String ROUTE_LABEL="♫  Music & Audio";
     private static final String MINI_MARK="northstar.music.mini";
 
-    private MusicModuleGuard(){}
+    private MusicWorkspaceModule(){}
 
     public static void loadSettings(){
         MusicService.instance().load();
