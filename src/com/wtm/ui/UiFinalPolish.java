@@ -1,24 +1,22 @@
 package com.wtm.ui;
 
-import com.wtm.config.AppConfig;
-
 import javax.swing.*;
 import javax.swing.border.Border;
 import javax.swing.border.EmptyBorder;
 import java.awt.*;
-import java.lang.reflect.Field;
-import java.util.List;
 import java.util.concurrent.atomic.AtomicBoolean;
 
 /**
  * Idempotent pre-paint normalization for dynamic/legacy NorthStar surfaces.
- * v2.1.7 intentionally contains no repeating layout timer.
+ *
+ * This class is intentionally presentation-only. It may normalize component
+ * layout and styling, but it must never reach into feature-private state or
+ * change persisted/runtime feature configuration as part of a paint pass.
  */
 public final class UiFinalPolish {
     private static final AtomicBoolean STARTED=new AtomicBoolean(false);
     private static final String EMPLOYEE_CLASS="com.wtm.ui.EmployeeOperationsPanel";
     private static final String TRUCK_CLASS="com.wtm.ui.TruckTrackingPanel";
-    private static final String SHOWCASE_CLASS="com.wtm.ui.MainShowcasePanel";
     private static final String PLAYBACK_TITLE="Playback / Live Map";
 
     private UiFinalPolish(){}
@@ -34,7 +32,6 @@ public final class UiFinalPolish {
         polishAppearanceScroll(component);
         polishUiFoundation(component);
         polishModulesOrganization(component);
-        polishMainShowcase(component);
     }
 
     private static void polishEmployeeLayout(Component component,boolean inEmployees){
@@ -185,30 +182,6 @@ public final class UiFinalPolish {
     private static int indexOfTab(JTabbedPane tabs,String title){
         for(int i=0;i<tabs.getTabCount();i++)if(title.equalsIgnoreCase(tabs.getTitleAt(i)))return i;
         return -1;
-    }
-
-    private static void polishMainShowcase(Component component){
-        if(SHOWCASE_CLASS.equals(component.getClass().getName())&&component instanceof JComponent showcase)ensureShowcaseRotation(showcase);
-        if(component instanceof Container container)
-            for(Component child:container.getComponents())polishMainShowcase(child);
-    }
-
-    private static void ensureShowcaseRotation(JComponent showcase){
-        if(Boolean.TRUE.equals(showcase.getClientProperty("northstar.showcase.prepared.v217")))return;
-        showcase.putClientProperty("northstar.showcase.prepared.v217",Boolean.TRUE);
-        try{
-            Field configField=showcase.getClass().getDeclaredField("config");configField.setAccessible(true);
-            Object raw=configField.get(showcase);if(!(raw instanceof AppConfig config))return;
-            boolean changed=false;
-            if(!config.mainShowcaseMediaEnabled){config.mainShowcaseMediaEnabled=true;changed=true;}
-            if(!config.operationsAnnouncementsEnabled){config.operationsAnnouncementsEnabled=true;changed=true;}
-            if(config.mainShowcaseIntervalSeconds<5){config.mainShowcaseIntervalSeconds=15;changed=true;}
-            Field cardsField=showcase.getClass().getDeclaredField("cardIds");cardsField.setAccessible(true);
-            Object idsObj=cardsField.get(showcase);int count=idsObj instanceof List<?> ids?ids.size():0;
-            Field timerField=showcase.getClass().getDeclaredField("rotationTimer");timerField.setAccessible(true);
-            Object timerObj=timerField.get(showcase);boolean running=timerObj instanceof Timer timer&&timer.isRunning();
-            if(changed||count<=1||(count>1&&!running))if(showcase instanceof MainShowcasePanel panel)panel.updateConfig(config);
-        }catch(ReflectiveOperationException ignored){}
     }
 
     private static boolean containsText(Component component,String needle){
