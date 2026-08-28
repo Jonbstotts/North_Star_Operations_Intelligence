@@ -1,0 +1,31 @@
+name: One-shot runtime ownership audit
+
+on:
+  push:
+    branches: [ master ]
+    paths:
+      - '.github/workflows/one-shot-runtime-ownership-audit.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  inspect:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: master
+      - name: Audit remaining global/runtime mechanisms
+        run: |
+          set -euo pipefail
+          echo '=== Global AWT listeners ==='
+          grep -R -n --include='*.java' 'addAWTEventListener\|AWTEventListener' src || true
+          echo '=== Reflection ==='
+          grep -R -n --include='*.java' 'java\.lang\.reflect\|getDeclaredField\|getDeclaredMethod\|setAccessible' src || true
+          echo '=== Swing invokeLater ==='
+          grep -R -n --include='*.java' 'SwingUtilities\.invokeLater' src || true
+          echo '=== Compatibility/no-op/deprecated comments ==='
+          grep -R -n --include='*.java' 'compatibility no-op\|Compatibility no-op\|@Deprecated\|legacy compatibility\|compatibility layer' src || true
+          echo '=== Window scans ==='
+          grep -R -n --include='*.java' 'Window\.getWindows\|getWindows()' src || true
