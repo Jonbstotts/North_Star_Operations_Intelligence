@@ -40,9 +40,7 @@ if [ ! -f src/com/wtm/modular/ui/WorkspaceLifecycleV3.java ] || \
   exit 1
 fi
 
-# Retired overlapping structural guards must stay out of the launcher. Their
-# source may remain temporarily for history/reconciliation, but installing them
-# reintroduces competing Dashboard/sidebar rebuild lifecycles.
+# Retired overlapping structural guards must stay out of the launcher.
 for retired in WorkspaceUiRecoveryGuard MusicWorkspacePolishGuard StartupDashboardReadyGuard; do
   if grep -q "${retired}.*install" src/com/wtm/app/NorthStarMainStable.java; then
     echo "ERROR: retired lifecycle guard '$retired' is installed by NorthStarMainStable." >&2
@@ -64,24 +62,15 @@ if grep -qE 'ModuleRegistry|ModularBootstrap' src/com/wtm/app/NorthStarMainStabl
   echo "ERROR: canonical launcher references retired generic modular-core infrastructure." >&2
   exit 1
 fi
-if grep -q 'polishModulesOrganization' src/com/wtm/ui/UiFinalPolish.java; then
-  echo "ERROR: obsolete Modules compatibility polish returned to UiFinalPolish." >&2
-  exit 1
-fi
 
-# Truck Tracking is no longer represented by a canonical TruckTrackingPanel;
-# stale pre-paint code must not silently target the archived legacy class.
-if grep -qE 'TruckTrackingPanel|polishTruckTracking|Playback / Live Map' src/com/wtm/ui/UiFinalPolish.java; then
-  echo "ERROR: dead Truck Tracking compatibility polish returned to UiFinalPolish." >&2
+# UiFinalPolish became an unused compatibility shim after feature-specific
+# layout ownership moved into canonical source components. It must stay deleted.
+if [ -e src/com/wtm/ui/UiFinalPolish.java ]; then
+  echo "ERROR: obsolete UiFinalPolish compatibility shim returned to canonical source." >&2
   exit 1
 fi
 
 # Settings pages own their scroll layout through scrollableSettingsPage().
-# Generic paint-time padding must never inflate Appearance/Startup content.
-if grep -qE 'polishAppearanceScroll|northstar\.appearance\.bottomSafe|h\+1050|700,0' src/com/wtm/ui/UiFinalPolish.java; then
-  echo "ERROR: obsolete Appearance scroll compatibility padding returned to UiFinalPolish." >&2
-  exit 1
-fi
 if ! grep -q 'scrollableSettingsPage' src/com/wtm/ui/SettingsDialog.java || \
    ! grep -q 'VERTICAL_SCROLLBAR_AS_NEEDED' src/com/wtm/ui/SettingsDialog.java || \
    ! grep -q 'HORIZONTAL_SCROLLBAR_NEVER' src/com/wtm/ui/SettingsDialog.java; then
@@ -90,8 +79,7 @@ if ! grep -q 'scrollableSettingsPage' src/com/wtm/ui/SettingsDialog.java || \
 fi
 
 # Employee layout and compact directory presentation belong to the canonical
-# EmployeeOperationsPanel. ThemeCore must remain a passive cross-cutting styler
-# and must never rediscover Employee internals by class name.
+# EmployeeOperationsPanel. ThemeCore must remain a passive cross-cutting styler.
 if grep -qE 'EMPLOYEE_PANEL_CLASS|normalizeEmployeeOperations|northstar\.employee\.compactDirectory|findEmployeeDirectoryTable' src/com/wtm/ui/ThemeCoreV216.java; then
   echo "ERROR: Employee-specific presentation mutation returned to ThemeCoreV216." >&2
   exit 1
@@ -99,6 +87,14 @@ fi
 if ! grep -q 'hideDirectoryColumn("Employee #")' src/com/wtm/ui/EmployeeOperationsPanel.java || \
    ! grep -q 'split.setDividerSize(0)' src/com/wtm/ui/EmployeeOperationsPanel.java; then
   echo "ERROR: canonical Employee presentation ownership is missing from EmployeeOperationsPanel." >&2
+  exit 1
+fi
+
+# ThemeCore must not rediscover feature pages by content text. The former
+# Locations compatibility scan targeted text that no longer exists in canonical
+# source and was therefore dead code.
+if grep -qE 'normalizeLocationsHeader|findContainerContainingText|Manage the primary facility|Locations & Routes' src/com/wtm/ui/ThemeCoreV216.java; then
+  echo "ERROR: dead Locations compatibility scanning returned to ThemeCoreV216." >&2
   exit 1
 fi
 
