@@ -66,9 +66,11 @@ public final class Main {
                         if(employeeMigration)
                             ConfigService.save(config);
 
-                        AppTheme theme=AppTheme.NORTH_STAR;
-                        config.themeId=theme.id();
-                        config.darkMode=true;
+                        AppTheme theme=HolidayThemeService.effectiveTheme(
+                                config,
+                                java.time.LocalDate.now()
+                        );
+                        config.darkMode=theme.dark();
                         Theme.setActive(theme.id());
 
                         /*
