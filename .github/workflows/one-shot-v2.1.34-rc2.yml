@@ -1,0 +1,36 @@
+name: Build v2.1.34 GUI RC2
+on:
+  push:
+    branches: [master]
+    paths:
+      - '.github/workflows/one-shot-v2.1.34-rc2.yml'
+permissions:
+  contents: read
+jobs:
+  candidate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: master
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '21'
+      - name: Build and verify RC2
+        shell: bash
+        run: |
+          set -euo pipefail
+          bash build.sh
+          cp NorthStarOperations.jar NorthStar-Operations-Intelligence-v2.1.34-GUI-RC2.jar
+          for r in brand/northstar_primary_logo_exact.png brand/northstar_splash_exact.png brand/northstar_app_icon_exact.png; do jar tf NorthStar-Operations-Intelligence-v2.1.34-GUI-RC2.jar | grep -Fx "$r"; done
+          sha256sum NorthStar-Operations-Intelligence-v2.1.34-GUI-RC2.jar > NorthStar-Operations-Intelligence-v2.1.34-GUI-RC2-SHA256SUMS.txt
+      - name: Upload RC2
+        uses: actions/upload-artifact@v4
+        with:
+          name: NorthStar-v2.1.34-GUI-RC2
+          path: |
+            NorthStar-Operations-Intelligence-v2.1.34-GUI-RC2.jar
+            NorthStar-Operations-Intelligence-v2.1.34-GUI-RC2-SHA256SUMS.txt
+          if-no-files-found: error
+          retention-days: 14
