@@ -1,0 +1,30 @@
+name: One-shot compatibility artifact audit
+
+on:
+  push:
+    branches: [ master ]
+    paths:
+      - '.github/workflows/one-shot-compatibility-audit.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: master
+          fetch-depth: 0
+      - name: Audit compatibility and duplicate configuration residue
+        run: |
+          set -euo pipefail
+          echo '=== deprecated / compatibility markers ==='
+          grep -R -n --include='*.java' -E '@Deprecated|deprecated|compatibility|legacy compatibility|Legacy compatibility|pre-workspace|northStarPreview|V[0-9]+[0-9]+' src || true
+          echo '=== likely duplicate persisted state ==='
+          grep -R -n --include='*.java' -E 'Preferences\.userRoot|java\.util\.prefs|workspaceInfoAutoScroll|showSchedulePanel|showReportsPanel|workspaceModules' src/com/wtm/config src/com/wtm/modular src/com/wtm/ui || true
+          echo '=== direct user.home path construction ==='
+          grep -R -n --include='*.java' 'System.getProperty("user.home")' src || true
+          echo '=== old product/version identity strings ==='
+          grep -R -n --include='*.java' -E 'WeatherTrafficMonitor|ORIVUE|Orivue|v5\.0|v4 |v3 |2\.1\.(2[0-9]|3[0-3])' src || true
