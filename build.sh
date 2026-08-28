@@ -150,6 +150,20 @@ for boundary in \
   fi
 done
 
+# Optional Workspace Setup controls are registered through a source-backed API.
+# WorkspaceLifecycleV3 must not rediscover the module grid by visible checkbox
+# labels or component ancestry.
+if ! grep -q 'registerWorkspaceModuleToggle' src/com/wtm/ui/SettingsDialog.java || \
+   ! grep -q 'workspaceModuleToggle' src/com/wtm/ui/SettingsDialog.java || \
+   ! grep -q 'workspaceModulesPanel' src/com/wtm/ui/SettingsDialog.java; then
+  echo "ERROR: source-backed Workspace Setup module-toggle API is missing." >&2
+  exit 1
+fi
+if grep -qE 'findCheckBox|findMarkedCheckBox|commonParent' src/com/wtm/modular/ui/WorkspaceLifecycleV3.java; then
+  echo "ERROR: WorkspaceLifecycleV3 contains stale Settings component discovery." >&2
+  exit 1
+fi
+
 # Settings pages own their scroll layout through scrollableSettingsPage().
 if ! grep -q 'scrollableSettingsPage' src/com/wtm/ui/SettingsDialog.java || \
    ! grep -q 'VERTICAL_SCROLLBAR_AS_NEEDED' src/com/wtm/ui/SettingsDialog.java || \
