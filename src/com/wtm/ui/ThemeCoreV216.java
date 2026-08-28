@@ -19,9 +19,6 @@ public final class ThemeCoreV216 {
 
     private ThemeCoreV216(){}
 
-    /** Retained as a no-op compatibility entry point for existing callers. */
-    public static void start(){}
-
     /** Called synchronously for the root passed to ThemeStyler. */
     public static void applyImmediate(Component component){
         if(component instanceof JDialog dialog)polishDialog(dialog);
@@ -72,7 +69,6 @@ public final class ThemeCoreV216 {
             hideTableColumn(directory,"Employee #");
             hideTableColumn(directory,"Department");
             hideTableColumn(directory,"Shift");
-            // Name gets the available width; Active stays compact/readable.
             try{
                 TableColumn name=directory.getColumn("Name");
                 name.setPreferredWidth(210);
@@ -83,8 +79,6 @@ public final class ThemeCoreV216 {
             }catch(IllegalArgumentException ignored){}
         }
 
-        // Keep the split-pane spacing but visually remove the legacy grey
-        // divider bar beside the employee directory.
         JSplitPane split=findFirst(employeePanel,JSplitPane.class);
         if(split!=null){
             split.setDividerSize(14);
@@ -125,7 +119,6 @@ public final class ThemeCoreV216 {
     private static Container findContainerContainingText(Component root,String text){
         if(root instanceof Container c){
             if(containsText(c,text)){
-                // Prefer the smallest matching container.
                 for(Component child:c.getComponents()){
                     Container nested=findContainerContainingText(child,text);
                     if(nested!=null)return nested;
