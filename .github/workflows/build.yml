@@ -53,6 +53,8 @@ jobs:
           ! grep -q 'COMPONENT_ADDED' src/com/wtm/modular/ui/TrustedEmailUiGuard.java
           ! grep -q 'new Timer' src/com/wtm/modular/ui/SidebarModulesGlyphGuard.java
           grep -q 'COMPONENT_ADDED is cosmetic only' src/com/wtm/modular/ui/WorkspaceLifecycleV3.java
+          grep -q 'WINDOW_ACTIVATED' src/com/wtm/modular/ui/WorkspaceLifecycleV3.java
+          ! grep -q 'if (isWorkspace(window)) activateWorkspace(window);' src/com/wtm/modular/ui/WorkspaceLifecycleV3.java
           ! grep -q 'new Timer' src/com/wtm/modular/ui/WorkspaceLifecycleV3.java
           ! grep -q 'showDashboardRoute' src/com/wtm/modular/ui/WorkspaceLifecycleV3.java
           ! grep -q 'invokeStaticFrame' src/com/wtm/modular/ui/WorkspaceLifecycleV3.java
@@ -77,6 +79,9 @@ jobs:
           grep -q 'AI_ASSISTANT' src/com/wtm/security/Permission.java
           grep -q 'AI_KNOWLEDGE_ADMIN' src/com/wtm/security/Permission.java
           grep -q 'AI_EMPLOYEE_METRICS' src/com/wtm/security/Permission.java
+          grep -q 'dashboardBody' src/com/wtm/app/AiEnabledMain.java
+          ! grep -q 'DashboardGridPanel' src/com/wtm/app/AiEnabledMain.java
+          ! grep -q 'isShowing()' src/com/wtm/app/AiEnabledMain.java
           ! grep -q 'new Timer' src/com/wtm/ui/IntelligenceGlassSettings.java
           ! grep -q 'AWTEventListener' src/com/wtm/ui/IntelligenceGlassSettings.java
           ! grep -q 'new Timer' src/com/wtm/app/AiEnabledMain.java
