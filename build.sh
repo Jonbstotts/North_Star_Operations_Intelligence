@@ -80,11 +80,11 @@ fi
 
 # Sidebar route identity must be explicit at construction. ThemeStyler must not
 # rediscover routes by implementation class names or button text.
-if ! grep -q 'button.putClientProperty("northstar.sidebar.route",Boolean.TRUE)' src/com/wtm/ui/OperationsWorkspaceFrame.java; then
+if ! grep -Fq 'button.putClientProperty("northstar.sidebar.route",Boolean.TRUE)' src/com/wtm/ui/OperationsWorkspaceFrame.java; then
   echo "ERROR: canonical sidebar buttons are not explicitly marked as routes." >&2
   exit 1
 fi
-if grep -qE 'getClass\(\)\.getName|OperationsWorkspaceFrame\$RoundedSidebarButton|data collection|northstar intelligence' src/com/wtm/ui/ThemeStyler.java; then
+if grep -qiE 'getClass\(\)\.getName|OperationsWorkspaceFrame\$RoundedSidebarButton|data collection|northstar intelligence' src/com/wtm/ui/ThemeStyler.java; then
   echo "ERROR: ThemeStyler contains stale sidebar route discovery heuristics." >&2
   exit 1
 fi
@@ -130,13 +130,13 @@ fi
 for boundary in \
   'WorkspaceLifecycleV3.initializeWorkspace(this)' \
   'WorkspaceLifecycleV3.dashboardMounted(this)'; do
-  if ! grep -q "$boundary" src/com/wtm/ui/OperationsWorkspaceFrame.java; then
+  if ! grep -Fq "$boundary" src/com/wtm/ui/OperationsWorkspaceFrame.java; then
     echo "ERROR: explicit workspace lifecycle boundary '$boundary' is missing." >&2
     exit 1
   fi
 done
-if grep -q 'routeMounted' src/com/wtm/modular/ui/WorkspaceLifecycleV3.java || \
-   grep -q 'WorkspaceLifecycleV3.routeMounted' src/com/wtm/ui/OperationsWorkspaceFrame.java; then
+if grep -Fq 'routeMounted' src/com/wtm/modular/ui/WorkspaceLifecycleV3.java || \
+   grep -Fq 'WorkspaceLifecycleV3.routeMounted' src/com/wtm/ui/OperationsWorkspaceFrame.java; then
   echo "ERROR: obsolete generic route-mounted compatibility boundary returned." >&2
   exit 1
 fi
@@ -144,7 +144,7 @@ for boundary in \
   'WorkspaceLifecycleV3.settingsReady(this)' \
   'WorkspaceLifecycleV3.persistSettings(this)' \
   'WorkspaceLifecycleV3.settingsApplied(this)'; do
-  if ! grep -q "$boundary" src/com/wtm/ui/SettingsDialog.java; then
+  if ! grep -Fq "$boundary" src/com/wtm/ui/SettingsDialog.java; then
     echo "ERROR: explicit Settings lifecycle boundary '$boundary' is missing." >&2
     exit 1
   fi
