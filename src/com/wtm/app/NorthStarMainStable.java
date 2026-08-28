@@ -16,7 +16,7 @@ public final class NorthStarMainStable {
 
     public static void main(String[] args){
         LocalSecurityHardening.install();
-        WorkspaceLifecycleV3.install();
+        WorkspaceLifecycleV3.bootstrap();
         Main.main(args);
     }
 }
