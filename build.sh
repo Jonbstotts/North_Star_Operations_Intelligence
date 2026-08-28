@@ -231,6 +231,19 @@ if grep -qE 'findByName|findMarked' src/com/wtm/app/AiEnabledMain.java src/com/w
   exit 1
 fi
 
+# Music settings belong to the canonical application data directory and own
+# their own file hardening. Workspace lifecycle code must not reach through
+# into Music persistence details.
+if ! grep -Fq 'ConfigService.appDataDir().resolve("music.properties")' src/com/wtm/modular/ui/MusicModuleGuard.java || \
+   ! grep -Fq 'SecureFiles.storePropertiesAtomic(config,p,"NorthStar Music & Audio")' src/com/wtm/modular/ui/MusicModuleGuard.java; then
+  echo "ERROR: Music settings are not using canonical hardened app storage." >&2
+  exit 1
+fi
+if grep -q 'restrictMusicStorage' src/com/wtm/modular/ui/WorkspaceLifecycleV3.java; then
+  echo "ERROR: workspace lifecycle reached into Music storage ownership." >&2
+  exit 1
+fi
+
 rm -rf out
 mkdir -p out
 javac --release 21 -encoding UTF-8 -d out $(find src -name '*.java')
