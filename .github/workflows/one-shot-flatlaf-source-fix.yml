@@ -22,9 +22,11 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          grep -RIl --include='*.java' 'AppTheme.DARK' src | xargs -r sed -i 's/AppTheme\.DARK/AppTheme.FLATLAF_DARK/g'
-          grep -RIl --include='*.java' 'AppTheme.LIGHT' src | xargs -r sed -i 's/AppTheme\.LIGHT/AppTheme.FLATLAF_LIGHT/g'
-          ! grep -R -n --include='*.java' -E 'AppTheme\.(DARK|LIGHT)' src
+          find src -name '*.java' -exec sed -i 's/AppTheme\.DARK/AppTheme.FLATLAF_DARK/g; s/AppTheme\.LIGHT/AppTheme.FLATLAF_LIGHT/g' {} +
+          if grep -R -n --include='*.java' -E 'AppTheme\.(DARK|LIGHT)' src; then
+            echo 'Legacy theme constants remain.' >&2
+            exit 1
+          fi
           rm -rf /tmp/ns-out && mkdir -p /tmp/ns-out
           javac --release 21 -Xlint:unchecked -Werror -encoding UTF-8 -cp 'lib/*' -d /tmp/ns-out $(find src -name '*.java')
           bash build.sh
