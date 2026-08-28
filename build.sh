@@ -63,10 +63,16 @@ if grep -qE 'ModuleRegistry|ModularBootstrap' src/com/wtm/app/NorthStarMainStabl
   exit 1
 fi
 
-# UiFinalPolish became an unused compatibility shim after feature-specific
-# layout ownership moved into canonical source components. It must stay deleted.
-if [ -e src/com/wtm/ui/UiFinalPolish.java ]; then
-  echo "ERROR: obsolete UiFinalPolish compatibility shim returned to canonical source." >&2
+# Generic presentation compatibility shims have been retired. Feature layout
+# belongs to canonical source components and dialog platform theming belongs to
+# ThemeStyler directly.
+if [ -e src/com/wtm/ui/UiFinalPolish.java ] || [ -e src/com/wtm/ui/ThemeCoreV216.java ]; then
+  echo "ERROR: retired presentation compatibility shim returned to canonical source." >&2
+  exit 1
+fi
+if grep -q 'ThemeCoreV216' src/com/wtm/ui/ThemeStyler.java || \
+   ! grep -q 'apple.awt.windowAppearance' src/com/wtm/ui/ThemeStyler.java; then
+  echo "ERROR: canonical dialog theme ownership is not fully contained in ThemeStyler." >&2
   exit 1
 fi
 
@@ -79,22 +85,10 @@ if ! grep -q 'scrollableSettingsPage' src/com/wtm/ui/SettingsDialog.java || \
 fi
 
 # Employee layout and compact directory presentation belong to the canonical
-# EmployeeOperationsPanel. ThemeCore must remain a passive cross-cutting styler.
-if grep -qE 'EMPLOYEE_PANEL_CLASS|normalizeEmployeeOperations|northstar\.employee\.compactDirectory|findEmployeeDirectoryTable' src/com/wtm/ui/ThemeCoreV216.java; then
-  echo "ERROR: Employee-specific presentation mutation returned to ThemeCoreV216." >&2
-  exit 1
-fi
+# EmployeeOperationsPanel.
 if ! grep -q 'hideDirectoryColumn("Employee #")' src/com/wtm/ui/EmployeeOperationsPanel.java || \
    ! grep -q 'split.setDividerSize(0)' src/com/wtm/ui/EmployeeOperationsPanel.java; then
   echo "ERROR: canonical Employee presentation ownership is missing from EmployeeOperationsPanel." >&2
-  exit 1
-fi
-
-# ThemeCore must not rediscover feature pages by content text. The former
-# Locations compatibility scan targeted text that no longer exists in canonical
-# source and was therefore dead code.
-if grep -qE 'normalizeLocationsHeader|findContainerContainingText|Manage the primary facility|Locations & Routes' src/com/wtm/ui/ThemeCoreV216.java; then
-  echo "ERROR: dead Locations compatibility scanning returned to ThemeCoreV216." >&2
   exit 1
 fi
 
