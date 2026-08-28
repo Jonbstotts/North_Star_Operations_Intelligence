@@ -1,0 +1,90 @@
+name: One-shot dashboard extension registry cleanup
+
+on:
+  push:
+    branches: [ master ]
+    paths:
+      - '.github/workflows/one-shot-dashboard-extension-registry.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: master
+          fetch-depth: 0
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '21'
+      - name: Make dashboard extension identity source-owned
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+
+          workspace=Path('src/com/wtm/ui/OperationsWorkspaceFrame.java')
+          s=workspace.read_text()
+          old='''    private final Map<String,JButton> sidebarRouteButtons=\n            new LinkedHashMap<>();\n'''
+          new='''    private final Map<String,JButton> sidebarRouteButtons=\n            new LinkedHashMap<>();\n    private final Map<String,JComponent> dashboardExtensions=\n            new LinkedHashMap<>();\n'''
+          if s.count(old)!=1: raise SystemExit('dashboard extension field anchor mismatch')
+          s=s.replace(old,new)
+          old='''    private JComponent createDashboardView(){\n        dashboardBody=new JPanel();\n'''
+          new='''    private JComponent createDashboardView(){\n        dashboardExtensions.clear();\n        dashboardBody=new JPanel();\n'''
+          if s.count(old)!=1: raise SystemExit('dashboard view anchor mismatch')
+          s=s.replace(old,new)
+          old='''    /** Mounts a dashboard extension at a bounded position without exposing dashboardBody. */\n    public boolean mountDashboardExtension(JComponent component,int preferredIndex){\n        if(component==null||dashboardBody==null||dashboardBody.getParent()==null)return false;\n        int index=Math.max(0,Math.min(preferredIndex,dashboardBody.getComponentCount()));\n        dashboardBody.add(component,index);\n        dashboardBody.revalidate();\n        dashboardBody.repaint();\n        return true;\n    }\n'''
+          new='''    /**\n     * Mounts an identified dashboard extension without exposing dashboardBody.\n     * Identity is tracked by the workspace owner, so extension code never needs\n     * to scan the Swing component tree to detect or remove its own surface.\n     */\n    public boolean mountDashboardExtension(String id,JComponent component,int preferredIndex){\n        if(id==null||id.isBlank()||component==null||dashboardBody==null||dashboardBody.getParent()==null)return false;\n        JComponent existing=dashboardExtensions.get(id);\n        if(existing!=null&&existing.getParent()==dashboardBody)return true;\n        int index=Math.max(0,Math.min(preferredIndex,dashboardBody.getComponentCount()));\n        dashboardBody.add(component,index);\n        dashboardExtensions.put(id,component);\n        dashboardBody.revalidate();\n        dashboardBody.repaint();\n        return true;\n    }\n\n    /** Removes a dashboard extension previously mounted by id. */\n    public boolean removeDashboardExtension(String id){\n        if(id==null||id.isBlank())return false;\n        JComponent component=dashboardExtensions.remove(id);\n        if(component==null||component.getParent()!=dashboardBody)return false;\n        dashboardBody.remove(component);\n        dashboardBody.revalidate();\n        dashboardBody.repaint();\n        return true;\n    }\n'''
+          if s.count(old)!=1: raise SystemExit('mountDashboardExtension anchor mismatch')
+          workspace.write_text(s.replace(old,new))
+
+          ai=Path('src/com/wtm/app/AiEnabledMain.java')
+          s=ai.read_text()
+          s=s.replace('''        if(!(frame instanceof OperationsWorkspaceFrame workspace)\n                ||!AuthorizationService.allowed(Permission.AI_ASSISTANT)\n                ||findByName(frame,"northstar.ai.sidebar")!=null)return;\n''','''        if(!(frame instanceof OperationsWorkspaceFrame workspace)\n                ||!AuthorizationService.allowed(Permission.AI_ASSISTANT))return;\n''')
+          s=s.replace('''        if(!(frame instanceof OperationsWorkspaceFrame workspace)\n                ||!AuthorizationService.allowed(Permission.AI_ASSISTANT)\n                ||findByName(frame,COMPACT_NAME)!=null)return;\n''','''        if(!(frame instanceof OperationsWorkspaceFrame workspace)\n                ||!AuthorizationService.allowed(Permission.AI_ASSISTANT))return;\n''')
+          s=s.replace('workspace.mountDashboardExtension(mount,Integer.MAX_VALUE-1);','workspace.mountDashboardExtension(COMPACT_NAME,mount,Integer.MAX_VALUE-1);')
+          start=s.find('    private static Component findByName(')
+          if start<0: raise SystemExit('Ai findByName helper missing')
+          end=s.find('\n}',start)
+          s=s[:start]+s[end:]
+          ai.write_text(s)
+
+          music=Path('src/com/wtm/modular/ui/MusicModuleGuard.java')
+          s=music.read_text()
+          old='''        if(!MusicService.instance().settings.dashboardPlayer\n                ||!(w instanceof OperationsWorkspaceFrame workspace))return;\n        if(findMarked(workspace,MINI_MARK)!=null)return;\n        MiniPlayer mini=new MiniPlayer(workspace);\n        mini.putClientProperty(MINI_MARK,Boolean.TRUE);\n        mini.setAlignmentX(Component.LEFT_ALIGNMENT);\n        mini.setMaximumSize(new Dimension(Integer.MAX_VALUE,72));\n        workspace.mountDashboardExtension(mini,2);\n    }\n\n    private static Component findMarked(Container root,String marker){\n        for(Component c:root.getComponents()){\n            if(c instanceof JComponent jc&&Boolean.TRUE.equals(jc.getClientProperty(marker)))return c;\n            if(c instanceof Container child){Component found=findMarked(child,marker);if(found!=null)return found;}\n        }\n        return null;\n    }\n'''
+          new='''        if(!MusicService.instance().settings.dashboardPlayer\n                ||!(w instanceof OperationsWorkspaceFrame workspace))return;\n        MiniPlayer mini=new MiniPlayer(workspace);\n        mini.setAlignmentX(Component.LEFT_ALIGNMENT);\n        mini.setMaximumSize(new Dimension(Integer.MAX_VALUE,72));\n        workspace.mountDashboardExtension(MINI_MARK,mini,2);\n    }\n'''
+          if s.count(old)!=1: raise SystemExit('Music findMarked anchor mismatch')
+          music.write_text(s.replace(old,new))
+
+          lifecycle=Path('src/com/wtm/modular/ui/WorkspaceLifecycleV3.java')
+          s=lifecycle.read_text()
+          s=s.replace('import com.wtm.ui.Theme;\n','')
+          s=s.replace('import java.awt.*;\n','')
+          s=s.replace('else removeNamed(workspace, "northstar.ai.compact");','else workspace.removeDashboardExtension("northstar.ai.compact");')
+          s=s.replace('if (!musicDashboardEnabled()) removeMarked(workspace, MUSIC_MINI_MARKER);','if (!musicDashboardEnabled()) workspace.removeDashboardExtension(MUSIC_MINI_MARKER);')
+          start=s.find('    private static void removeMarked(')
+          if start<0: raise SystemExit('Lifecycle recursive removal helpers missing')
+          end=s.rfind('\n}')
+          s=s[:start]+s[end:]
+          lifecycle.write_text(s)
+          PY
+          ! grep -q 'findByName' src/com/wtm/app/AiEnabledMain.java
+          ! grep -q 'findMarked' src/com/wtm/modular/ui/MusicModuleGuard.java
+          ! grep -q 'findMarked\|removeMarked\|removeNamed' src/com/wtm/modular/ui/WorkspaceLifecycleV3.java
+          grep -q 'mountDashboardExtension(String id' src/com/wtm/ui/OperationsWorkspaceFrame.java
+          grep -q 'removeDashboardExtension(String id)' src/com/wtm/ui/OperationsWorkspaceFrame.java
+          git diff --check
+          rm -rf /tmp/ns-out && mkdir -p /tmp/ns-out
+          javac --release 21 -encoding UTF-8 -d /tmp/ns-out $(find src -name '*.java')
+      - name: Commit dashboard registry cleanup
+        run: |
+          set -euo pipefail
+          git config user.name 'NorthStar Cleanup Bot'
+          git config user.email 'actions@users.noreply.github.com'
+          git add src/com/wtm/ui/OperationsWorkspaceFrame.java src/com/wtm/app/AiEnabledMain.java src/com/wtm/modular/ui/MusicModuleGuard.java src/com/wtm/modular/ui/WorkspaceLifecycleV3.java
+          git commit -m 'Make dashboard extension identity source-owned'
+          git push origin master
