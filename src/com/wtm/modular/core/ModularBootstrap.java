@@ -1,16 +1,14 @@
 package com.wtm.modular.core;
 
-import com.wtm.ui.MapPinStandardizer;
 import com.wtm.ui.foundation.UiFoundationRuntime;
 import javax.swing.SwingUtilities;
 
 /**
  * Canonical modular bootstrap.
  *
- * <p>Only source-backed services are started here. The former
- * ModuleUiCoordinatorLifecycle depended on runtime-only reflective classes and
- * is intentionally excluded; workspace structural lifecycle is owned by
- * WorkspaceLifecycleV3.</p>
+ * <p>Only active source-backed services are started here. Workspace structural
+ * lifecycle is owned by WorkspaceLifecycleV3; historical recovery/coordinator
+ * hooks and empty compatibility shells are deliberately excluded.</p>
  */
 public final class ModularBootstrap {
     private ModularBootstrap(){}
@@ -19,7 +17,6 @@ public final class ModularBootstrap {
         Runnable boot=()->{
             ModuleRegistry.get();
             UiFoundationRuntime.start();
-            MapPinStandardizer.start();
         };
         if(SwingUtilities.isEventDispatchThread())boot.run(); else SwingUtilities.invokeLater(boot);
     }
