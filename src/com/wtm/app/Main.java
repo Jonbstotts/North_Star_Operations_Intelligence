@@ -23,7 +23,7 @@ public final class Main {
         SwingUtilities.invokeLater(()->{
             configureDesktopLookAndFeel();
 
-            AppTheme bootTheme=AppTheme.NORTH_STAR;
+            AppTheme bootTheme=AppTheme.fromId(ConfigService.peekThemeId());
             Theme.setActive(bootTheme.id());
 
             ApplicationBrand.applyApplicationIcon();
@@ -98,11 +98,11 @@ public final class Main {
                             UserAccount initial=AuthService.hasPassword()
                                     ?LegacyAdminMigrationDialog.migrate(
                                             null,
-                                            AppTheme.NORTH_STAR
+                                            theme
                                     )
                                     :FirstAdminDialog.create(
                                             null,
-                                            AppTheme.NORTH_STAR
+                                            theme
                                     );
 
                             if(initial==null)return;
