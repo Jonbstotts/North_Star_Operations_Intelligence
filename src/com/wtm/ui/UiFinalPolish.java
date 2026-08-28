@@ -25,7 +25,6 @@ public final class UiFinalPolish {
         polishTruckTracking(component);
         polishAppearanceScroll(component);
         polishUiFoundation(component);
-        polishModulesOrganization(component);
     }
 
     private static void polishEmployeeLayout(Component component,boolean inEmployees){
@@ -154,28 +153,6 @@ public final class UiFinalPolish {
         }
         if(component instanceof Container container)
             for(Component child:container.getComponents())normalizeFoundationCombos(child);
-    }
-
-    private static void polishModulesOrganization(Component component){
-        if(component instanceof JTabbedPane tabs&&containsTab(tabs,"Organization")){
-            int index=indexOfTab(tabs,"Organization");
-            if(index>=0){
-                Component page=tabs.getComponentAt(index);
-                if(page instanceof JComponent jc&&!Boolean.TRUE.equals(jc.getClientProperty("northstar.modules.organization.topAligned"))){
-                    JPanel topWrap=new JPanel(new BorderLayout());topWrap.setOpaque(false);topWrap.setBorder(new EmptyBorder(12,0,0,0));
-                    tabs.setComponentAt(index,topWrap);topWrap.add(page,BorderLayout.NORTH);
-                    topWrap.putClientProperty("northstar.modules.organization.topAligned",Boolean.TRUE);
-                }
-            }
-        }
-        if(component instanceof Container container)
-            for(Component child:container.getComponents())polishModulesOrganization(child);
-    }
-
-    private static boolean containsTab(JTabbedPane tabs,String title){return indexOfTab(tabs,title)>=0;}
-    private static int indexOfTab(JTabbedPane tabs,String title){
-        for(int i=0;i<tabs.getTabCount();i++)if(title.equalsIgnoreCase(tabs.getTitleAt(i)))return i;
-        return -1;
     }
 
     private static boolean containsText(Component component,String needle){
