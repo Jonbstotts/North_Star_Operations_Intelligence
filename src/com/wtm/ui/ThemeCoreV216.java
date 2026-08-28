@@ -12,7 +12,6 @@ import java.util.concurrent.atomic.AtomicBoolean;
 /** Shared NorthStar theme/layout core. */
 public final class ThemeCoreV216 {
     private static final AtomicBoolean STARTED=new AtomicBoolean(false);
-    private static final String MODULE_MANAGER_CLASS="com.wtm.modular.ui.ModuleManagerPanel";
     private static final String EMPLOYEE_PANEL_CLASS="com.wtm.ui.EmployeeOperationsPanel";
 
     private ThemeCoreV216(){}
@@ -31,31 +30,8 @@ public final class ThemeCoreV216 {
     /** Called synchronously for the root passed to ThemeStyler. */
     public static void applyImmediate(Component component){
         if(component instanceof JDialog dialog)polishDialog(dialog);
-        alignModuleOrganization(component);
         normalizeLocationsHeader(component);
         normalizeEmployeeOperations(component);
-    }
-
-    private static void alignModuleOrganization(Component root){
-        Component manager=findByClass(root,MODULE_MANAGER_CLASS);
-        if(!(manager instanceof Container container))return;
-        Container organization=findOrganizationGrid(container);
-        if(!(organization instanceof JComponent jc))return;
-        if(Boolean.TRUE.equals(jc.getClientProperty("northstar.organization.topAligned")))return;
-        jc.putClientProperty("northstar.organization.topAligned",Boolean.TRUE);
-
-        JPanel filler=new JPanel();
-        filler.setOpaque(false);
-        GridBagConstraints c=new GridBagConstraints();
-        c.gridx=0;
-        c.gridy=99;
-        c.gridwidth=2;
-        c.weightx=1.0;
-        c.weighty=1.0;
-        c.fill=GridBagConstraints.BOTH;
-        c.anchor=GridBagConstraints.NORTHWEST;
-        organization.add(filler,c);
-        organization.invalidate();
     }
 
     /**
@@ -149,19 +125,6 @@ public final class ThemeCoreV216 {
     private static void hideTableColumn(JTable table,String name){
         try{ table.removeColumn(table.getColumn(name)); }
         catch(IllegalArgumentException ignored){}
-    }
-
-    private static Container findOrganizationGrid(Container root){
-        if(root.getLayout() instanceof GridBagLayout
-                &&containsText(root,"Organization name")
-                &&containsText(root,"Primary site/workspace")
-                &&containsText(root,"Deployment profile"))return root;
-        for(Component child:root.getComponents())
-            if(child instanceof Container c){
-                Container found=findOrganizationGrid(c);
-                if(found!=null)return found;
-            }
-        return null;
     }
 
     private static Container findContainerContainingText(Component root,String text){
