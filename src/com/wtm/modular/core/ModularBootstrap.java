@@ -1,17 +1,23 @@
 package com.wtm.modular.core;
 
-import com.wtm.modular.ui.ModuleUiCoordinatorLifecycle;
 import com.wtm.ui.MapPinStandardizer;
 import com.wtm.ui.foundation.UiFoundationRuntime;
 import javax.swing.SwingUtilities;
 
-/** Modular bootstrap with event-driven, first-paint sidebar initialization. */
+/**
+ * Canonical modular bootstrap.
+ *
+ * <p>Only source-backed services are started here. The former
+ * ModuleUiCoordinatorLifecycle depended on runtime-only reflective classes and
+ * is intentionally excluded; workspace structural lifecycle is owned by
+ * WorkspaceLifecycleV3.</p>
+ */
 public final class ModularBootstrap {
     private ModularBootstrap(){}
+
     public static void start(){
         Runnable boot=()->{
             ModuleRegistry.get();
-            ModuleUiCoordinatorLifecycle.start();
             UiFoundationRuntime.start();
             MapPinStandardizer.start();
         };
