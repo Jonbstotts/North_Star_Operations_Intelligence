@@ -1,0 +1,51 @@
+name: One-shot Appearance polish CI gate
+
+on:
+  push:
+    branches: [ master ]
+    paths:
+      - '.github/workflows/one-shot-appearance-polish-gate.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout master
+        uses: actions/checkout@v4
+        with:
+          ref: master
+          fetch-depth: 0
+      - name: Update canonical presentation gate
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          path=Path('.github/workflows/build.yml')
+          text=path.read_text(encoding='utf-8')
+          old="""          ! grep -q 'mainShowcaseIntervalSeconds' src/com/wtm/ui/UiFinalPolish.java
+          grep -q 'presentation-only' src/com/wtm/ui/UiFinalPolish.java"""
+          new="""          ! grep -q 'mainShowcaseIntervalSeconds' src/com/wtm/ui/UiFinalPolish.java
+          ! grep -q 'polishAppearanceScroll' src/com/wtm/ui/UiFinalPolish.java
+          ! grep -q 'northstar.appearance.bottomSafe' src/com/wtm/ui/UiFinalPolish.java
+          ! grep -q 'h+1050' src/com/wtm/ui/UiFinalPolish.java
+          grep -q 'scrollableSettingsPage' src/com/wtm/ui/SettingsDialog.java
+          grep -q 'VERTICAL_SCROLLBAR_AS_NEEDED' src/com/wtm/ui/SettingsDialog.java
+          grep -q 'HORIZONTAL_SCROLLBAR_NEVER' src/com/wtm/ui/SettingsDialog.java
+          grep -q 'presentation-only' src/com/wtm/ui/UiFinalPolish.java"""
+          if text.count(old)!=1:
+              raise SystemExit(f'Presentation gate anchor mismatch: {text.count(old)}')
+          path.write_text(text.replace(old,new,1),encoding='utf-8')
+          PY
+          git diff --check
+          git diff -- .github/workflows/build.yml
+      - name: Commit CI gate
+        run: |
+          set -euo pipefail
+          git config user.name 'NorthStar Cleanup Bot'
+          git config user.email 'actions@users.noreply.github.com'
+          git add .github/workflows/build.yml
+          git commit -m 'Gate removal of Appearance paint-time padding'
+          git push origin HEAD:master
