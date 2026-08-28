@@ -107,6 +107,7 @@ public final class OperationsWorkspaceFrame extends JFrame {
         overlayEffects.setVisible(true);
 
         buildUi();
+        ThemeStyler.apply(this,Theme.active());
         startRefreshers();
 
         clockTimer=new javax.swing.Timer(1000,e->updateClock());

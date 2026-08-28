@@ -2,7 +2,6 @@ package com.wtm.app;
 
 import com.wtm.modular.ui.WorkspaceLifecycleV3;
 import com.wtm.security.LocalSecurityHardening;
-import com.wtm.ui.foundation.UiFoundationRuntime;
 
 /**
  * Canonical NorthStar launcher.
@@ -18,7 +17,6 @@ public final class NorthStarMainStable {
     public static void main(String[] args){
         LocalSecurityHardening.install();
         WorkspaceLifecycleV3.install();
-        UiFoundationRuntime.start();
         Main.main(args);
     }
 }
