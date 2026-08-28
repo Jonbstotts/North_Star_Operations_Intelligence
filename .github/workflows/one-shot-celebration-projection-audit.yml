@@ -1,0 +1,30 @@
+name: One-shot celebration projection ownership audit
+
+on:
+  push:
+    branches: [ master ]
+    paths:
+      - '.github/workflows/one-shot-celebration-projection-audit.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: master
+          fetch-depth: 0
+      - name: Audit celebration projection ownership
+        run: |
+          set -euo pipefail
+          echo '=== AppConfig celebrations usages ==='
+          grep -R -n --include='*.java' 'config\.celebrations\|cfg\.celebrations\|\.celebrations' src || true
+          echo '=== CelebrationConfig usages ==='
+          grep -R -n --include='*.java' 'CelebrationConfig' src || true
+          echo '=== Employee projection APIs ==='
+          grep -R -n --include='*.java' 'syncCelebrations\|migrateLegacyCelebrationsIfNeeded' src || true
+          echo '=== celebration showcase/calendar consumers ==='
+          grep -R -n --include='*.java' -E 'birthday|anniversary|employeeOfMonth|celebrationAnnouncements' src/com/wtm/ui src/com/wtm/media src/com/wtm/employee | head -n 300 || true
