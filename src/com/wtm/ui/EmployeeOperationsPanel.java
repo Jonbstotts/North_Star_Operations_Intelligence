@@ -1294,7 +1294,7 @@ public final class EmployeeOperationsPanel extends JPanel {
                 ||component instanceof JSpinner){
             Dimension preferred=component.getPreferredSize();
             int h=component instanceof JComboBox<?>
-                    ?ThemedComboBoxUI.CONTROL_HEIGHT
+                    ?42
                     :Math.max(38,Math.min(42,preferred.height));
             component.setPreferredSize(
                     new Dimension(Math.max(180,preferred.width),h));

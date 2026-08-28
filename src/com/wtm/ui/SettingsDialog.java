@@ -793,7 +793,7 @@ public final class SettingsDialog extends JDialog {
 
         JLabel holidayStatus=new JLabel(
                 "<html>"+HolidayThemeService.automaticThemeDescription(LocalDate.now())
-              + ". North Star remains the base interface outside automatic holiday windows.</html>");
+              + ". Your selected FlatLaf theme remains the base interface outside automatic holiday windows.</html>");
         addFull(p,y++,holidayStatus);
 
         addFull(p,y++,themeEffects);
@@ -2707,7 +2707,7 @@ public final class SettingsDialog extends JDialog {
 
     private static void normalizeSettingsControl(JComponent component){
         int height=component instanceof JComboBox<?>
-                ?ThemedComboBoxUI.CONTROL_HEIGHT
+                ?42
                 :38;
         if(component instanceof JTextField
                 ||component instanceof JPasswordField

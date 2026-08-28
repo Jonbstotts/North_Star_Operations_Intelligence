@@ -212,7 +212,7 @@ document.getElementById('auth').onclick=auth;document.getElementById('sync').onc
         }
         private JPanel section(String name,JComponent inner){JPanel p=new JPanel(new BorderLayout());p.setBackground(Theme.panel());p.setBorder(BorderFactory.createCompoundBorder(BorderFactory.createLineBorder(Theme.border()),new EmptyBorder(14,14,14,14)));JLabel h=new JLabel(name);h.setForeground(Theme.text());h.setFont(h.getFont().deriveFont(Font.BOLD,17f));p.add(h,BorderLayout.NORTH);p.add(inner,BorderLayout.CENTER);p.setMaximumSize(new Dimension(Integer.MAX_VALUE,180));return p;}
         private JPanel flow(){JPanel p=new JPanel(new FlowLayout(FlowLayout.LEFT,9,10));p.setOpaque(false);return p;}
-        private void styleCombo(JComboBox<?> combo){combo.setUI(new com.wtm.ui.ThemedComboBoxUI(Theme.active()));combo.setBackground(Theme.panel2());combo.setForeground(Theme.text());combo.setBorder(BorderFactory.createLineBorder(Theme.border()));}
+        private void styleCombo(JComboBox<?> combo){combo.setBackground(Theme.panel2());combo.setForeground(Theme.text());}
         private void prepareScroll(JScrollPane scroll,JComponent body){
             scroll.setHorizontalScrollBarPolicy(ScrollPaneConstants.HORIZONTAL_SCROLLBAR_NEVER);
             scroll.getHorizontalScrollBar().setEnabled(false);

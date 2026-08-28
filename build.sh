@@ -298,6 +298,16 @@ if ! grep -Fq 'public boolean workspaceIntelligenceEnabled = true;' src/com/wtm/
   exit 1
 fi
 
+# Real FlatLaf owns ordinary Swing controls. North Star may layer branded semantics,
+# but custom ComboBox/TabbedPane look-and-feel delegates must not return.
+if [ ! -f src/com/wtm/ui/ThemeManager.java ] || \
+   ! grep -Fq 'FlatDarkLaf.setup()' src/com/wtm/ui/ThemeManager.java || \
+   grep -qE 'ThemedComboBoxUI|BasicTabbedPaneUI' src/com/wtm/ui/ThemeStyler.java || \
+   [ -f src/com/wtm/ui/ThemedComboBoxUI.java ]; then
+  echo "ERROR: canonical theme ownership is not delegated to real FlatLaf." >&2
+  exit 1
+fi
+
 if [ ! -f lib/flatlaf-3.7.2.jar ] || [ ! -f lib/flatlaf-intellij-themes-3.7.2.jar ]; then
   echo "ERROR: required FlatLaf 3.7.2 runtime libraries are missing from lib/." >&2
   exit 1
