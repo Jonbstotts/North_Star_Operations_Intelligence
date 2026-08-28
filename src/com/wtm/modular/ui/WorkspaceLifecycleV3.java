@@ -2,7 +2,6 @@ package com.wtm.modular.ui;
 
 import com.wtm.app.AiEnabledMain;
 import com.wtm.ui.Theme;
-import com.wtm.ui.ThemedComboBoxUI;
 
 import javax.swing.*;
 import java.awt.*;
@@ -19,11 +18,10 @@ import java.util.prefs.Preferences;
  * Single lifecycle owner for dynamic workspace additions that live outside the
  * base OperationsWorkspaceFrame source.
  *
- * <p>The key rule is intentionally strict: COMPONENT_ADDED is cosmetic only.
- * Structural work (dynamic sidebar routes, Intelligence and Music dashboard
+ * <p>Structural work (dynamic sidebar routes, Intelligence and Music dashboard
  * additions) runs only at real lifecycle boundaries: first workspace
- * activation and Settings Save & Apply. This avoids the historical
- * component-add rebuild storms and removes competing recovery guards.</p>
+ * activation and Settings Save & Apply. Generic component-add lifecycle
+ * hooks are deliberately excluded.</p>
  *
  * <p>WINDOW_OPENED is intentionally not a structural workspace boundary. Swing
  * can publish it while the base frame still has queued construction work. The
@@ -33,7 +31,6 @@ import java.util.prefs.Preferences;
 public final class WorkspaceLifecycleV3 {
     private static final String WORKSPACE_CLASS = "com.wtm.ui.OperationsWorkspaceFrame";
     private static final String SETTINGS_CLASS = "com.wtm.ui.SettingsDialog";
-    private static final String MUSIC_PANEL_CLASS = "com.wtm.modular.ui.MusicModuleGuard$MusicPanel";
     private static final String MUSIC_MINI_MARKER = "northstar.music.mini";
     private static final String INTELLIGENCE_CHECK = "northstar.intelligence.workspace.checkbox";
     private static final String MUSIC_CHECK = "northstar.music.workspace.checkbox";
@@ -44,8 +41,6 @@ public final class WorkspaceLifecycleV3 {
             Preferences.userRoot().node("com/wtm/northstar/workspace");
     private static final Set<Window> ACTIVATED =
             Collections.newSetFromMap(new WeakHashMap<>());
-    private static final Set<JScrollPane> MUSIC_SCROLLS =
-            Collections.newSetFromMap(new IdentityHashMap<>());
     private static boolean installed;
 
     private WorkspaceLifecycleV3() {}
@@ -96,12 +91,7 @@ public final class WorkspaceLifecycleV3 {
                 }
             }
 
-            if (event instanceof ContainerEvent ce && ce.getID() == ContainerEvent.COMPONENT_ADDED) {
-                // COMPONENT_ADDED is cosmetic only: never insert controls or
-                // rebuild routes from a generic component-add callback.
-                polishMusicTree(ce.getChild());
-            }
-        }, AWTEvent.WINDOW_EVENT_MASK | AWTEvent.ACTION_EVENT_MASK | AWTEvent.CONTAINER_EVENT_MASK);
+        }, AWTEvent.WINDOW_EVENT_MASK | AWTEvent.ACTION_EVENT_MASK);
 
         for (Window window : Window.getWindows()) {
             if (isSettings(window)) injectWorkspaceToggles(window);
@@ -143,7 +133,6 @@ public final class WorkspaceLifecycleV3 {
         MusicModuleGuard.installWorkspace(window);
         syncDynamicDashboard(frame);
         TrustedEmailUiGuard.apply(frame);
-        polishMusicTree(frame);
         frame.getRootPane().revalidate();
         frame.validate();
         frame.repaint();
@@ -160,7 +149,6 @@ public final class WorkspaceLifecycleV3 {
         MusicModuleGuard.installWorkspace(window);
         syncDynamicDashboard(frame);
         TrustedEmailUiGuard.apply(frame);
-        polishMusicTree(frame);
         frame.getRootPane().revalidate();
         frame.validate();
         frame.repaint();
@@ -291,56 +279,6 @@ public final class WorkspaceLifecycleV3 {
             if (java.nio.file.Files.isRegularFile(file)) com.wtm.util.SecureFiles.restrictFile(file);
         } catch (Exception ignored) {
         }
-    }
-
-    /** Cosmetic-only Music workspace normalization. */
-    private static void polishMusicTree(Component component) {
-        if (component == null) return;
-        if (component instanceof JComboBox<?> combo && hasAncestorNamed(component, MUSIC_PANEL_CLASS)) {
-            combo.setUI(new ThemedComboBoxUI(Theme.active()));
-            combo.setBackground(Theme.panel2());
-            combo.setForeground(Theme.text());
-            combo.setBorder(BorderFactory.createLineBorder(Theme.border()));
-        }
-
-        if (component instanceof JScrollPane scroll && hasAncestorNamed(component, MUSIC_PANEL_CLASS)) {
-            fitMusicScroll(scroll);
-        }
-
-        if (component instanceof Container container) {
-            for (Component child : container.getComponents()) polishMusicTree(child);
-        }
-    }
-
-    private static void fitMusicScroll(JScrollPane scroll) {
-        scroll.setHorizontalScrollBarPolicy(ScrollPaneConstants.HORIZONTAL_SCROLLBAR_NEVER);
-        scroll.getHorizontalScrollBar().setEnabled(false);
-        scroll.getViewport().setBackground(Theme.bg());
-        Runnable fit = () -> {
-            Component view = scroll.getViewport().getView();
-            if (!(view instanceof JComponent jc)) return;
-            int width = scroll.getViewport().getExtentSize().width;
-            if (width <= 0) width = Math.max(620, scroll.getWidth() - 20);
-            Dimension pref = jc.getPreferredSize();
-            int height = pref == null ? 760 : Math.max(pref.height, 720);
-            jc.setMinimumSize(new Dimension(0, height));
-            jc.setPreferredSize(new Dimension(Math.max(600, width), height));
-            jc.setMaximumSize(new Dimension(Integer.MAX_VALUE, Integer.MAX_VALUE));
-            jc.revalidate();
-        };
-        fit.run();
-        if (MUSIC_SCROLLS.add(scroll)) {
-            scroll.getViewport().addComponentListener(new ComponentAdapter() {
-                @Override public void componentResized(ComponentEvent e) { SwingUtilities.invokeLater(fit); }
-            });
-        }
-    }
-
-    private static boolean hasAncestorNamed(Component component, String className) {
-        for (Container p = component == null ? null : component.getParent(); p != null; p = p.getParent()) {
-            if (className.equals(p.getClass().getName())) return true;
-        }
-        return false;
     }
 
     private static JCheckBox findCheckBox(Container root, String text) {

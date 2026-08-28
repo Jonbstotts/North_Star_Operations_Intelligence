@@ -7,6 +7,8 @@ import com.wtm.ui.Theme;
 import javax.swing.*;
 import javax.swing.border.EmptyBorder;
 import java.awt.*;
+import java.awt.event.ComponentAdapter;
+import java.awt.event.ComponentEvent;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
@@ -233,19 +235,28 @@ document.getElementById('auth').onclick=auth;document.getElementById('sync').onc
             JPanel top=new JPanel(new BorderLayout(14,14));top.setOpaque(false);JLabel title=new JLabel("Music & Audio");title.setForeground(Theme.text());title.setFont(title.getFont().deriveFont(Font.BOLD,26f));top.add(title,BorderLayout.WEST);state.setForeground(Theme.muted());top.add(state,BorderLayout.SOUTH);add(top,BorderLayout.NORTH);
             JPanel body=new JPanel();body.setOpaque(false);body.setLayout(new BoxLayout(body,BoxLayout.Y_AXIS));body.setBorder(new EmptyBorder(22,0,0,0));
             body.add(section("Apple Music",applePanel()));body.add(Box.createVerticalStrut(14));body.add(section("Playback",playbackPanel()));body.add(Box.createVerticalStrut(14));body.add(section("Facility Audio",facilityPanel()));
-            JScrollPane scroll=new JScrollPane(body);scroll.setBorder(null);scroll.setOpaque(false);scroll.getViewport().setOpaque(false);scroll.getVerticalScrollBar().setUnitIncrement(18);add(scroll,BorderLayout.CENTER);
+            JScrollPane scroll=new JScrollPane(body);scroll.setBorder(null);scroll.setOpaque(false);scroll.getViewport().setOpaque(false);scroll.getVerticalScrollBar().setUnitIncrement(18);prepareScroll(scroll,body);add(scroll,BorderLayout.CENTER);
         }
         private JPanel applePanel(){
             JPanel p=flow();token.setText(service.settings.developerToken);token.setPreferredSize(new Dimension(430,34));p.add(new JLabel("Developer Token"));p.add(token);p.add(button("Save",()->{service.settings.developerToken=token.getText().trim();service.save();refresh();}));p.add(button("Authorize / Open Apple Music",()->service.open(this)));p.add(button("Refresh",this::refresh));return p;
         }
         private JPanel playbackPanel(){
-            JPanel p=flow();playlists.setPreferredSize(new Dimension(280,34));p.add(playlists);p.add(button("Play Playlist",()->{MusicPlaylist x=(MusicPlaylist)playlists.getSelectedItem();if(x!=null)service.command("playlist:"+x.playId());}));p.add(button("◀",()->service.command("prev")));p.add(button("▶",()->service.command("play")));p.add(button("❚❚",()->service.command("pause")));p.add(button("▶▶",()->service.command("next")));return p;
+            JPanel p=flow();styleCombo(playlists);playlists.setPreferredSize(new Dimension(280,34));p.add(playlists);p.add(button("Play Playlist",()->{MusicPlaylist x=(MusicPlaylist)playlists.getSelectedItem();if(x!=null)service.command("playlist:"+x.playId());}));p.add(button("◀",()->service.command("prev")));p.add(button("▶",()->service.command("play")));p.add(button("❚❚",()->service.command("pause")));p.add(button("▶▶",()->service.command("next")));return p;
         }
         private JPanel facilityPanel(){
-            JPanel p=flow();JTextField zone=new JTextField(service.settings.facilityZone,18);JComboBox<String> eq=new JComboBox<>(new String[]{"Balanced","Voice","Bass Boost","Bright"});eq.setSelectedItem(service.settings.eqPreset);p.add(new JLabel("Zone"));p.add(zone);p.add(new JLabel("EQ"));p.add(eq);p.add(button("Save",()->{service.settings.facilityZone=zone.getText().trim();service.settings.eqPreset=Objects.toString(eq.getSelectedItem(),"Balanced");service.save();}));return p;
+            JPanel p=flow();JTextField zone=new JTextField(service.settings.facilityZone,18);JComboBox<String> eq=new JComboBox<>(new String[]{"Balanced","Voice","Bass Boost","Bright"});styleCombo(eq);eq.setSelectedItem(service.settings.eqPreset);p.add(new JLabel("Zone"));p.add(zone);p.add(new JLabel("EQ"));p.add(eq);p.add(button("Save",()->{service.settings.facilityZone=zone.getText().trim();service.settings.eqPreset=Objects.toString(eq.getSelectedItem(),"Balanced");service.save();}));return p;
         }
         private JPanel section(String name,JComponent inner){JPanel p=new JPanel(new BorderLayout());p.setBackground(Theme.panel());p.setBorder(BorderFactory.createCompoundBorder(BorderFactory.createLineBorder(Theme.border()),new EmptyBorder(14,14,14,14)));JLabel h=new JLabel(name);h.setForeground(Theme.text());h.setFont(h.getFont().deriveFont(Font.BOLD,17f));p.add(h,BorderLayout.NORTH);p.add(inner,BorderLayout.CENTER);p.setMaximumSize(new Dimension(Integer.MAX_VALUE,180));return p;}
         private JPanel flow(){JPanel p=new JPanel(new FlowLayout(FlowLayout.LEFT,9,10));p.setOpaque(false);return p;}
+        private void styleCombo(JComboBox<?> combo){combo.setUI(new com.wtm.ui.ThemedComboBoxUI(Theme.active()));combo.setBackground(Theme.panel2());combo.setForeground(Theme.text());combo.setBorder(BorderFactory.createLineBorder(Theme.border()));}
+        private void prepareScroll(JScrollPane scroll,JComponent body){
+            scroll.setHorizontalScrollBarPolicy(ScrollPaneConstants.HORIZONTAL_SCROLLBAR_NEVER);
+            scroll.getHorizontalScrollBar().setEnabled(false);
+            scroll.getViewport().setBackground(Theme.bg());
+            Runnable fit=()->{int width=scroll.getViewport().getExtentSize().width;if(width<=0)width=Math.max(620,scroll.getWidth()-20);Dimension pref=body.getPreferredSize();int height=pref==null?760:Math.max(pref.height,720);body.setMinimumSize(new Dimension(0,height));body.setPreferredSize(new Dimension(Math.max(600,width),height));body.setMaximumSize(new Dimension(Integer.MAX_VALUE,Integer.MAX_VALUE));body.revalidate();};
+            fit.run();
+            scroll.getViewport().addComponentListener(new ComponentAdapter(){@Override public void componentResized(ComponentEvent e){fit.run();}});
+        }
         private JButton button(String s,Runnable r){JButton b=new JButton(s);b.addActionListener(e->r.run());return b;}
         private void refresh(){playlistModel.removeAllElements();for(MusicPlaylist x:service.playlists())playlistModel.addElement(x);PlaybackState ps=service.playback();state.setText((service.connected()?"Connected":"Not connected")+" • "+ps.title()+("".equals(ps.artist())?"":" — "+ps.artist()));repaint();}
     }
