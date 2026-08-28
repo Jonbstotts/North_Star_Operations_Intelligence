@@ -1046,6 +1046,42 @@ public final class OperationsWorkspaceFrame extends JFrame {
         return row;
     }
 
+    private String eventDashboardGlyphKey(OperationEvent event){
+        String name=event==null||event.name()==null?"":event.name().toLowerCase(Locale.ROOT);
+        if(name.contains("new year"))return "new_year";
+        if(name.contains("martin luther king")||name.contains("mlk"))return "mlk";
+        if(name.contains("president"))return "presidents_day";
+        if(name.contains("memorial"))return "memorial_day";
+        if(name.contains("independence")||name.contains("fourth of july")||name.contains("4th of july"))return "independence_day";
+        if(name.contains("labor day"))return "labor_day";
+        if(name.contains("columbus")||name.contains("indigenous peoples"))return "columbus_day";
+        if(name.contains("veteran"))return "veterans_day";
+        if(name.contains("thanksgiving"))return "thanksgiving";
+        if(name.contains("christmas"))return "christmas";
+        if(name.contains("halloween"))return "halloween";
+        if(name.contains("valentine"))return "valentines_day";
+        if(name.contains("st. patrick")||name.contains("st patrick"))return "st_patricks_day";
+        if(name.contains("easter"))return "easter";
+        if(name.contains("mother"))return "mothers_day";
+        if(name.contains("father"))return "fathers_day";
+        if(name.contains("juneteenth"))return "juneteenth";
+        if(name.contains("safety"))return "safety_milestone";
+        if(name.contains("project complete")||name.contains("project completion"))return "project_complete";
+        if(name.contains("milestone"))return "milestone";
+        if(name.contains("weather alert")||name.contains("severe weather")||name.contains("storm alert"))return "weather_alert";
+        if(name.contains("holiday season"))return "holiday_season";
+        if(name.contains("seasonal"))return "seasonal";
+        if(name.contains("promotion"))return "promotion";
+        if(name.contains("graduation"))return "graduation";
+        if(name.contains("new hire"))return "new_hire";
+        if(name.contains("welcome"))return "welcome";
+        if(name.contains("congrat"))return "congratulations";
+        if(name.contains("team success"))return "team_success";
+        if(name.contains("thank you"))return "thank_you";
+        if(name.contains("celebrat"))return "lets_celebrate";
+        return "special_event";
+    }
+
     private String eventGlyphAssetKey(OperationEvent event){
         String kind=eventVisualKind(event);
         return switch(kind){
@@ -1072,6 +1108,8 @@ public final class OperationsWorkspaceFrame extends JFrame {
     }
 
     private Icon eventTagIcon(OperationEvent event,int size){
+        Icon supplied=NorthStarDashboardGlyphs.icon(eventDashboardGlyphKey(event),size);
+        if(supplied!=null)return supplied;
         String assetKey=eventGlyphAssetKey(event);
         Icon approved=WorkspaceGlyphs.icon(assetKey,size,Theme.text());
         if(approved!=null)return approved;
@@ -1485,6 +1523,15 @@ public final class OperationsWorkspaceFrame extends JFrame {
         String type=item==null||item.type()==null
                 ?""
                 :item.type().toLowerCase(Locale.ROOT);
+        String dashboardKey=type.contains("anniversary")
+                ?"work_anniversary"
+                :type.contains("employee of the month")
+                    ?"employee_of_month"
+                    :type.contains("promotion")
+                        ?"promotion"
+                        :"birthday";
+        Icon supplied=NorthStarDashboardGlyphs.icon(dashboardKey,size);
+        if(supplied!=null)return supplied;
         String assetKey=type.contains("anniversary")
                 ?"confetti"
                 :type.contains("employee of the month")
