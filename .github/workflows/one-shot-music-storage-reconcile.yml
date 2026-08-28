@@ -1,4 +1,4 @@
-name: One-shot Music storage reconciliation
+name: One-shot Music storage regression gates
 
 on:
   push:
@@ -21,48 +21,25 @@ jobs:
         with:
           distribution: temurin
           java-version: '21'
-      - name: Reconcile Music storage ownership
+      - name: Gate canonical Music storage ownership
         run: |
           set -euo pipefail
           python3 - <<'PY'
           from pathlib import Path
-
-          music=Path('src/com/wtm/modular/ui/MusicModuleGuard.java')
-          s=music.read_text()
-          s=s.replace('import com.wtm.ui.Theme;\n','import com.wtm.config.ConfigService;\nimport com.wtm.ui.Theme;\nimport com.wtm.util.SecureFiles;\n')
-          s=s.replace('import java.nio.file.attribute.PosixFilePermissions;\n','')
-          old='''        private final MusicSettings settings=new MusicSettings();\n        private final Path config=Paths.get(System.getProperty("user.home"),".northstar","music.properties");\n'''
-          new='''        private final MusicSettings settings=new MusicSettings();\n        private final Path config=ConfigService.appDataDir().resolve("music.properties");\n        private final Path legacyConfig=Paths.get(System.getProperty("user.home"),".northstar","music.properties");\n'''
-          if s.count(old)!=1: raise SystemExit('Music config path anchor mismatch')
-          s=s.replace(old,new)
-          old='''        synchronized void load(){\n            Properties p=new Properties();if(Files.isRegularFile(config))try(InputStream in=Files.newInputStream(config)){p.load(in);}catch(IOException ignored){}\n'''
-          new='''        synchronized void load(){\n            migrateLegacyConfig();\n            Properties p=new Properties();if(Files.isRegularFile(config))try(InputStream in=Files.newInputStream(config)){p.load(in);SecureFiles.restrictFile(config);}catch(IOException ignored){}\n'''
-          if s.count(old)!=1: raise SystemExit('Music load anchor mismatch')
-          s=s.replace(old,new)
-          old='''        synchronized void save(){\n            Properties p=new Properties();p.setProperty("apple.developerToken",settings.developerToken==null?"":settings.developerToken.trim());p.setProperty("dashboard.player",Boolean.toString(settings.dashboardPlayer));p.setProperty("facility.zone",settings.facilityZone);p.setProperty("eq.preset",settings.eqPreset);p.setProperty("eq.bass",String.valueOf(settings.bass));p.setProperty("eq.mid",String.valueOf(settings.mid));p.setProperty("eq.treble",String.valueOf(settings.treble));\n            try{Files.createDirectories(config.getParent());try(OutputStream out=Files.newOutputStream(config,StandardOpenOption.CREATE,StandardOpenOption.TRUNCATE_EXISTING)){p.store(out,"NorthStar Music & Audio");}try{Files.setPosixFilePermissions(config,PosixFilePermissions.fromString("rw-------"));}catch(Exception ignored){}}catch(IOException e){throw new IllegalStateException("Unable to save music settings",e);}\n        }\n'''
-          new='''        synchronized void save(){\n            Properties p=new Properties();p.setProperty("apple.developerToken",settings.developerToken==null?"":settings.developerToken.trim());p.setProperty("dashboard.player",Boolean.toString(settings.dashboardPlayer));p.setProperty("facility.zone",settings.facilityZone);p.setProperty("eq.preset",settings.eqPreset);p.setProperty("eq.bass",String.valueOf(settings.bass));p.setProperty("eq.mid",String.valueOf(settings.mid));p.setProperty("eq.treble",String.valueOf(settings.treble));\n            try{SecureFiles.storePropertiesAtomic(config,p,"NorthStar Music & Audio");}catch(IOException e){throw new IllegalStateException("Unable to save music settings",e);}\n        }\n        private void migrateLegacyConfig(){\n            if(Files.isRegularFile(config)||!Files.isRegularFile(legacyConfig))return;\n            try{\n                SecureFiles.ensurePrivateDirectory(config.getParent());\n                Files.copy(legacyConfig,config);\n                SecureFiles.restrictFile(config);\n            }catch(IOException ignored){}\n        }\n'''
-          if s.count(old)!=1: raise SystemExit('Music save anchor mismatch')
-          music.write_text(s.replace(old,new))
-
-          lifecycle=Path('src/com/wtm/modular/ui/WorkspaceLifecycleV3.java')
-          s=lifecycle.read_text()
-          s=s.replace('''    private static void loadMusicSettings() {\n        MusicModuleGuard.loadSettings();\n        restrictMusicStorage();\n    }\n''','''    private static void loadMusicSettings() {\n        MusicModuleGuard.loadSettings();\n    }\n''')
-          s=s.replace('''    private static void setMusicDashboardEnabled(boolean enabled) {\n        MusicModuleGuard.setDashboardPlayerEnabled(enabled);\n        restrictMusicStorage();\n    }\n\n    private static void restrictMusicStorage() {\n        try {\n            java.nio.file.Path directory = java.nio.file.Paths.get(\n                    System.getProperty("user.home"), ".northstar");\n            com.wtm.util.SecureFiles.ensurePrivateDirectory(directory);\n            java.nio.file.Path file = directory.resolve("music.properties");\n            if (java.nio.file.Files.isRegularFile(file))\n                com.wtm.util.SecureFiles.restrictFile(file);\n        } catch (Exception ignored) {\n        }\n    }\n''','''    private static void setMusicDashboardEnabled(boolean enabled) {\n        MusicModuleGuard.setDashboardPlayerEnabled(enabled);\n    }\n''')
-          if 'restrictMusicStorage' in s: raise SystemExit('Lifecycle storage reach-through remains')
-          lifecycle.write_text(s)
+          p=Path('build.sh')
+          s=p.read_text()
+          anchor='''if grep -qE 'findByName|findMarked' src/com/wtm/app/AiEnabledMain.java src/com/wtm/modular/ui/MusicModuleGuard.java || \\\n   grep -qE 'findMarked|removeMarked|removeNamed' src/com/wtm/modular/ui/WorkspaceLifecycleV3.java; then\n  echo "ERROR: recursive dashboard extension component discovery returned." >&2\n  exit 1\nfi\n\n'''
+          insert=anchor+'''# Music settings belong to the canonical application data directory and own\n# their own file hardening. Workspace lifecycle code must not reach through\n# into Music persistence details.\nif ! grep -Fq 'ConfigService.appDataDir().resolve("music.properties")' src/com/wtm/modular/ui/MusicModuleGuard.java || \\\n   ! grep -Fq 'SecureFiles.storePropertiesAtomic(config,p,"NorthStar Music & Audio")' src/com/wtm/modular/ui/MusicModuleGuard.java; then\n  echo "ERROR: Music settings are not using canonical hardened app storage." >&2\n  exit 1\nfi\nif grep -q 'restrictMusicStorage' src/com/wtm/modular/ui/WorkspaceLifecycleV3.java; then\n  echo "ERROR: workspace lifecycle reached into Music storage ownership." >&2\n  exit 1\nfi\n\n'''
+          if s.count(anchor)!=1: raise SystemExit('build.sh dashboard gate anchor mismatch')
+          p.write_text(s.replace(anchor,insert))
           PY
-          grep -Fq 'ConfigService.appDataDir().resolve("music.properties")' src/com/wtm/modular/ui/MusicModuleGuard.java
-          grep -Fq 'SecureFiles.storePropertiesAtomic(config,p,"NorthStar Music & Audio")' src/com/wtm/modular/ui/MusicModuleGuard.java
-          ! grep -q 'restrictMusicStorage' src/com/wtm/modular/ui/WorkspaceLifecycleV3.java
           git diff --check
-          rm -rf /tmp/ns-out && mkdir -p /tmp/ns-out
-          javac --release 21 -encoding UTF-8 -d /tmp/ns-out $(find src -name '*.java')
           bash build.sh
-      - name: Commit Music storage reconciliation
+      - name: Commit Music storage gates
         run: |
           set -euo pipefail
           git config user.name 'NorthStar Cleanup Bot'
           git config user.email 'actions@users.noreply.github.com'
-          git add src/com/wtm/modular/ui/MusicModuleGuard.java src/com/wtm/modular/ui/WorkspaceLifecycleV3.java
-          git commit -m 'Move Music settings into canonical app storage'
+          git add build.sh
+          git commit -m 'Gate canonical Music settings storage'
           git push origin master
