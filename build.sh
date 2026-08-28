@@ -337,4 +337,17 @@ mkdir -p /tmp/ns-theme-smoke
 javac --release 21 -Xlint:unchecked -Werror -encoding UTF-8 -cp 'out:lib/*' -d /tmp/ns-theme-smoke ci/ThemeSmokeTest.java
 java -Djava.awt.headless=true -cp '/tmp/ns-theme-smoke:out:lib/*' ThemeSmokeTest
 
+
+# Runtime branding is mandatory. NorthStarBrand loads these classpath resources
+# during application startup, so a release JAR without them is not launchable.
+for resource in \
+  brand/northstar_primary_logo_exact.png \
+  brand/northstar_splash_exact.png \
+  brand/northstar_app_icon_exact.png; do
+  if ! jar tf NorthStarOperations.jar | grep -Fxq "$resource"; then
+    echo "ERROR: packaged JAR is missing required runtime resource: $resource" >&2
+    exit 1
+  fi
+done
+
 echo "Built NorthStarOperations.jar from canonical master src tree"
