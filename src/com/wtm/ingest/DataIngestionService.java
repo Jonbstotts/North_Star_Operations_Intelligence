@@ -25,7 +25,11 @@ public final class DataIngestionService {
   if(h.contains("equipment")&&h.contains("logdt")&&h.contains("operation"))return Type.EQUIPMENT_USAGE;
   if(h.contains("process")&&h.contains("activity")&&h.contains("userbk")&&h.contains("barcode1")){if(name.contains("location"))return Type.AUDIT_LOCATION;if(name.contains("task"))return Type.AUDIT_TASK;return Type.AUDIT_ITEM;}
   if(h.contains("completeduserbk")&&h.contains("total")){if(name.contains("binned"))return Type.HOURLY_BINNED;return Type.HOURLY_PICKS;}return Type.UNKNOWN;}
- public Path dataFile(Type t){return operational.resolve(t.name().toLowerCase(Locale.ROOT)+".csv");}
+ public Path dataFile(Type t){
+  if(t==Type.DEALER_NETWORK)return app.resolve("tracking").resolve("logistics-network.csv");
+  if(t==Type.TRACKER_TELEMETRY)return app.resolve("tracking").resolve("tracker-telemetry.csv");
+  return operational.resolve(t.name().toLowerCase(Locale.ROOT)+".csv");
+ }
  public synchronized List<IngestionRecord> scanIncoming(){List<IngestionRecord> out=new ArrayList<>();if(!watchEnabled())return out;try(var s=Files.list(incoming)){for(Path p:s.filter(Files::isRegularFile).toList())try{if(autoImport()){out.add(importFile(p,"Watched Folder"));Files.deleteIfExists(p);}}catch(Exception e){out.add(append("Watched Folder",p.getFileName().toString(),"",Type.UNKNOWN.name(),"FAILED",0,e.getMessage(),""));}}catch(Exception ignored){}return out;}
  public synchronized List<IngestionRecord> history(){List<IngestionRecord> out=new ArrayList<>();if(!Files.isRegularFile(history))return out;try{List<String> ls=Files.readAllLines(history,StandardCharsets.UTF_8);for(int i=1;i<ls.size();i++){String[] a=ls.get(i).split("\\|",-1);if(a.length>=10)out.add(new IngestionRecord(a[0],a[1],a[2],a[3],a[4],a[5],a[6],parseInt(a[7]),a[8],a[9]));}}catch(Exception ignored){}return out;}
  private static void mergeSnapshotOrHistory(Path src,Path target,Type t)throws IOException{Files.createDirectories(target.getParent());if(t==Type.DAILY_PRODUCTIVITY){mergeCsv(src,target);return;}Files.copy(src,target,StandardCopyOption.REPLACE_EXISTING);}
