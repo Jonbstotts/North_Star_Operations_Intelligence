@@ -16,10 +16,10 @@ jobs:
       - uses: actions/checkout@v4
         with:
           ref: master
-      - name: Inspect DataPath presentation owner
+      - name: Inspect Gmail DataPath call sites
         run: |
           set -euo pipefail
-          echo '=== Exact GMAIL DATAPATH UI matches ==='
-          grep -R -n -B 80 -A 140 --include='*.java' 'GMAIL DATAPATH' src/com/wtm/ui || true
-          echo '=== Data Collection UI matches ==='
-          grep -R -n -B 40 -A 120 --include='*.java' 'Data Collection' src/com/wtm/ui | head -n 500 || true
+          echo '=== GmailDataPathService call sites ==='
+          grep -R -n -B 60 -A 140 --include='*.java' 'GmailDataPathService' src | head -n 700 || true
+          echo '=== Gmail labels/buttons ==='
+          grep -R -n -B 30 -A 80 --include='*.java' 'Gmail\|gmail' src/com/wtm/ui | head -n 700 || true
