@@ -23,10 +23,9 @@ jobs:
           find src -type f -name '*.java' | grep -E '(Guard|Runtime|Coordinator|Stabilizer|Bootstrap|Compatibility)' | sort || true
           echo '=== Dynamic class lookup or class-name matching ==='
           grep -R -n --include='*.java' 'Class\.forName\|getClass()\.getName\|getClass().getSimpleName\|\.getName().contains' src || true
+          echo '=== GlassSurfacePanel definition and uses ==='
+          grep -R -n -B 5 -A 12 --include='*.java' 'GlassSurfacePanel' src || true
+          echo '=== Sidebar route property ownership ==='
+          grep -R -n -B 5 -A 8 --include='*.java' 'northstar.sidebar.route\|createSidebarButton' src/com/wtm/ui src/com/wtm/modular src/com/wtm/app || true
           echo '=== deprecated and compatibility wording ==='
           grep -R -n -i --include='*.java' 'deprecated\|compatib\|legacy.*runtime\|runtime.*legacy\|workaround\|temporary shim\|fallback hook' src || true
-          echo '=== broad component tree discovery ==='
-          grep -R -n --include='*.java' 'for.*getComponents()\|getComponents())' src/com/wtm/modular src/com/wtm/app src/com/wtm/ui | head -n 250 || true
-          echo '=== launcher and startup calls ==='
-          sed -n '1,180p' src/com/wtm/app/NorthStarMainStable.java
-          sed -n '1,220p' src/com/wtm/app/Main.java
