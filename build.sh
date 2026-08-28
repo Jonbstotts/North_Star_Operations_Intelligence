@@ -331,4 +331,10 @@ fi
 
 unzip -tq NorthStarOperations.jar >/dev/null
 
+# Exercise every catalog theme through genuine FlatLaf delegates in headless mode.
+rm -rf /tmp/ns-theme-smoke
+mkdir -p /tmp/ns-theme-smoke
+javac --release 21 -Xlint:unchecked -Werror -encoding UTF-8 -cp 'out:lib/*' -d /tmp/ns-theme-smoke ci/ThemeSmokeTest.java
+java -Djava.awt.headless=true -cp '/tmp/ns-theme-smoke:out:lib/*' ThemeSmokeTest
+
 echo "Built NorthStarOperations.jar from canonical master src tree"
