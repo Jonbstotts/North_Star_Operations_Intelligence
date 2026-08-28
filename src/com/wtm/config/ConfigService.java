@@ -98,6 +98,8 @@ public final class ConfigService {
             cfg.fullscreen = bool(p, "fullscreen", cfg.fullscreen);
             cfg.darkMode = bool(p, "darkMode", cfg.darkMode);
             cfg.themeId=p.getProperty("themeId",cfg.themeId);
+            cfg.automaticHolidayThemes=bool(
+                    p,"automaticHolidayThemes",cfg.automaticHolidayThemes);
             AppTheme selectedTheme=AppTheme.fromId(cfg.themeId);
             cfg.darkMode=selectedTheme.dark();
 
