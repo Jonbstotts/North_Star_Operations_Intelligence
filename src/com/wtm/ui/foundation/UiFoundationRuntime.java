@@ -2,16 +2,16 @@ package com.wtm.ui.foundation;
 
 import javax.swing.*;
 import java.awt.*;
-import java.awt.event.ContainerEvent;
 import java.awt.event.WindowEvent;
 import java.util.Locale;
 
 /**
- * Synchronous, event-driven UI Foundation runtime; no post-paint polling.
+ * Window-boundary UI Foundation runtime.
  *
- * Workspace sidebar routes are marked as foundation-exempt before the shared
- * styler sees them. Their active/inactive appearance is owned by the workspace
- * route painter, not NorthStarButtonUI.
+ * The foundation is applied once when a Swing window opens, plus once to any
+ * displayable windows that already exist when the runtime starts. Component
+ * additions are deliberately not observed: route/page constructors and
+ * ThemeStyler own styling for content mounted after a window is open.
  */
 public final class UiFoundationRuntime {
     private static volatile boolean started;
@@ -23,25 +23,20 @@ public final class UiFoundationRuntime {
         started=true;
 
         Toolkit.getDefaultToolkit().addAWTEventListener(event->{
-            if(event instanceof ContainerEvent ce
-                    &&ce.getID()==ContainerEvent.COMPONENT_ADDED){
-                Component child=ce.getChild();
-                markSidebarRoutes(child);
-                UiFoundation.apply(child);
-            }else if(event instanceof WindowEvent we
+            if(event instanceof WindowEvent we
                     &&we.getID()==WindowEvent.WINDOW_OPENED){
-                Window window=we.getWindow();
-                markSidebarRoutes(window);
-                UiFoundation.apply(window);
+                applyWindow(we.getWindow());
             }
-        },AWTEvent.CONTAINER_EVENT_MASK|AWTEvent.WINDOW_EVENT_MASK);
+        },AWTEvent.WINDOW_EVENT_MASK);
 
-        for(Window window:Window.getWindows()){
-            if(window!=null&&window.isDisplayable()){
-                markSidebarRoutes(window);
-                UiFoundation.apply(window);
-            }
-        }
+        for(Window window:Window.getWindows())
+            if(window!=null&&window.isDisplayable())applyWindow(window);
+    }
+
+    private static void applyWindow(Window window){
+        if(window==null)return;
+        markSidebarRoutes(window);
+        UiFoundation.apply(window);
     }
 
     private static void markSidebarRoutes(Component component){
