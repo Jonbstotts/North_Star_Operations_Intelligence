@@ -45,6 +45,13 @@ jobs:
           ! grep -q 'MusicWorkspacePolishGuard.*install' src/com/wtm/app/NorthStarMainStable.java
           ! grep -q 'StartupDashboardReadyGuard.*install' src/com/wtm/app/NorthStarMainStable.java
           ! grep -q 'MusicModuleGuard.*install' src/com/wtm/app/NorthStarMainStable.java
+          ! grep -q 'AnnouncementBorderGuard' src/com/wtm/app/NorthStarMainStable.java
+          ! grep -q 'StartupUiGuard' src/com/wtm/app/NorthStarMainStable.java
+          ! grep -q 'NetworkGeocodingService' src/com/wtm/app/NorthStarMainStable.java
+          ! test -f src/com/wtm/modular/ui/RuntimeStabilizer.java
+          ! grep -q 'RuntimeStabilizer' src/com/wtm/modular/core/ModularBootstrap.java
+          ! grep -q 'COMPONENT_ADDED' src/com/wtm/modular/ui/TrustedEmailUiGuard.java
+          ! grep -q 'new Timer' src/com/wtm/modular/ui/SidebarModulesGlyphGuard.java
           grep -q 'COMPONENT_ADDED is cosmetic only' src/com/wtm/modular/ui/WorkspaceLifecycleV3.java
           grep -q 'showDashboardRoute' src/com/wtm/modular/ui/WorkspaceLifecycleV3.java
 
