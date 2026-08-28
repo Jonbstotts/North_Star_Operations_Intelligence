@@ -20,7 +20,6 @@ public final class ThemeStyler {
         if(component==null)return;
         AppTheme resolved=theme==null?Theme.active():theme;
         applyRecursive(component,resolved);
-        ThemeCoreV216.applyImmediate(component);
     }
 
     private static void applyRecursive(Component component,AppTheme theme){
@@ -33,6 +32,9 @@ public final class ThemeStyler {
         if(component instanceof JDialog dialog){
             dialog.setBackground(bg);
             if(dialog.getRootPane()!=null){
+                dialog.getRootPane().putClientProperty(
+                        "apple.awt.windowAppearance",
+                        theme.dark()?"NSAppearanceNameDarkAqua":"NSAppearanceNameAqua");
                 dialog.getRootPane().setOpaque(true);
                 dialog.getRootPane().setBackground(bg);
                 dialog.getRootPane().setBorder(BorderFactory.createEmptyBorder());
