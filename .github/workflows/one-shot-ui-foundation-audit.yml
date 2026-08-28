@@ -1,0 +1,54 @@
+name: One-shot UI foundation audit
+
+on:
+  push:
+    branches: [ master ]
+    paths:
+      - '.github/workflows/one-shot-ui-foundation-audit.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  inspect:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: master
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '21'
+      - name: Inspect UI foundation ownership
+        run: |
+          set -euo pipefail
+          echo '=== UiFoundationRuntime references ==='
+          grep -R -n --include='*.java' 'UiFoundationRuntime' src || true
+          echo '=== UiFoundation references ==='
+          grep -R -n --include='*.java' 'UiFoundation' src || true
+          echo '=== NorthStarThemeCompliance references ==='
+          grep -R -n --include='*.java' 'NorthStarThemeCompliance' src || true
+          echo '=== ThemeStyler direct calls ==='
+          grep -R -n --include='*.java' 'ThemeStyler\.apply' src || true
+          echo '=== Compile without NorthStarThemeCompliance ==='
+          if [ -f src/com/wtm/ui/NorthStarThemeCompliance.java ]; then
+            mv src/com/wtm/ui/NorthStarThemeCompliance.java /tmp/NorthStarThemeCompliance.java
+            mkdir -p /tmp/northstar-no-theme-compliance
+            if javac --release 21 -encoding UTF-8 -d /tmp/northstar-no-theme-compliance $(find src -name '*.java'); then
+              echo 'NORTHSTAR_THEME_COMPLIANCE_UNUSED=true'
+            else
+              echo 'NORTHSTAR_THEME_COMPLIANCE_UNUSED=false'
+            fi
+            mv /tmp/NorthStarThemeCompliance.java src/com/wtm/ui/NorthStarThemeCompliance.java
+          fi
+          echo '=== Compile without UiFoundationRuntime ==='
+          if [ -f src/com/wtm/ui/foundation/UiFoundationRuntime.java ]; then
+            mv src/com/wtm/ui/foundation/UiFoundationRuntime.java /tmp/UiFoundationRuntime.java
+            mkdir -p /tmp/northstar-no-ui-foundation-runtime
+            if javac --release 21 -encoding UTF-8 -d /tmp/northstar-no-ui-foundation-runtime $(find src -name '*.java'); then
+              echo 'UI_FOUNDATION_RUNTIME_UNUSED=true'
+            else
+              echo 'UI_FOUNDATION_RUNTIME_UNUSED=false'
+            fi
+          fi
