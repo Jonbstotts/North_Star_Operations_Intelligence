@@ -3,6 +3,7 @@ package com.wtm.modular.ui;
 import com.sun.net.httpserver.HttpExchange;
 import com.sun.net.httpserver.HttpServer;
 import com.wtm.ui.Theme;
+import com.wtm.ui.OperationsWorkspaceFrame;
 
 import javax.swing.*;
 import javax.swing.border.EmptyBorder;
@@ -12,8 +13,6 @@ import java.awt.event.ComponentEvent;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
-import java.lang.reflect.Field;
-import java.lang.reflect.Method;
 import java.net.InetSocketAddress;
 import java.net.URI;
 import java.net.URLDecoder;
@@ -77,55 +76,31 @@ public final class MusicModuleGuard {
         injectDashboardPlayer(w);
     }
 
-    @SuppressWarnings("unchecked")
     private static void injectSidebar(Window w){
-        try{
-            Map<String,JButton> routes=(Map<String,JButton>)field(w,"sidebarRouteButtons");
-            if(routes==null)return;
-            JButton current=routes.get(ROUTE);
-            if(current!=null&&current.getParent()!=null)return;
-            JButton anchor=findButton((Container)w,"Main Showcase");
-            if(anchor==null||anchor.getParent()==null)return;
-
-            Method create=w.getClass().getDeclaredMethod("createSidebarButton",String.class,boolean.class);
-            create.setAccessible(true);
-            JButton music=(JButton)create.invoke(w,ROUTE_LABEL,false);
-            music.putClientProperty("northstar.sidebar.route",Boolean.TRUE);
-            music.putClientProperty("northstar.ui.skip",Boolean.TRUE);
-            music.addActionListener(e->showMusic(w));
-            routes.put(ROUTE,music);
-
-            Container p=anchor.getParent();
-            int index=indexOf(p,anchor);
-            p.add(music,Math.min(p.getComponentCount(),index+1));
-            p.revalidate();p.repaint();
-        }catch(ReflectiveOperationException ignored){}
+        if(!(w instanceof OperationsWorkspaceFrame workspace))return;
+        workspace.registerWorkspaceExtensionRoute(
+                ROUTE,ROUTE_LABEL,"northstar.music.sidebar",
+                "Main Showcase",true,()->showMusic(workspace));
     }
 
     private static void showMusic(Window w){
-        try{
-            Field active=w.getClass().getDeclaredField("activeWorkspaceRoute");
-            active.setAccessible(true);active.set(w,ROUTE);
-            invoke(w,"closeEmbeddedSettingsSession");
-            invoke(w,"releaseDashboardModules");
-            JPanel host=(JPanel)field(w,"workspaceContentHost");
-            if(host==null)return;
-            host.removeAll();host.add(new MusicPanel(w),BorderLayout.CENTER);host.revalidate();host.repaint();
-            invoke(w,"updateSidebarSelection");
-        }catch(ReflectiveOperationException ex){
-            JOptionPane.showMessageDialog(w,"Music & Audio could not open: "+ex.getMessage(),"NorthStar Music",JOptionPane.ERROR_MESSAGE);
+        if(!(w instanceof OperationsWorkspaceFrame workspace))return;
+        if(!workspace.showWorkspaceExtensionRoute(ROUTE,new MusicPanel(workspace))){
+            JOptionPane.showMessageDialog(
+                    w,"Music & Audio could not open.",
+                    "NorthStar Music",JOptionPane.ERROR_MESSAGE);
         }
     }
 
     private static void injectDashboardPlayer(Window w){
-        if(!MusicService.instance().settings.dashboardPlayer)return;
-        try{
-            JPanel body=(JPanel)field(w,"dashboardBody");
-            if(body==null||body.getParent()==null)return;
-            if(findMarked(body,MINI_MARK)!=null)return;
-            MiniPlayer mini=new MiniPlayer(w);mini.putClientProperty(MINI_MARK,Boolean.TRUE);mini.setAlignmentX(Component.LEFT_ALIGNMENT);mini.setMaximumSize(new Dimension(Integer.MAX_VALUE,72));
-            int at=Math.min(2,body.getComponentCount());body.add(mini,at);body.add(Box.createVerticalStrut(10),Math.min(at+1,body.getComponentCount()));body.revalidate();body.repaint();
-        }catch(ReflectiveOperationException ignored){}
+        if(!MusicService.instance().settings.dashboardPlayer
+                ||!(w instanceof OperationsWorkspaceFrame workspace))return;
+        if(findMarked(workspace,MINI_MARK)!=null)return;
+        MiniPlayer mini=new MiniPlayer(workspace);
+        mini.putClientProperty(MINI_MARK,Boolean.TRUE);
+        mini.setAlignmentX(Component.LEFT_ALIGNMENT);
+        mini.setMaximumSize(new Dimension(Integer.MAX_VALUE,72));
+        workspace.mountDashboardExtension(mini,2);
     }
 
     private static Component findMarked(Container root,String marker){
@@ -135,12 +110,6 @@ public final class MusicModuleGuard {
         }
         return null;
     }
-
-    private static Object field(Object o,String name)throws ReflectiveOperationException{Field f=o.getClass().getDeclaredField(name);f.setAccessible(true);return f.get(o);}
-    private static void invoke(Object o,String name){try{Method m=o.getClass().getDeclaredMethod(name);m.setAccessible(true);m.invoke(o);}catch(ReflectiveOperationException ignored){}}
-    private static int indexOf(Container p,Component target){Component[] a=p.getComponents();for(int i=0;i<a.length;i++)if(a[i]==target)return i;return a.length-1;}
-    private static JButton findButton(Container root,String name){for(Component c:root.getComponents()){if(c instanceof JButton b&&clean(b.getText()).equalsIgnoreCase(name))return b;if(c instanceof Container cc){JButton x=findButton(cc,name);if(x!=null)return x;}}return null;}
-    private static String clean(String s){return s==null?"":s.replaceAll("^[^A-Za-z0-9]+","").trim();}
 
     // Provider-neutral model ------------------------------------------------
 

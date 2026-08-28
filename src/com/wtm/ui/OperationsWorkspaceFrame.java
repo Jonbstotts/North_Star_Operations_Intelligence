@@ -439,6 +439,75 @@ public final class OperationsWorkspaceFrame extends JFrame {
         }
     }
 
+
+    /**
+     * Stable source-backed extension point for optional workspace modules.
+     * Dynamic modules may register a route without reflecting into private
+     * sidebar fields or private button factories.
+     */
+    public boolean registerWorkspaceExtensionRoute(
+            String route,
+            String label,
+            String componentName,
+            String anchorRoute,
+            boolean afterAnchor,
+            Runnable action
+    ){
+        if(route==null||route.isBlank()||label==null||label.isBlank()||action==null)return false;
+        JButton existing=sidebarRouteButtons.get(route);
+        if(existing!=null&&existing.getParent()!=null)return true;
+        JButton anchorButton=sidebarRouteButtons.get(anchorRoute);
+        if(anchorButton==null||anchorButton.getParent()==null)return false;
+
+        JButton button=createSidebarButton(label,false);
+        if(componentName!=null&&!componentName.isBlank())button.setName(componentName);
+        button.putClientProperty("northstar.sidebar.route",Boolean.TRUE);
+        button.putClientProperty("northstar.ui.skip",Boolean.TRUE);
+        button.addActionListener(e->action.run());
+        sidebarRouteButtons.put(route,button);
+
+        Container parent=anchorButton.getParent();
+        int index=parent.getComponentCount();
+        Component[] children=parent.getComponents();
+        for(int i=0;i<children.length;i++){
+            if(children[i]==anchorButton){index=i+(afterAnchor?1:0);break;}
+        }
+        parent.add(button,Math.max(0,Math.min(index,parent.getComponentCount())));
+        parent.revalidate();
+        parent.repaint();
+        updateSidebarSelection();
+        return true;
+    }
+
+    /** Mounts an extension-owned full workspace page through the canonical route lifecycle. */
+    public boolean showWorkspaceExtensionRoute(String route,JComponent content){
+        if(route==null||route.isBlank()||content==null||workspaceContentHost==null)return false;
+        activeWorkspaceRoute=route;
+        closeEmbeddedSettingsSession();
+        releaseDashboardModules();
+        workspaceContentHost.removeAll();
+        workspaceContentHost.add(content,BorderLayout.CENTER);
+        workspaceContentHost.revalidate();
+        workspaceContentHost.repaint();
+        updateSidebarSelection();
+        return true;
+    }
+
+    /** Mounts a dashboard extension at a bounded position without exposing dashboardBody. */
+    public boolean mountDashboardExtension(JComponent component,int preferredIndex){
+        if(component==null||dashboardBody==null||dashboardBody.getParent()==null)return false;
+        int index=Math.max(0,Math.min(preferredIndex,dashboardBody.getComponentCount()));
+        dashboardBody.add(component,index);
+        dashboardBody.revalidate();
+        dashboardBody.repaint();
+        return true;
+    }
+
+    /** Returns the canonical active route for source-backed extension coordination. */
+    public String activeWorkspaceRouteName(){
+        return activeWorkspaceRoute==null?"":activeWorkspaceRoute;
+    }
+
     private JComponent buildSummaryStrip(){
         JPanel strip=new JPanel(new BorderLayout(20,0));
         strip.setOpaque(false);
