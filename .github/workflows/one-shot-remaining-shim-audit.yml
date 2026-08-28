@@ -1,0 +1,32 @@
+name: One-shot remaining shim audit
+
+on:
+  push:
+    branches: [ master ]
+    paths:
+      - '.github/workflows/one-shot-remaining-shim-audit.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  inspect:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: master
+      - name: Inspect remaining shim-like source
+        run: |
+          set -euo pipefail
+          echo '=== Guard Runtime Coordinator Stabilizer source files ==='
+          find src -type f -name '*.java' | grep -E '(Guard|Runtime|Coordinator|Stabilizer|Bootstrap|Compatibility)' | sort || true
+          echo '=== Dynamic class lookup or class-name matching ==='
+          grep -R -n --include='*.java' 'Class\.forName\|getClass()\.getName\|getClass().getSimpleName\|\.getName().contains' src || true
+          echo '=== deprecated and compatibility wording ==='
+          grep -R -n -i --include='*.java' 'deprecated\|compatib\|legacy.*runtime\|runtime.*legacy\|workaround\|temporary shim\|fallback hook' src || true
+          echo '=== broad component tree discovery ==='
+          grep -R -n --include='*.java' 'for.*getComponents()\|getComponents())' src/com/wtm/modular src/com/wtm/app src/com/wtm/ui | head -n 250 || true
+          echo '=== launcher and startup calls ==='
+          sed -n '1,180p' src/com/wtm/app/NorthStarMainStable.java
+          sed -n '1,220p' src/com/wtm/app/Main.java
