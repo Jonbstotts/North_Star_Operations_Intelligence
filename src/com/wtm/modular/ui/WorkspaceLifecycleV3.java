@@ -121,7 +121,6 @@ public final class WorkspaceLifecycleV3 {
 
     private static void loadMusicSettings() {
         MusicModuleGuard.loadSettings();
-        restrictMusicStorage();
     }
 
     private static boolean musicDashboardEnabled() {
@@ -130,19 +129,6 @@ public final class WorkspaceLifecycleV3 {
 
     private static void setMusicDashboardEnabled(boolean enabled) {
         MusicModuleGuard.setDashboardPlayerEnabled(enabled);
-        restrictMusicStorage();
-    }
-
-    private static void restrictMusicStorage() {
-        try {
-            java.nio.file.Path directory = java.nio.file.Paths.get(
-                    System.getProperty("user.home"), ".northstar");
-            com.wtm.util.SecureFiles.ensurePrivateDirectory(directory);
-            java.nio.file.Path file = directory.resolve("music.properties");
-            if (java.nio.file.Files.isRegularFile(file))
-                com.wtm.util.SecureFiles.restrictFile(file);
-        } catch (Exception ignored) {
-        }
     }
 
 

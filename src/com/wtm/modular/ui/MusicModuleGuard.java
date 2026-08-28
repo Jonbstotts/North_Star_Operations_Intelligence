@@ -2,7 +2,9 @@ package com.wtm.modular.ui;
 
 import com.sun.net.httpserver.HttpExchange;
 import com.sun.net.httpserver.HttpServer;
+import com.wtm.config.ConfigService;
 import com.wtm.ui.Theme;
+import com.wtm.util.SecureFiles;
 import com.wtm.ui.OperationsWorkspaceFrame;
 
 import javax.swing.*;
@@ -21,7 +23,6 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.nio.file.StandardOpenOption;
-import java.nio.file.attribute.PosixFilePermissions;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -115,7 +116,8 @@ public final class MusicModuleGuard {
         private final AtomicReference<PlaybackState> playback=new AtomicReference<>(PlaybackState.empty());
         private final AtomicReference<String> command=new AtomicReference<>("");
         private final MusicSettings settings=new MusicSettings();
-        private final Path config=Paths.get(System.getProperty("user.home"),".northstar","music.properties");
+        private final Path config=ConfigService.appDataDir().resolve("music.properties");
+        private final Path legacyConfig=Paths.get(System.getProperty("user.home"),".northstar","music.properties");
         private HttpServer server;private int port;
         static MusicService instance(){return INSTANCE;}
         @Override public String name(){return "Apple Music";}
@@ -125,12 +127,21 @@ public final class MusicModuleGuard {
         @Override public void command(String c){if(c!=null)command.set(c);}
 
         synchronized void load(){
-            Properties p=new Properties();if(Files.isRegularFile(config))try(InputStream in=Files.newInputStream(config)){p.load(in);}catch(IOException ignored){}
+            migrateLegacyConfig();
+            Properties p=new Properties();if(Files.isRegularFile(config))try(InputStream in=Files.newInputStream(config)){p.load(in);SecureFiles.restrictFile(config);}catch(IOException ignored){}
             settings.developerToken=p.getProperty("apple.developerToken","").trim();settings.dashboardPlayer=Boolean.parseBoolean(p.getProperty("dashboard.player","true"));settings.facilityZone=p.getProperty("facility.zone","Main Facility PA");settings.eqPreset=p.getProperty("eq.preset","Balanced");settings.bass=intValue(p.getProperty("eq.bass"));settings.mid=intValue(p.getProperty("eq.mid"));settings.treble=intValue(p.getProperty("eq.treble"));
         }
         synchronized void save(){
             Properties p=new Properties();p.setProperty("apple.developerToken",settings.developerToken==null?"":settings.developerToken.trim());p.setProperty("dashboard.player",Boolean.toString(settings.dashboardPlayer));p.setProperty("facility.zone",settings.facilityZone);p.setProperty("eq.preset",settings.eqPreset);p.setProperty("eq.bass",String.valueOf(settings.bass));p.setProperty("eq.mid",String.valueOf(settings.mid));p.setProperty("eq.treble",String.valueOf(settings.treble));
-            try{Files.createDirectories(config.getParent());try(OutputStream out=Files.newOutputStream(config,StandardOpenOption.CREATE,StandardOpenOption.TRUNCATE_EXISTING)){p.store(out,"NorthStar Music & Audio");}try{Files.setPosixFilePermissions(config,PosixFilePermissions.fromString("rw-------"));}catch(Exception ignored){}}catch(IOException e){throw new IllegalStateException("Unable to save music settings",e);}
+            try{SecureFiles.storePropertiesAtomic(config,p,"NorthStar Music & Audio");}catch(IOException e){throw new IllegalStateException("Unable to save music settings",e);}
+        }
+        private void migrateLegacyConfig(){
+            if(Files.isRegularFile(config)||!Files.isRegularFile(legacyConfig))return;
+            try{
+                SecureFiles.ensurePrivateDirectory(config.getParent());
+                Files.copy(legacyConfig,config);
+                SecureFiles.restrictFile(config);
+            }catch(IOException ignored){}
         }
         synchronized URI bridge()throws IOException{
             if(server!=null)return URI.create("http://127.0.0.1:"+port+"/");
