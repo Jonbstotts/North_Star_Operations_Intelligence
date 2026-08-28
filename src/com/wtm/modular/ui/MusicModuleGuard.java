@@ -71,7 +71,7 @@ public final class MusicModuleGuard {
     }
 
     public static void installWorkspace(Window w){
-        if(w==null||!w.isDisplayable())return;
+        if(w==null)return;
         injectSidebar(w);
         injectDashboardPlayer(w);
     }

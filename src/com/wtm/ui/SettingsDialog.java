@@ -4,6 +4,7 @@ import com.wtm.config.*;
 import com.wtm.model.*;
 import com.wtm.security.*;
 import com.wtm.media.*;
+import com.wtm.modular.ui.WorkspaceLifecycleV3;
 
 import javax.swing.*;
 import javax.swing.table.DefaultTableModel;
@@ -319,6 +320,7 @@ public final class SettingsDialog extends JDialog {
         installOperationTypeBehavior();
         updateAutomaticSevereControls();
         applySettingsTheme(AppTheme.fromId(cfg.themeId));
+        WorkspaceLifecycleV3.settingsReady(this);
     }
 
     private JPanel buildSettingsBrandBar(){
@@ -2477,9 +2479,11 @@ public final class SettingsDialog extends JDialog {
                 cfg.widgetTypes.add(choice==null?"STATUS":choice.id());
             }
 
+            WorkspaceLifecycleV3.persistSettings(this);
             ConfigService.save(cfg);
             AuditService.record("Saved application settings");
             onSave.accept(cfg);
+            WorkspaceLifecycleV3.settingsApplied(this);
             dispose();
         }catch(Exception ex){
             ThemedDialogs.message(

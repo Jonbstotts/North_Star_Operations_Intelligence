@@ -5,6 +5,7 @@ import com.wtm.config.AppConfig;
 import com.wtm.map.TileMapPanel;
 import com.wtm.media.MediaCategory;
 import com.wtm.media.MediaService;
+import com.wtm.modular.ui.WorkspaceLifecycleV3;
 import com.wtm.model.*;
 import com.wtm.net.HttpService;
 import com.wtm.radar.RainViewerService;
@@ -108,6 +109,7 @@ public final class OperationsWorkspaceFrame extends JFrame {
 
         buildUi();
         ThemeStyler.apply(this,Theme.active());
+        WorkspaceLifecycleV3.initializeWorkspace(this);
         startRefreshers();
 
         clockTimer=new javax.swing.Timer(1000,e->updateClock());
@@ -288,6 +290,7 @@ public final class OperationsWorkspaceFrame extends JFrame {
         workspaceContentHost.repaint();
 
         refreshVisibleModules();
+        WorkspaceLifecycleV3.dashboardMounted(this);
     }
 
     private JComponent buildSidebar(){
@@ -491,6 +494,7 @@ public final class OperationsWorkspaceFrame extends JFrame {
         workspaceContentHost.revalidate();
         workspaceContentHost.repaint();
         updateSidebarSelection();
+        WorkspaceLifecycleV3.routeMounted(this);
         return true;
     }
 
@@ -2867,6 +2871,7 @@ public final class OperationsWorkspaceFrame extends JFrame {
             workspaceContentHost.revalidate();
             workspaceContentHost.repaint();
         }
+        WorkspaceLifecycleV3.routeMounted(this);
     }
 
     private void releaseDashboardModules(){
