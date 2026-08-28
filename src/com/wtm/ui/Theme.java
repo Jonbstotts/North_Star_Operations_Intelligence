@@ -2,36 +2,32 @@ package com.wtm.ui;
 
 import java.awt.*;
 
-/**
- * Central theme facade used throughout the dashboard.
- *
- * The active preset is changed when configuration is applied. Existing widget
- * code can continue using Theme.accent()/danger()/etc., while surfaces come
- * from the selected AppTheme.
- */
+/** Central semantic-color facade backed by the installed FlatLaf. */
 public final class Theme {
     private Theme() {}
 
     private static volatile AppTheme active=AppTheme.NORTH_STAR;
 
-    public static void setActive(String id){ active=AppTheme.fromId(id); }
+    public static synchronized void setActive(String id){
+        active=AppTheme.fromId(id);
+        ThemeManager.install(active);
+    }
     public static AppTheme active(){return active;}
 
-    public static Color bg(){return active.bg();}
-    public static Color panel(){return active.panel();}
-    public static Color panel2(){return active.panel2();}
-    public static Color border(){return active.border();}
-    public static Color text(){return active.text();}
-    public static Color muted(){return active.muted();}
-    public static Color accent(){return active.accent();}
+    public static Color bg(){return ThemeManager.uiColor("Panel.background",active.bg());}
+    public static Color panel(){return ThemeManager.uiColor("Panel.background",active.panel());}
+    public static Color panel2(){return ThemeManager.uiColor("TextField.background",active.panel2());}
+    public static Color border(){return ThemeManager.uiColor("Component.borderColor",active.border());}
+    public static Color text(){return ThemeManager.uiColor("Label.foreground",active.text());}
+    public static Color muted(){return ThemeManager.uiColor("Label.disabledForeground",active.muted());}
+    public static Color accent(){return ThemeManager.uiColor("Component.accentColor",active.accent());}
 
-    // Compatibility overloads retained for older components/source extensions.
-    public static Color bg(boolean dark){return dark?AppTheme.DARK.bg():AppTheme.LIGHT.bg();}
-    public static Color panel(boolean dark){return dark?AppTheme.DARK.panel():AppTheme.LIGHT.panel();}
-    public static Color panel2(boolean dark){return dark?AppTheme.DARK.panel2():AppTheme.LIGHT.panel2();}
-    public static Color border(boolean dark){return dark?AppTheme.DARK.border():AppTheme.LIGHT.border();}
-    public static Color text(boolean dark){return dark?AppTheme.DARK.text():AppTheme.LIGHT.text();}
-    public static Color muted(boolean dark){return dark?AppTheme.DARK.muted():AppTheme.LIGHT.muted();}
+    public static Color bg(boolean dark){return dark?AppTheme.FLATLAF_DARK.bg():AppTheme.FLATLAF_LIGHT.bg();}
+    public static Color panel(boolean dark){return dark?AppTheme.FLATLAF_DARK.panel():AppTheme.FLATLAF_LIGHT.panel();}
+    public static Color panel2(boolean dark){return dark?AppTheme.FLATLAF_DARK.panel2():AppTheme.FLATLAF_LIGHT.panel2();}
+    public static Color border(boolean dark){return dark?AppTheme.FLATLAF_DARK.border():AppTheme.FLATLAF_LIGHT.border();}
+    public static Color text(boolean dark){return dark?AppTheme.FLATLAF_DARK.text():AppTheme.FLATLAF_LIGHT.text();}
+    public static Color muted(boolean dark){return dark?AppTheme.FLATLAF_DARK.muted():AppTheme.FLATLAF_LIGHT.muted();}
 
     public static Color good(){ return new Color(54,177,91); }
     public static Color warn(){ return new Color(242,177,30); }
