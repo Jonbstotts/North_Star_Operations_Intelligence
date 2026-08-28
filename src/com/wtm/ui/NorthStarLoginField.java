@@ -105,51 +105,10 @@ public final class NorthStarLoginField extends JPanel {
         };
         field.addFocusListener(focus);
 
-        /*
-         * IMPORTANT: a JPasswordField must retain a PasswordFieldUI delegate.
-         * v3.2.1 installed BasicTextFieldUI for both field types; that delegate
-         * paints the document as ordinary text and therefore bypassed
-         * JPasswordField's echo-character masking entirely.
-         */
-        if(kind==Kind.PASSWORD){
-            field.setUI(new javax.swing.plaf.basic.BasicPasswordFieldUI(){
-                @Override protected void paintSafely(Graphics g){
-                    super.paintSafely(g);
-                    paintPlaceholder(g);
-                }
-
-                private void paintPlaceholder(Graphics g){
-                    paintFieldPlaceholder(field,g);
-                }
-            });
-
-            // Re-assert the secure default after installing the UI delegate.
+        // FlatLaf owns the text/password field delegates. Preserve the explicit
+        // password echo character without replacing the installed Look & Feel UI.
+        if(kind==Kind.PASSWORD)
             ((JPasswordField)field).setEchoChar(passwordEcho);
-        }else{
-            field.setUI(new javax.swing.plaf.basic.BasicTextFieldUI(){
-                @Override protected void paintSafely(Graphics g){
-                    super.paintSafely(g);
-                    paintFieldPlaceholder(field,g);
-                }
-            });
-        }
-    }
-
-    private static void paintFieldPlaceholder(JTextField field,Graphics g){
-        if(field.getText().isEmpty()&&!field.hasFocus()){
-            Object hint=field.getClientProperty("northstar.placeholder");
-            if(hint!=null){
-                Graphics2D g2=(Graphics2D)g.create();
-                Color muted=Theme.muted();
-                g2.setColor(new Color(
-                        muted.getRed(),muted.getGreen(),muted.getBlue(),150));
-                g2.setFont(field.getFont());
-                FontMetrics fm=g2.getFontMetrics();
-                int y=(field.getHeight()-fm.getHeight())/2+fm.getAscent();
-                g2.drawString(String.valueOf(hint),4,y);
-                g2.dispose();
-            }
-        }
     }
 
     public JTextField textField(){ return field; }

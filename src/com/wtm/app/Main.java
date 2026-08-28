@@ -21,8 +21,6 @@ public final class Main {
         );
 
         SwingUtilities.invokeLater(()->{
-            configureDesktopLookAndFeel();
-
             AppTheme bootTheme=AppTheme.fromId(ConfigService.peekThemeId());
             Theme.setActive(bootTheme.id());
 
@@ -158,17 +156,4 @@ public final class Main {
         frame.setVisible(true);
     }
 
-    private static void configureDesktopLookAndFeel(){
-        try{
-            UIManager.setLookAndFeel(
-                    UIManager.getSystemLookAndFeelClassName()
-            );
-        }catch(Exception ignored){}
-
-        Font base=new Font(Font.SANS_SERIF,Font.PLAIN,14);
-        for(Object key:UIManager.getDefaults().keySet()){
-            if(key.toString().toLowerCase().endsWith(".font"))
-                UIManager.put(key,base);
-        }
-    }
 }
