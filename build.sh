@@ -298,9 +298,18 @@ if ! grep -Fq 'public boolean workspaceIntelligenceEnabled = true;' src/com/wtm/
   exit 1
 fi
 
+if [ ! -f lib/flatlaf-3.7.2.jar ] || [ ! -f lib/flatlaf-intellij-themes-3.7.2.jar ]; then
+  echo "ERROR: required FlatLaf 3.7.2 runtime libraries are missing from lib/." >&2
+  exit 1
+fi
+
 rm -rf out
 mkdir -p out
-javac --release 21 -Xlint:unchecked -Werror -encoding UTF-8 -d out $(find src -name '*.java')
+javac --release 21 -Xlint:unchecked -Werror -encoding UTF-8 -cp 'lib/*' -d out $(find src -name '*.java')
+for dep in lib/flatlaf-3.7.2.jar lib/flatlaf-intellij-themes-3.7.2.jar; do
+  (cd out && jar --extract --file "../$dep")
+done
+rm -f out/META-INF/MANIFEST.MF
 if [ -d resources ]; then cp -R resources/. out/; fi
 jar --create --file NorthStarOperations.jar --manifest MANIFEST.MF -C out .
 
