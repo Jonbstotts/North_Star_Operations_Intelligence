@@ -54,6 +54,21 @@ if grep -q 'MusicModuleGuard.*install' src/com/wtm/app/NorthStarMainStable.java;
   exit 1
 fi
 
+# The old generic module registry/manager architecture was never a canonical
+# source-backed feature. The live workspace owns concrete routes directly.
+if [ -e src/com/wtm/modular/core/ModuleRegistry.java ] || [ -e src/com/wtm/modular/core/ModularBootstrap.java ]; then
+  echo "ERROR: obsolete generic modular-core shell returned to canonical source." >&2
+  exit 1
+fi
+if grep -qE 'ModuleRegistry|ModularBootstrap' src/com/wtm/app/NorthStarMainStable.java; then
+  echo "ERROR: canonical launcher references retired generic modular-core infrastructure." >&2
+  exit 1
+fi
+if grep -q 'polishModulesOrganization' src/com/wtm/ui/UiFinalPolish.java; then
+  echo "ERROR: obsolete Modules compatibility polish returned to UiFinalPolish." >&2
+  exit 1
+fi
+
 # Dynamic workspace integrations must use the canonical source-backed extension
 # API instead of reflecting into OperationsWorkspaceFrame private implementation
 # details. Keep these checks in build.sh so local release builds and CI enforce
