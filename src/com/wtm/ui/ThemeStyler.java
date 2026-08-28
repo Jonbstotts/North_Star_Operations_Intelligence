@@ -7,10 +7,8 @@ import java.awt.*;
 
 /**
  * Recursively applies the active application theme to Swing component trees.
- * v2.1.16 makes sidebar-route detection intrinsic instead of timing dependent:
- * native RoundedSidebarButton instances and late injected Data Collection /
- * NorthStar Intelligence buttons are recognized before generic JButton
- * styling can ever add an inactive outline during startup or config refresh.
+ * Sidebar styling relies only on explicit source-owned route metadata; this
+ * class does not infer route identity from button classes, labels, or timing.
  */
 public final class ThemeStyler {
     private ThemeStyler(){}
