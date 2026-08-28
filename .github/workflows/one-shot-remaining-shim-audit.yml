@@ -16,10 +16,17 @@ jobs:
       - uses: actions/checkout@v4
         with:
           ref: master
-      - name: Inspect Gmail DataPath call sites
+          fetch-depth: 0
+      - name: Inspect historical DataPath UI ownership
         run: |
           set -euo pipefail
-          echo '=== GmailDataPathService call sites ==='
-          grep -R -n -B 60 -A 140 --include='*.java' 'GmailDataPathService' src | head -n 700 || true
-          echo '=== Gmail labels/buttons ==='
-          grep -R -n -B 30 -A 80 --include='*.java' 'Gmail\|gmail' src/com/wtm/ui | head -n 700 || true
+          echo '=== canonical Gmail/Data Collection references ==='
+          grep -R -n --include='*.java' -E 'GMAIL DATAPATH|GmailDataPathService|Data Collection|GlassSurfacePanel' src || true
+          echo '=== archived snapshot Gmail/Data Collection references ==='
+          grep -R -n --include='*.java' -E 'GMAIL DATAPATH|GmailDataPathService|Data Collection|GlassSurfacePanel' legacy_source_snapshot | head -n 500 || true
+          echo '=== migration branch Gmail/Data Collection references ==='
+          git grep -n -E 'GMAIL DATAPATH|GmailDataPathService|Data Collection|GlassSurfacePanel' origin/migration/modular-core-v2 -- '*.java' | head -n 500 || true
+          echo '=== pre-clean archive branch Gmail/Data Collection references ==='
+          git grep -n -E 'GMAIL DATAPATH|GmailDataPathService|Data Collection|GlassSurfacePanel' origin/archive/pre-clean-sweep-2026-08-27 -- '*.java' | head -n 700 || true
+          echo '=== recovery branch Gmail/Data Collection references ==='
+          git grep -n -E 'GMAIL DATAPATH|GmailDataPathService|Data Collection|GlassSurfacePanel' origin/recovery/v1.6.3 -- '*.java' | head -n 500 || true
