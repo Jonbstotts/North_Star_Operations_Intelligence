@@ -53,7 +53,14 @@ jobs:
           ! grep -q 'COMPONENT_ADDED' src/com/wtm/modular/ui/TrustedEmailUiGuard.java
           ! grep -q 'new Timer' src/com/wtm/modular/ui/SidebarModulesGlyphGuard.java
           grep -q 'COMPONENT_ADDED is cosmetic only' src/com/wtm/modular/ui/WorkspaceLifecycleV3.java
-          grep -q 'showDashboardRoute' src/com/wtm/modular/ui/WorkspaceLifecycleV3.java
+          ! grep -q 'new Timer' src/com/wtm/modular/ui/WorkspaceLifecycleV3.java
+          ! grep -q 'showDashboardRoute' src/com/wtm/modular/ui/WorkspaceLifecycleV3.java
+          ! grep -q 'invokeStaticFrame' src/com/wtm/modular/ui/WorkspaceLifecycleV3.java
+          grep -q 'AiEnabledMain.injectDashboard' src/com/wtm/modular/ui/WorkspaceLifecycleV3.java
+          grep -q 'MusicModuleGuard.installWorkspace' src/com/wtm/modular/ui/WorkspaceLifecycleV3.java
+          ! grep -q 'AWTEventListener' src/com/wtm/modular/ui/MusicModuleGuard.java
+          ! grep -q 'COMPONENT_ADDED' src/com/wtm/modular/ui/MusicModuleGuard.java
+          ! grep -q 'new Timer' src/com/wtm/modular/ui/MusicModuleGuard.java
 
       - name: Intelligence reconciliation regression
         run: |
