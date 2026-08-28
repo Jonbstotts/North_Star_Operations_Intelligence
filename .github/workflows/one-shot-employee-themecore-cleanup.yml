@@ -57,27 +57,26 @@ jobs:
           text=text.replace('import java.util.List;\n','')
           text=text.replace('    private static final String EMPLOYEE_PANEL_CLASS="com.wtm.ui.EmployeeOperationsPanel";\n\n','')
           text=text.replace('        normalizeEmployeeOperations(component);\n','')
+
           start=text.find('    /** Employee page compact directory treatment owned by the shared UI core. */')
           end=text.find('    private static Container findContainerContainingText(',start)
           if start<0 or end<0:
               raise SystemExit('ThemeCore Employee normalization block not found')
           text=text[:start]+text[end:]
 
-          for signature in [
-              '    private static List<JLabel> labels(Container root)',
-              '    private static <T extends Component> T findFirst(Container root,Class<T> type)',
-              '    private static <T extends Component> List<T> findAll(Component root,Class<T> type)',
-              '    private static <T extends Component> void collect(Component root,Class<T> type,List<T> out)',
-              '    private static Component findByClass(Component root,String className)'
-          ]:
-              if signature in text:
-                  raise SystemExit(f'Unexpected leftover helper after block removal: {signature}')
+          start=text.find('    private static List<JLabel> labels(Container root)')
+          end=text.find('    private static boolean containsText(Component root,String text)',start)
+          if start<0 or end<0:
+              raise SystemExit('ThemeCore employee helper block not found')
+          text=text[:start]+text[end:]
+
           core.write_text(text,encoding='utf-8')
           PY
           git diff --check
           ! grep -q 'EMPLOYEE_PANEL_CLASS' src/com/wtm/ui/ThemeCoreV216.java
           ! grep -q 'normalizeEmployeeOperations' src/com/wtm/ui/ThemeCoreV216.java
           ! grep -q 'compactDirectory' src/com/wtm/ui/ThemeCoreV216.java
+          ! grep -q 'findByClass' src/com/wtm/ui/ThemeCoreV216.java
           grep -q 'hideDirectoryColumn("Employee #")' src/com/wtm/ui/EmployeeOperationsPanel.java
           grep -q 'split.setDividerSize(0)' src/com/wtm/ui/EmployeeOperationsPanel.java
           javac --release 21 -encoding UTF-8 -d /tmp/northstar-employee-core $(find src -name '*.java')
