@@ -85,6 +85,17 @@ public final class WorkspaceLifecycleV3 {
                     if (workspace != null) {
                         SwingUtilities.invokeLater(() -> syncDynamicDashboard(workspace));
                     }
+                    return;
+                }
+
+                String lower = text.toLowerCase(java.util.Locale.ROOT);
+                if (lower.contains("data collection")
+                        || lower.contains("gmail")
+                        || lower.contains("datapath")) {
+                    Window workspace = findWorkspace(SwingUtilities.getWindowAncestor(button));
+                    if (workspace != null) {
+                        SwingUtilities.invokeLater(() -> TrustedEmailUiGuard.apply(workspace));
+                    }
                 }
             }
 
@@ -135,6 +146,7 @@ public final class WorkspaceLifecycleV3 {
         MusicModuleGuard.installWorkspace(window);
         syncDynamicDashboard(frame);
         polishMusicTree(frame);
+        TrustedEmailUiGuard.apply(frame);
         frame.getRootPane().revalidate();
         frame.validate();
         frame.repaint();
@@ -151,6 +163,7 @@ public final class WorkspaceLifecycleV3 {
         MusicModuleGuard.installWorkspace(window);
         syncDynamicDashboard(frame);
         polishMusicTree(frame);
+        TrustedEmailUiGuard.apply(frame);
         frame.getRootPane().revalidate();
         frame.validate();
         frame.repaint();
