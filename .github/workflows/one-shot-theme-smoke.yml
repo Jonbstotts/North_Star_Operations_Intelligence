@@ -1,0 +1,120 @@
+name: FlatLaf theme smoke validation
+on:
+  push:
+    branches:
+      - master
+    paths:
+      - '.github/workflows/one-shot-theme-smoke.yml'
+permissions:
+  contents: write
+jobs:
+  smoke:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: master
+          fetch-depth: 0
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '21'
+      - name: Add permanent theme smoke gate
+        shell: bash
+        run: |
+          set -euo pipefail
+          cat > ci/ThemeSmokeTest.java <<'JAVA'
+          import com.wtm.ui.AppTheme;
+          import com.wtm.ui.Theme;
+
+          import javax.swing.*;
+          import java.awt.*;
+          import java.awt.image.BufferedImage;
+
+          public final class ThemeSmokeTest {
+              private ThemeSmokeTest() {}
+
+              public static void main(String[] args) throws Exception {
+                  System.setProperty("java.awt.headless", "true");
+                  SwingUtilities.invokeAndWait(() -> {
+                      for (AppTheme theme : AppTheme.values()) {
+                          Theme.setActive(theme.id());
+                          verifyFlatLaf(theme);
+                          verifyControls(theme);
+                      }
+                  });
+                  System.out.println("FLATLAF_THEME_SMOKE_OK " + AppTheme.values().length + " themes");
+              }
+
+              private static void verifyFlatLaf(AppTheme theme) {
+                  LookAndFeel laf = UIManager.getLookAndFeel();
+                  if (laf == null || !laf.getClass().getName().startsWith("com.formdev.flatlaf"))
+                      throw new IllegalStateException(theme.id() + ": non-FlatLaf look and feel " + laf);
+                  if (Theme.bg() == null || Theme.panel() == null || Theme.panel2() == null
+                          || Theme.border() == null || Theme.text() == null || Theme.muted() == null
+                          || Theme.accent() == null)
+                      throw new IllegalStateException(theme.id() + ": unresolved semantic color");
+              }
+
+              private static void verifyControls(AppTheme theme) {
+                  JComboBox<String> combo = new JComboBox<>(new String[]{"North Star", "Operations"});
+                  JTabbedPane tabs = new JTabbedPane();
+                  tabs.addTab("Overview", new JPanel());
+                  JTextField text = new JTextField("Theme smoke");
+                  JPasswordField password = new JPasswordField("masked");
+                  JTable table = new JTable(new Object[][]{{"OK", theme.display()}}, new Object[]{"State", "Theme"});
+                  JList<String> list = new JList<>(new String[]{"One", "Two"});
+                  JScrollPane scroll = new JScrollPane(table);
+
+                  JPanel panel = new JPanel(new GridLayout(0, 1));
+                  panel.add(combo);
+                  panel.add(tabs);
+                  panel.add(text);
+                  panel.add(password);
+                  panel.add(list);
+                  panel.add(scroll);
+                  SwingUtilities.updateComponentTreeUI(panel);
+
+                  assertFlatDelegate(theme, "combo", combo.getUI());
+                  assertFlatDelegate(theme, "tabs", tabs.getUI());
+                  assertFlatDelegate(theme, "text", text.getUI());
+                  assertFlatDelegate(theme, "password", password.getUI());
+                  assertFlatDelegate(theme, "table", table.getUI());
+                  assertFlatDelegate(theme, "list", list.getUI());
+                  if (password.getEchoChar() == 0)
+                      throw new IllegalStateException(theme.id() + ": password field is unmasked");
+
+                  panel.setSize(720, 480);
+                  panel.doLayout();
+                  BufferedImage image = new BufferedImage(720, 480, BufferedImage.TYPE_INT_ARGB);
+                  Graphics2D g = image.createGraphics();
+                  panel.paint(g);
+                  g.dispose();
+              }
+
+              private static void assertFlatDelegate(AppTheme theme, String control, Object ui) {
+                  if (ui == null || !ui.getClass().getName().startsWith("com.formdev.flatlaf"))
+                      throw new IllegalStateException(theme.id() + ": " + control + " delegate is " + ui);
+              }
+          }
+          JAVA
+
+          python3 - <<'PY'
+          from pathlib import Path
+          p=Path('build.sh')
+          s=p.read_text()
+          marker='echo "Built NorthStarOperations.jar from canonical master src tree"\n'
+          block='''# Exercise every catalog theme through genuine FlatLaf delegates in headless mode.\nrm -rf /tmp/ns-theme-smoke\nmkdir -p /tmp/ns-theme-smoke\njavac --release 21 -Xlint:unchecked -Werror -encoding UTF-8 -cp 'out:lib/*' -d /tmp/ns-theme-smoke ci/ThemeSmokeTest.java\njava -Djava.awt.headless=true -cp '/tmp/ns-theme-smoke:out:lib/*' ThemeSmokeTest\n\n'''
+          if block not in s:
+              if s.count(marker)!=1: raise SystemExit('build completion marker mismatch')
+              s=s.replace(marker,block+marker,1)
+          p.write_text(s)
+          PY
+
+          git diff --check
+          bash build.sh
+          git config user.name 'NorthStar Cleanup Bot'
+          git config user.email 'actions@users.noreply.github.com'
+          git add ci/ThemeSmokeTest.java build.sh
+          git commit -m 'Add full FlatLaf theme smoke regression'
+          git push origin master
