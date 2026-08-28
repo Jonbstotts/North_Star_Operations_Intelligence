@@ -19,13 +19,9 @@ jobs:
       - name: Inspect remaining shim-like source
         run: |
           set -euo pipefail
-          echo '=== Guard Runtime Coordinator Stabilizer source files ==='
-          find src -type f -name '*.java' | grep -E '(Guard|Runtime|Coordinator|Stabilizer|Bootstrap|Compatibility)' | sort || true
+          echo '=== Gmail DataPath UI source ==='
+          grep -R -n -B 45 -A 90 --include='*.java' 'GMAIL DATAPATH\|Gmail DataPath\|DataPath' src/com/wtm/ui src/com/wtm/ingest src/com/wtm/modular | head -n 420 || true
+          echo '=== Sidebar button source ==='
+          grep -n -B 10 -A 35 'private JButton createSidebarButton' src/com/wtm/ui/OperationsWorkspaceFrame.java || true
           echo '=== Dynamic class lookup or class-name matching ==='
-          grep -R -n --include='*.java' 'Class\.forName\|getClass()\.getName\|getClass().getSimpleName\|\.getName().contains' src || true
-          echo '=== GlassSurfacePanel definition and uses ==='
-          grep -R -n -B 5 -A 12 --include='*.java' 'GlassSurfacePanel' src || true
-          echo '=== Sidebar route property ownership ==='
-          grep -R -n -B 5 -A 8 --include='*.java' 'northstar.sidebar.route\|createSidebarButton' src/com/wtm/ui src/com/wtm/modular src/com/wtm/app || true
-          echo '=== deprecated and compatibility wording ==='
-          grep -R -n -i --include='*.java' 'deprecated\|compatib\|legacy.*runtime\|runtime.*legacy\|workaround\|temporary shim\|fallback hook' src || true
+          grep -R -n --include='*.java' 'Class\.forName\|getClass()\.getName\|\.getName().contains' src || true
