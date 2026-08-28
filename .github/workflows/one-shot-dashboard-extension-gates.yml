@@ -1,0 +1,45 @@
+name: One-shot dashboard extension regression gates
+
+on:
+  push:
+    branches: [ master ]
+    paths:
+      - '.github/workflows/one-shot-dashboard-extension-gates.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: master
+          fetch-depth: 0
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '21'
+      - name: Gate source-owned dashboard extension identity
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          p=Path('build.sh')
+          s=p.read_text()
+          anchor='''if grep -qE 'COMPONENT_ADDED|CONTAINER_EVENT_MASK|ContainerEvent' src/com/wtm/modular/ui/WorkspaceLifecycleV3.java; then\n  echo "ERROR: generic component-add lifecycle handling returned to WorkspaceLifecycleV3." >&2\n  exit 1\nfi\n\n'''
+          insert='''if grep -qE 'COMPONENT_ADDED|CONTAINER_EVENT_MASK|ContainerEvent' src/com/wtm/modular/ui/WorkspaceLifecycleV3.java; then\n  echo "ERROR: generic component-add lifecycle handling returned to WorkspaceLifecycleV3." >&2\n  exit 1\nfi\n\n# Dashboard extension identity belongs to OperationsWorkspaceFrame. Optional\n# modules must not recursively scan the Swing tree to rediscover or remove\n# surfaces that the workspace itself mounted.\nfor api in 'mountDashboardExtension(String id' 'removeDashboardExtension(String id)'; do\n  if ! grep -Fq "$api" src/com/wtm/ui/OperationsWorkspaceFrame.java; then\n    echo "ERROR: source-owned dashboard extension API '$api' is missing." >&2\n    exit 1\n  fi\ndone\nif grep -qE 'findByName|findMarked' src/com/wtm/app/AiEnabledMain.java src/com/wtm/modular/ui/MusicModuleGuard.java || \\\n   grep -qE 'findMarked|removeMarked|removeNamed' src/com/wtm/modular/ui/WorkspaceLifecycleV3.java; then\n  echo "ERROR: recursive dashboard extension component discovery returned." >&2\n  exit 1\nfi\n\n'''
+          if s.count(anchor)!=1: raise SystemExit('build.sh component gate anchor mismatch')
+          p.write_text(s.replace(anchor,insert))
+          PY
+          git diff --check
+          bash build.sh
+      - name: Commit dashboard extension gates
+        run: |
+          set -euo pipefail
+          git config user.name 'NorthStar Cleanup Bot'
+          git config user.email 'actions@users.noreply.github.com'
+          git add build.sh
+          git commit -m 'Gate source-owned dashboard extension identity'
+          git push origin master
