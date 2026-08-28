@@ -134,6 +134,11 @@ public final class ConfigService {
             cfg.workspaceModules.removeIf(
                     value->"NORTHSTAR_INTELLIGENCE".equalsIgnoreCase(value));
 
+            for(String id:new java.util.ArrayList<>(cfg.workspaceDashboardLayout.keySet())){
+                String saved=p.getProperty("workspace.layout."+id);
+                if(saved!=null&&!saved.isBlank())cfg.workspaceDashboardLayout.put(id,saved.trim());
+            }
+
             cfg.workspaceInfoStripEnabled=bool(
                     p,"workspace.infoStrip.enabled",true);
             cfg.workspaceInfoBlockCount=Math.max(
@@ -468,6 +473,8 @@ public final class ConfigService {
             p.setProperty("workspaceModules",String.join(",",cfg.workspaceModules));
             p.setProperty("workspace.intelligence.enabled",
                     Boolean.toString(cfg.workspaceIntelligenceEnabled));
+            for(java.util.Map.Entry<String,String> entry:cfg.workspaceDashboardLayout.entrySet())
+                p.setProperty("workspace.layout."+entry.getKey(),entry.getValue());
             p.setProperty(
                     "workspace.infoStrip.enabled",
                     Boolean.toString(cfg.workspaceInfoStripEnabled));

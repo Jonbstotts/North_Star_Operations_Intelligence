@@ -2,6 +2,7 @@ package com.wtm.ui;
 
 import com.wtm.alerts.NwsAlertService;
 import com.wtm.config.AppConfig;
+import com.wtm.config.ConfigService;
 import com.wtm.map.TileMapPanel;
 import com.wtm.media.MediaCategory;
 import com.wtm.media.MediaService;
@@ -599,111 +600,63 @@ public final class OperationsWorkspaceFrame extends JFrame {
     }
 
     private JComponent buildModuleGrid(){
-        JPanel container=new JPanel();
+        JPanel container=new JPanel(new BorderLayout(0,8));
         container.setOpaque(false);
-        container.setLayout(new BoxLayout(container,BoxLayout.Y_AXIS));
 
-        boolean showWeather=moduleEnabled("WEATHER");
-        boolean showMap=moduleEnabled("TRAFFIC_MAP");
-        boolean showEvents=moduleEnabled("UPCOMING_EVENTS");
-        boolean showCelebrations=moduleEnabled("TEAM_CELEBRATIONS");
-        boolean showOps=moduleEnabled("OPERATIONS_SNAPSHOT");
+        DashboardGridPanel grid=new DashboardGridPanel(
+                config.workspaceDashboardLayout,
+                ()->ConfigService.save(config)
+        );
 
-        JPanel primaryRow=new JPanel(new GridBagLayout());
-        primaryRow.setOpaque(false);
-        primaryRow.setAlignmentX(Component.LEFT_ALIGNMENT);
-
-        GridBagConstraints c=new GridBagConstraints();
-        c.gridy=0;
-        c.weighty=1;
-        c.fill=GridBagConstraints.BOTH;
-        c.insets=new Insets(0,0,0,12);
-
-        int x=0;
-        if(showWeather){
+        if(moduleEnabled("WEATHER")){
             weatherModule=weatherCard();
-
-            JPanel weatherHolder=new JPanel(new BorderLayout());
-            weatherHolder.setOpaque(false);
-            weatherHolder.add(weatherModule,BorderLayout.NORTH);
-
-            c.gridx=x++;
-            c.weightx=.20;
-            primaryRow.add(weatherHolder,c);
+            grid.addTile("WEATHER","Local Weather",weatherModule,"0,0,3,6");
         }
-
-        if(showMap){
-            c.gridx=x++;
-            c.weightx=.56;
-            primaryRow.add(mapCard(),c);
+        if(moduleEnabled("TRAFFIC_MAP"))
+            grid.addTile("SHOWCASE","Main Showcase",mapCard(),"3,0,6,6");
+        if(moduleEnabled("UPCOMING_EVENTS")){
+            eventsModule=eventsCard();
+            grid.addTile("UPCOMING_EVENTS","Upcoming Events",eventsModule,"9,0,3,3");
         }
-
-        if(showEvents||showCelebrations){
-            JPanel right=new JPanel(new GridBagLayout());
-            right.setOpaque(false);
-
-            GridBagConstraints r=new GridBagConstraints();
-            r.gridx=0;
-            r.weightx=1;
-            r.fill=GridBagConstraints.BOTH;
-
-            int row=0;
-            if(showEvents){
-                eventsModule=eventsCard();
-                r.gridy=row++;
-                r.weighty=showCelebrations?.53:1;
-                r.insets=new Insets(0,0,showCelebrations?6:0,0);
-                right.add(eventsModule,r);
-            }
-
-            if(showCelebrations){
-                celebrationsModule=celebrationsCard();
-                r.gridy=row;
-                r.weighty=showEvents?.47:1;
-                r.insets=new Insets(showEvents?6:0,0,0,0);
-                right.add(celebrationsModule,r);
-            }
-
-            c.gridx=x++;
-            c.weightx=.24;
-            c.insets=new Insets(0,0,0,0);
-            primaryRow.add(right,c);
+        if(moduleEnabled("TEAM_CELEBRATIONS")){
+            celebrationsModule=celebrationsCard();
+            grid.addTile("TEAM_CELEBRATIONS","Team Celebrations",celebrationsModule,"9,3,3,3");
         }
-
-        /*
-         * Reference-scale primary dashboard band. This intentionally occupies
-         * much more of a 1080p/4K workspace than the earlier 430px treatment
-         * while still remaining bounded and scrollable on smaller screens.
-         */
-        primaryRow.setPreferredSize(new Dimension(1100,580));
-        primaryRow.setMinimumSize(new Dimension(800,520));
-        primaryRow.setMaximumSize(new Dimension(Integer.MAX_VALUE,580));
-        container.add(primaryRow);
-
         if(config.workspaceInfoStripEnabled){
-            container.add(Box.createVerticalStrut(12));
             infoStripModule=informationStripCard();
-            infoStripModule.setAlignmentX(Component.LEFT_ALIGNMENT);
-            infoStripModule.setPreferredSize(new Dimension(1000,108));
-            infoStripModule.setMaximumSize(new Dimension(Integer.MAX_VALUE,108));
-            container.add(infoStripModule);
+            grid.addTile("INFORMATION","Information",infoStripModule,"0,6,12,1");
         }
-
-        if(showOps){
-            container.add(Box.createVerticalStrut(12));
+        if(moduleEnabled("OPERATIONS_SNAPSHOT")){
             operationsModule=operationsSnapshotCard();
-            operationsModule.setAlignmentX(Component.LEFT_ALIGNMENT);
-            operationsModule.setPreferredSize(new Dimension(1000,132));
-            operationsModule.setMaximumSize(new Dimension(Integer.MAX_VALUE,132));
-            container.add(operationsModule);
+            grid.addTile("OPERATIONS_SNAPSHOT","Operations Snapshot",operationsModule,"0,7,12,2");
         }
 
-        int totalHeight=580
-                +(config.workspaceInfoStripEnabled?120:0)
-                +(showOps?144:0);
-        container.setPreferredSize(new Dimension(1100,totalHeight));
-        container.setMaximumSize(new Dimension(Integer.MAX_VALUE,totalHeight));
+        if(AuthorizationService.allowed(Permission.DASHBOARD_LAYOUT)){
+            JPanel tools=new JPanel(new FlowLayout(FlowLayout.RIGHT,8,0));
+            tools.setOpaque(false);
+            JToggleButton edit=new JToggleButton("Customize Layout");
+            edit.setToolTipText("Drag and resize dashboard blocks on a 12-column snap grid.");
+            edit.addActionListener(e->{
+                grid.setEditMode(edit.isSelected());
+                edit.setText(edit.isSelected()?"Finish Layout":"Customize Layout");
+            });
+            JButton reset=new JButton("Reset Layout");
+            reset.addActionListener(e->{
+                Map<String,String> defaults=new LinkedHashMap<>();
+                defaults.put("WEATHER","0,0,3,6");
+                defaults.put("SHOWCASE","3,0,6,6");
+                defaults.put("UPCOMING_EVENTS","9,0,3,3");
+                defaults.put("TEAM_CELEBRATIONS","9,3,3,3");
+                defaults.put("INFORMATION","0,6,12,1");
+                defaults.put("OPERATIONS_SNAPSHOT","0,7,12,2");
+                grid.resetLayout(defaults);
+            });
+            tools.add(edit);
+            tools.add(reset);
+            container.add(tools,BorderLayout.NORTH);
+        }
 
+        container.add(grid,BorderLayout.CENTER);
         return container;
     }
 

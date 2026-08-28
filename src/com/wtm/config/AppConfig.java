@@ -47,6 +47,16 @@ public final class AppConfig {
     /** Source-owned toggle for the optional NorthStar Intelligence dashboard/route integration. */
     public boolean workspaceIntelligenceEnabled = true;
 
+    /** Persisted 12-column dashboard tile geometry: x,y,width,height. */
+    public final Map<String,String> workspaceDashboardLayout=new LinkedHashMap<>(Map.of(
+            "WEATHER","0,0,3,6",
+            "SHOWCASE","3,0,6,6",
+            "UPCOMING_EVENTS","9,0,3,3",
+            "TEAM_CELEBRATIONS","9,3,3,3",
+            "INFORMATION","0,6,12,1",
+            "OPERATIONS_SNAPSHOT","0,7,12,2"
+    ));
+
     /**
      * Compact Information row placed between the primary workspace modules and
      * Operations Snapshot. Information Blocks is the single configuration
