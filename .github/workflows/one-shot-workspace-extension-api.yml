@@ -23,7 +23,7 @@ jobs:
         with:
           distribution: temurin
           java-version: '21'
-      - name: Add source-backed workspace extension API
+      - name: Remove workspace lifecycle configuration reflection
         run: |
           set -euo pipefail
           python3 - <<'PY'
@@ -31,51 +31,55 @@ jobs:
 
           path=Path('src/com/wtm/ui/OperationsWorkspaceFrame.java')
           text=path.read_text(encoding='utf-8')
-          anchor='''    private void updateSidebarSelection(){\n        for(Map.Entry<String,JButton> entry:sidebarRouteButtons.entrySet()){\n            boolean active=entry.getKey().equalsIgnoreCase(\n                    activeWorkspaceRoute==null?"":activeWorkspaceRoute);\n            JButton button=entry.getValue();\n            button.putClientProperty("northstar.sidebar.active",active);\n            button.setForeground(active?Color.WHITE:Theme.muted());\n            button.repaint();\n        }\n    }\n'''
-          addition='''\n\n    /**\n     * Stable source-backed extension point for optional workspace modules.\n     * Dynamic modules may register a route without reflecting into private\n     * sidebar fields or private button factories.\n     */\n    public boolean registerWorkspaceExtensionRoute(\n            String route,\n            String label,\n            String componentName,\n            String anchorRoute,\n            boolean afterAnchor,\n            Runnable action\n    ){\n        if(route==null||route.isBlank()||label==null||label.isBlank()||action==null)return false;\n        JButton existing=sidebarRouteButtons.get(route);\n        if(existing!=null&&existing.getParent()!=null)return true;\n        JButton anchorButton=sidebarRouteButtons.get(anchorRoute);\n        if(anchorButton==null||anchorButton.getParent()==null)return false;\n\n        JButton button=createSidebarButton(label,false);\n        if(componentName!=null&&!componentName.isBlank())button.setName(componentName);\n        button.putClientProperty("northstar.sidebar.route",Boolean.TRUE);\n        button.putClientProperty("northstar.ui.skip",Boolean.TRUE);\n        button.addActionListener(e->action.run());\n        sidebarRouteButtons.put(route,button);\n\n        Container parent=anchorButton.getParent();\n        int index=parent.getComponentCount();\n        Component[] children=parent.getComponents();\n        for(int i=0;i<children.length;i++){\n            if(children[i]==anchorButton){index=i+(afterAnchor?1:0);break;}\n        }\n        parent.add(button,Math.max(0,Math.min(index,parent.getComponentCount())));\n        parent.revalidate();\n        parent.repaint();\n        updateSidebarSelection();\n        return true;\n    }\n\n    /** Mounts an extension-owned full workspace page through the canonical route lifecycle. */\n    public boolean showWorkspaceExtensionRoute(String route,JComponent content){\n        if(route==null||route.isBlank()||content==null||workspaceContentHost==null)return false;\n        activeWorkspaceRoute=route;\n        closeEmbeddedSettingsSession();\n        releaseDashboardModules();\n        workspaceContentHost.removeAll();\n        workspaceContentHost.add(content,BorderLayout.CENTER);\n        workspaceContentHost.revalidate();\n        workspaceContentHost.repaint();\n        updateSidebarSelection();\n        return true;\n    }\n\n    /** Mounts a dashboard extension at a bounded position without exposing dashboardBody. */\n    public boolean mountDashboardExtension(JComponent component,int preferredIndex){\n        if(component==null||dashboardBody==null||dashboardBody.getParent()==null)return false;\n        int index=Math.max(0,Math.min(preferredIndex,dashboardBody.getComponentCount()));\n        dashboardBody.add(component,index);\n        dashboardBody.revalidate();\n        dashboardBody.repaint();\n        return true;\n    }\n\n    /** Returns the canonical active route for source-backed extension coordination. */\n    public String activeWorkspaceRouteName(){\n        return activeWorkspaceRoute==null?"":activeWorkspaceRoute;\n    }\n'''
-          if text.count(anchor)!=1: raise SystemExit('Workspace sidebar-selection anchor mismatch')
+          anchor='''    /** Returns the canonical active route for source-backed extension coordination. */\n    public String activeWorkspaceRouteName(){\n        return activeWorkspaceRoute==null?"":activeWorkspaceRoute;\n    }\n'''
+          addition='''\n\n    /** Returns the live workspace configuration to trusted source-backed integrations. */\n    public AppConfig workspaceConfigForExtensions(){\n        return config;\n    }\n'''
+          if text.count(anchor)!=1: raise SystemExit('Operations extension-config anchor mismatch')
           path.write_text(text.replace(anchor,anchor+addition,1),encoding='utf-8')
 
-          path=Path('src/com/wtm/app/AiEnabledMain.java')
+          path=Path('src/com/wtm/ui/SettingsDialog.java')
           text=path.read_text(encoding='utf-8')
-          text=text.replace('import com.wtm.ui.NorthStarIntelligencePanel;\n','import com.wtm.ui.NorthStarIntelligencePanel;\nimport com.wtm.ui.OperationsWorkspaceFrame;\n')
-          text=text.replace('import java.lang.reflect.Field;\nimport java.lang.reflect.Method;\nimport java.util.Map;\n','')
-          start=text.index('    @SuppressWarnings("unchecked")\n    public static void injectSidebar')
-          end=text.index('    private static Component findByName',start)
-          replacement='''    public static void injectSidebar(JFrame frame){\n        if(!(frame instanceof OperationsWorkspaceFrame workspace)\n                ||!AuthorizationService.allowed(Permission.AI_ASSISTANT)\n                ||findByName(frame,"northstar.ai.sidebar")!=null)return;\n        workspace.registerWorkspaceExtensionRoute(\n                "NorthStar Intelligence",\n                "✦  NorthStar Intelligence",\n                "northstar.ai.sidebar",\n                "Main Showcase",\n                true,\n                ()->openFull(workspace)\n        );\n    }\n\n    public static void openFull(JFrame frame){\n        if(!(frame instanceof OperationsWorkspaceFrame workspace)\n                ||!AuthorizationService.allowed(Permission.AI_ASSISTANT))return;\n        if(!workspace.showWorkspaceExtensionRoute(\n                "NorthStar Intelligence",new NorthStarIntelligencePanel())){\n            JOptionPane.showMessageDialog(\n                    frame,\n                    "Unable to open NorthStar Intelligence.",\n                    "NorthStar Intelligence",\n                    JOptionPane.ERROR_MESSAGE\n            );\n        }\n    }\n\n    /**\n     * Mounts the compact assistant before the dashboard's trailing vertical\n     * glue. This works before first paint as soon as dashboardBody exists; it\n     * deliberately does not require Component.isShowing().\n     */\n    public static void injectDashboard(JFrame frame){\n        if(!(frame instanceof OperationsWorkspaceFrame workspace)\n                ||!AuthorizationService.allowed(Permission.AI_ASSISTANT)\n                ||findByName(frame,COMPACT_NAME)!=null)return;\n\n        NorthStarIntelligenceCompactPanel compact=\n                new NorthStarIntelligenceCompactPanel(()->openFull(workspace));\n        compact.setAlignmentX(Component.LEFT_ALIGNMENT);\n        Dimension preferred=compact.getPreferredSize();\n        int height=Math.max(150,preferred==null?150:preferred.height);\n        compact.setMaximumSize(new Dimension(Integer.MAX_VALUE,height));\n\n        JPanel mount=new JPanel(new BorderLayout());\n        mount.setName(COMPACT_NAME);\n        mount.setOpaque(false);\n        mount.setBorder(new EmptyBorder(14,0,0,0));\n        mount.setAlignmentX(Component.LEFT_ALIGNMENT);\n        mount.setMaximumSize(new Dimension(Integer.MAX_VALUE,height+14));\n        mount.add(compact,BorderLayout.CENTER);\n\n        workspace.mountDashboardExtension(mount,Integer.MAX_VALUE-1);\n    }\n\n'''
-          text=text[:start]+replacement+text[end:]
-          # Remove old reflection helper methods if still present after findByName.
-          helper=text.find('    private static void invoke(Object target,String name)')
-          if helper>=0:
-              text=text[:helper]+'}\n'
-          path.write_text(text,encoding='utf-8')
+          anchor='''    private final Consumer<AppConfig> onSave;\n'''
+          if text.count(anchor)!=1: raise SystemExit('Settings field anchor mismatch')
+          # Insert accessor just before first large control-field block, after core fields.
+          target='''    private final AppTheme originalTheme;\n    private final JTabbedPane tabs=new JTabbedPane();\n'''
+          replacement='''    private final AppTheme originalTheme;\n    private final JTabbedPane tabs=new JTabbedPane();\n\n    /** Returns this settings session configuration to trusted workspace integrations. */\n    public AppConfig workspaceConfigForExtensions(){\n        return cfg;\n    }\n'''
+          if text.count(target)!=1: raise SystemExit('Settings accessor anchor mismatch')
+          path.write_text(text.replace(target,replacement,1),encoding='utf-8')
 
-          path=Path('src/com/wtm/modular/ui/MusicModuleGuard.java')
+          path=Path('src/com/wtm/modular/ui/WorkspaceLifecycleV3.java')
           text=path.read_text(encoding='utf-8')
-          text=text.replace('import com.wtm.ui.Theme;\n','import com.wtm.ui.Theme;\nimport com.wtm.ui.OperationsWorkspaceFrame;\n')
-          text=text.replace('import java.lang.reflect.Field;\nimport java.lang.reflect.Method;\n','')
-          start=text.index('    @SuppressWarnings("unchecked")\n    private static void injectSidebar')
-          end=text.index('    private static Component findMarked',start)
-          replacement='''    private static void injectSidebar(Window w){\n        if(!(w instanceof OperationsWorkspaceFrame workspace))return;\n        workspace.registerWorkspaceExtensionRoute(\n                ROUTE,ROUTE_LABEL,"northstar.music.sidebar",\n                "Main Showcase",true,()->showMusic(workspace));\n    }\n\n    private static void showMusic(Window w){\n        if(!(w instanceof OperationsWorkspaceFrame workspace))return;\n        if(!workspace.showWorkspaceExtensionRoute(ROUTE,new MusicPanel(workspace))){\n            JOptionPane.showMessageDialog(\n                    w,"Music & Audio could not open.",\n                    "NorthStar Music",JOptionPane.ERROR_MESSAGE);\n        }\n    }\n\n    private static void injectDashboardPlayer(Window w){\n        if(!MusicService.instance().settings.dashboardPlayer\n                ||!(w instanceof OperationsWorkspaceFrame workspace))return;\n        if(findMarked(workspace,MINI_MARK)!=null)return;\n        MiniPlayer mini=new MiniPlayer(workspace);\n        mini.putClientProperty(MINI_MARK,Boolean.TRUE);\n        mini.setAlignmentX(Component.LEFT_ALIGNMENT);\n        mini.setMaximumSize(new Dimension(Integer.MAX_VALUE,72));\n        workspace.mountDashboardExtension(mini,2);\n    }\n\n'''
+          text=text.replace('import com.wtm.app.AiEnabledMain;\n','import com.wtm.app.AiEnabledMain;\nimport com.wtm.config.AppConfig;\nimport com.wtm.ui.OperationsWorkspaceFrame;\nimport com.wtm.ui.SettingsDialog;\n')
+          text=text.replace('import java.lang.reflect.Field;\n','')
+
+          old='''    private static String activeRoute(JFrame frame) {\n        Object value = fieldValue(frame, "activeWorkspaceRoute");\n        return value == null ? "" : value.toString();\n    }\n'''
+          new='''    private static String activeRoute(JFrame frame) {\n        return frame instanceof OperationsWorkspaceFrame workspace\n                ? workspace.activeWorkspaceRouteName()\n                : "";\n    }\n'''
+          if text.count(old)!=1: raise SystemExit('Lifecycle active-route anchor mismatch')
+          text=text.replace(old,new,1)
+
+          start=text.index('    private static Object configObject(Window window) {')
+          end=text.index('    private static void loadMusicSettings()',start)
+          replacement='''    private static AppConfig configObject(Window window) {\n        if (window instanceof SettingsDialog settings)\n            return settings.workspaceConfigForExtensions();\n        if (window instanceof OperationsWorkspaceFrame workspace)\n            return workspace.workspaceConfigForExtensions();\n        return null;\n    }\n\n    private static void setModuleToken(AppConfig cfg, String token, boolean enabled) {\n        if (cfg == null) return;\n        cfg.workspaceModules.removeIf(value -> token.equalsIgnoreCase(String.valueOf(value)));\n        if (enabled) cfg.workspaceModules.add(token);\n    }\n\n'''
           text=text[:start]+replacement+text[end:]
-          # Remove obsolete reflection/index/button helper run, keeping findMarked and clean no longer needed.
-          old='''    private static Object field(Object o,String name)throws ReflectiveOperationException{Field f=o.getClass().getDeclaredField(name);f.setAccessible(true);return f.get(o);}\n    private static void invoke(Object o,String name){try{Method m=o.getClass().getDeclaredMethod(name);m.setAccessible(true);m.invoke(o);}catch(ReflectiveOperationException ignored){}}\n    private static int indexOf(Container p,Component target){Component[] a=p.getComponents();for(int i=0;i<a.length;i++)if(a[i]==target)return i;return a.length-1;}\n    private static JButton findButton(Container root,String name){for(Component c:root.getComponents()){if(c instanceof JButton b&&clean(b.getText()).equalsIgnoreCase(name))return b;if(c instanceof Container cc){JButton x=findButton(cc,name);if(x!=null)return x;}}return null;}\n    private static String clean(String s){return s==null?"":s.replaceAll("^[^A-Za-z0-9]+","").trim();}\n\n'''
-          if text.count(old)!=1: raise SystemExit('Music reflection helper anchor mismatch')
-          path.write_text(text.replace(old,'',1),encoding='utf-8')
+
+          start=text.find('    private static Object fieldValue(Object target, String name) {')
+          if start<0: raise SystemExit('Lifecycle fieldValue helper missing')
+          end=text.find('    private static String clean(String text)',start)
+          if end<0: raise SystemExit('Lifecycle clean helper anchor missing')
+          text=text[:start]+text[end:]
+          path.write_text(text,encoding='utf-8')
           PY
           git diff --check
-          javac --release 21 -encoding UTF-8 -d /tmp/northstar-extension-api $(find src -name '*.java')
-          ! grep -q 'java.lang.reflect' src/com/wtm/app/AiEnabledMain.java
-          ! grep -q 'getDeclaredField' src/com/wtm/app/AiEnabledMain.java
-          ! grep -q 'java.lang.reflect' src/com/wtm/modular/ui/MusicModuleGuard.java
-          ! grep -q 'getDeclaredField' src/com/wtm/modular/ui/MusicModuleGuard.java
-          grep -q 'registerWorkspaceExtensionRoute' src/com/wtm/ui/OperationsWorkspaceFrame.java
+          javac --release 21 -encoding UTF-8 -d /tmp/northstar-config-api $(find src -name '*.java')
+          ! grep -q 'java.lang.reflect' src/com/wtm/modular/ui/WorkspaceLifecycleV3.java
+          ! grep -q 'getDeclaredField' src/com/wtm/modular/ui/WorkspaceLifecycleV3.java
+          grep -q 'activeWorkspaceRouteName' src/com/wtm/modular/ui/WorkspaceLifecycleV3.java
+          grep -q 'workspaceConfigForExtensions' src/com/wtm/modular/ui/WorkspaceLifecycleV3.java
           git diff --stat
       - name: Commit source cleanup
         run: |
           set -euo pipefail
           git config user.name 'NorthStar Cleanup Bot'
           git config user.email 'actions@users.noreply.github.com'
-          git add src/com/wtm/ui/OperationsWorkspaceFrame.java src/com/wtm/app/AiEnabledMain.java src/com/wtm/modular/ui/MusicModuleGuard.java
-          git commit -m 'Expose source-backed workspace extension API'
+          git add src/com/wtm/ui/OperationsWorkspaceFrame.java src/com/wtm/ui/SettingsDialog.java src/com/wtm/modular/ui/WorkspaceLifecycleV3.java
+          git commit -m 'Remove workspace lifecycle configuration reflection'
           git push origin HEAD:master
