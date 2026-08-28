@@ -1,0 +1,53 @@
+name: Vendor FlatLaf dependencies
+on:
+  push:
+    branches: [master]
+    paths:
+      - .github/workflows/one-shot-vendor-flatlaf.yml
+permissions:
+  contents: write
+jobs:
+  vendor:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: master
+          fetch-depth: 0
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '21'
+      - name: Vendor FlatLaf 3.7.2 and update canonical build
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p lib
+          curl -fsSL -o lib/flatlaf-3.7.2.jar https://repo1.maven.org/maven2/com/formdev/flatlaf/3.7.2/flatlaf-3.7.2.jar
+          curl -fsSL -o lib/flatlaf-intellij-themes-3.7.2.jar https://repo1.maven.org/maven2/com/formdev/flatlaf-intellij-themes/3.7.2/flatlaf-intellij-themes-3.7.2.jar
+          test -s lib/flatlaf-3.7.2.jar
+          test -s lib/flatlaf-intellij-themes-3.7.2.jar
+          python3 - <<'PY'
+          from pathlib import Path
+          p=Path('build.sh')
+          s=p.read_text()
+          old="""rm -rf out\nmkdir -p out\njavac --release 21 -Xlint:unchecked -Werror -encoding UTF-8 -d out $(find src -name '*.java')\nif [ -d resources ]; then cp -R resources/. out/; fi\njar --create --file NorthStarOperations.jar --manifest MANIFEST.MF -C out .\n"""
+          new="""if [ ! -f lib/flatlaf-3.7.2.jar ] || [ ! -f lib/flatlaf-intellij-themes-3.7.2.jar ]; then\n  echo \"ERROR: required FlatLaf 3.7.2 runtime libraries are missing from lib/.\" >&2\n  exit 1\nfi\n\nrm -rf out\nmkdir -p out\njavac --release 21 -Xlint:unchecked -Werror -encoding UTF-8 -cp 'lib/*' -d out $(find src -name '*.java')\nfor dep in lib/flatlaf-3.7.2.jar lib/flatlaf-intellij-themes-3.7.2.jar; do\n  (cd out && jar --extract --file \"../$dep\")\ndone\nrm -f out/META-INF/MANIFEST.MF\nif [ -d resources ]; then cp -R resources/. out/; fi\njar --create --file NorthStarOperations.jar --manifest MANIFEST.MF -C out .\n"""
+          if s.count(old)!=1:
+              raise SystemExit('canonical compile/package anchor mismatch')
+          p.write_text(s.replace(old,new))
+          PY
+          cat > THIRD_PARTY_NOTICES.md <<'EOF'
+          # Third-Party Notices
+
+          North Star Operations Intelligence redistributes FlatLaf and the FlatLaf IntelliJ Themes Pack, version 3.7.2, from FormDev Software GmbH.
+
+          FlatLaf is licensed under the Apache License 2.0. Project: https://github.com/JFormDesigner/FlatLaf
+          EOF
+          git diff --check
+          bash build.sh
+          git config user.name 'NorthStar Cleanup Bot'
+          git config user.email 'actions@users.noreply.github.com'
+          git add lib/flatlaf-3.7.2.jar lib/flatlaf-intellij-themes-3.7.2.jar build.sh THIRD_PARTY_NOTICES.md
+          git commit -m 'Vendor real FlatLaf theme runtime'
+          git push origin master
