@@ -54,6 +54,42 @@ if grep -q 'MusicModuleGuard.*install' src/com/wtm/app/NorthStarMainStable.java;
   exit 1
 fi
 
+# Dynamic workspace integrations must use the canonical source-backed extension
+# API instead of reflecting into OperationsWorkspaceFrame private implementation
+# details. Keep these checks in build.sh so local release builds and CI enforce
+# the same architecture.
+for file in \
+  src/com/wtm/app/AiEnabledMain.java \
+  src/com/wtm/modular/ui/MusicModuleGuard.java \
+  src/com/wtm/modular/ui/WorkspaceLifecycleV3.java; do
+  if grep -qE 'java\.lang\.reflect|getDeclaredField|getDeclaredMethod|setAccessible\(' "$file"; then
+    echo "ERROR: private workspace reflection reintroduced in $file." >&2
+    exit 1
+  fi
+done
+
+for api in \
+  registerWorkspaceExtensionRoute \
+  showWorkspaceExtensionRoute \
+  mountDashboardExtension \
+  activeWorkspaceRouteName \
+  workspaceConfigForExtensions; do
+  if ! grep -q "$api" src/com/wtm/ui/OperationsWorkspaceFrame.java; then
+    echo "ERROR: canonical workspace extension API '$api' is missing." >&2
+    exit 1
+  fi
+done
+
+if ! grep -q 'workspaceConfigForExtensions' src/com/wtm/ui/SettingsDialog.java; then
+  echo "ERROR: SettingsDialog source-backed config accessor is missing." >&2
+  exit 1
+fi
+
+if grep -qE 'COMPONENT_ADDED|CONTAINER_EVENT_MASK|ContainerEvent' src/com/wtm/modular/ui/WorkspaceLifecycleV3.java; then
+  echo "ERROR: generic component-add lifecycle handling returned to WorkspaceLifecycleV3." >&2
+  exit 1
+fi
+
 rm -rf out
 mkdir -p out
 javac --release 21 -encoding UTF-8 -d out $(find src -name '*.java')
