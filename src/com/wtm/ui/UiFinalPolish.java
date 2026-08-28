@@ -1,45 +1,28 @@
 package com.wtm.ui;
 
 import javax.swing.*;
-import javax.swing.border.Border;
-import javax.swing.border.EmptyBorder;
 import java.awt.*;
 
 /**
  * Idempotent pre-paint normalization for dynamic/legacy NorthStar surfaces.
  *
  * This class is intentionally presentation-only. It may normalize component
- * layout and styling, but it must never reach into feature-private state or
- * change persisted/runtime feature configuration as part of a paint pass.
+ * styling, but it must never reach into feature-private state, mutate feature
+ * layout ownership, or change persisted/runtime configuration during paint.
  */
 public final class UiFinalPolish {
     private UiFinalPolish(){}
 
     static void prepareBeforePaint(Component component){
         if(component==null)return;
-        polishAppearanceScroll(component);
         polishUiFoundation(component);
     }
 
-    private static void polishAppearanceScroll(Component component){
-        if(component instanceof JScrollPane scroll){
-            Component view=scroll.getViewport()==null?null:scroll.getViewport().getView();
-            if(view instanceof JComponent jc&&(containsText(view,"Appearance")||containsText(view,"Startup Experience"))
-                    &&!Boolean.TRUE.equals(jc.getClientProperty("northstar.appearance.bottomSafe.v217"))){
-                jc.putClientProperty("northstar.appearance.bottomSafe.v217",Boolean.TRUE);
-                Dimension pref=jc.getPreferredSize();int w=pref==null?1:Math.max(1,pref.width),h=pref==null?1:Math.max(1,pref.height);
-                jc.setPreferredSize(new Dimension(w,h+1050));
-                Border existing=jc.getBorder();Border pad=new EmptyBorder(0,0,700,0);
-                jc.setBorder(existing==null?pad:BorderFactory.createCompoundBorder(existing,pad));
-                scroll.getVerticalScrollBar().setUnitIncrement(24);scroll.getVerticalScrollBar().setBlockIncrement(220);
-            }
-        }
-        if(component instanceof Container container)
-            for(Component child:container.getComponents())polishAppearanceScroll(child);
-    }
-
     private static void polishUiFoundation(Component component){
-        if(component instanceof Container container&&containsText(container,"NorthStar UI Foundation")){normalizeFoundationCombos(container);return;}
+        if(component instanceof Container container&&containsText(container,"NorthStar UI Foundation")){
+            normalizeFoundationCombos(container);
+            return;
+        }
         if(component instanceof Container container)
             for(Component child:container.getComponents())polishUiFoundation(child);
     }
@@ -48,8 +31,10 @@ public final class UiFinalPolish {
         if(component instanceof JComboBox<?> box){
             AppTheme theme=Theme.active();
             if(!(box.getUI() instanceof ThemedComboBoxUI))box.setUI(new ThemedComboBoxUI(theme));
-            box.setBackground(theme.panel2());box.setForeground(theme.text());
-            Dimension pref=box.getPreferredSize();int width=Math.max(160,pref==null?160:pref.width);
+            box.setBackground(theme.panel2());
+            box.setForeground(theme.text());
+            Dimension pref=box.getPreferredSize();
+            int width=Math.max(160,pref==null?160:pref.width);
             box.setPreferredSize(new Dimension(width,ThemedComboBoxUI.CONTROL_HEIGHT));
             box.setMinimumSize(new Dimension(120,ThemedComboBoxUI.CONTROL_HEIGHT));
             box.setMaximumSize(new Dimension(Integer.MAX_VALUE,ThemedComboBoxUI.CONTROL_HEIGHT));
@@ -65,5 +50,8 @@ public final class UiFinalPolish {
             for(Component child:container.getComponents())if(containsText(child,needle))return true;
         return false;
     }
-    private static String stripHtml(String text){return text.replaceAll("<[^>]+>"," ");}
+
+    private static String stripHtml(String text){
+        return text.replaceAll("<[^>]+>"," ");
+    }
 }
