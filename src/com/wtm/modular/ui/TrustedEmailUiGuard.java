@@ -2,8 +2,8 @@ package com.wtm.modular.ui;
 
 import com.wtm.ingest.GmailDataPathService;
 import com.wtm.ingest.TrustedSenderPolicy;
-import com.wtm.ui.NorthStarThemeCompliance;
 import com.wtm.ui.Theme;
+import com.wtm.ui.ThemeStyler;
 
 import javax.swing.*;
 import javax.swing.border.EmptyBorder;
@@ -69,7 +69,7 @@ public final class TrustedEmailUiGuard {
         jc.putClientProperty(INSTALLED, Boolean.TRUE);
         JComponent security = buildTrustedSenderPanel();
         card.add(security, BorderLayout.SOUTH);
-        NorthStarThemeCompliance.apply(security);
+        ThemeStyler.apply(security, Theme.active());
         card.revalidate();
         card.repaint();
     }
