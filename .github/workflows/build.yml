@@ -78,6 +78,9 @@ jobs:
           grep -q 'WorkspaceLifecycleV3.settingsReady(this)' src/com/wtm/ui/SettingsDialog.java
           grep -q 'WorkspaceLifecycleV3.persistSettings(this)' src/com/wtm/ui/SettingsDialog.java
           grep -q 'WorkspaceLifecycleV3.settingsApplied(this)' src/com/wtm/ui/SettingsDialog.java
+          grep -q 'registerWorkspaceModuleToggle' src/com/wtm/ui/SettingsDialog.java
+          grep -q 'workspaceModuleToggle' src/com/wtm/ui/SettingsDialog.java
+          ! grep -qE 'findCheckBox|findMarkedCheckBox|commonParent' src/com/wtm/modular/ui/WorkspaceLifecycleV3.java
           ! grep -q 'SwingUtilities.invokeLater(this::showDashboardRoute)' src/com/wtm/ui/OperationsWorkspaceFrame.java
           grep -q 'showDashboardRoute();' src/com/wtm/ui/OperationsWorkspaceFrame.java
           ! grep -q 'AWTEventListener' src/com/wtm/modular/ui/MusicModuleGuard.java
@@ -88,6 +91,11 @@ jobs:
           grep -q 'HORIZONTAL_SCROLLBAR_NEVER' src/com/wtm/modular/ui/MusicModuleGuard.java
           grep -q 'addComponentListener' src/com/wtm/modular/ui/MusicModuleGuard.java
           ! grep -q 'polishMusicTree' src/com/wtm/modular/ui/WorkspaceLifecycleV3.java
+          grep -q 'mountDashboardExtension(String id' src/com/wtm/ui/OperationsWorkspaceFrame.java
+          grep -q 'removeDashboardExtension(String id)' src/com/wtm/ui/OperationsWorkspaceFrame.java
+          ! grep -q 'findByName' src/com/wtm/app/AiEnabledMain.java
+          ! grep -q 'findMarked' src/com/wtm/modular/ui/MusicModuleGuard.java
+          ! grep -qE 'findMarked|removeMarked|removeNamed' src/com/wtm/modular/ui/WorkspaceLifecycleV3.java
           ! test -f src/com/wtm/ui/foundation/UiFoundationRuntime.java
           ! test -f src/com/wtm/ui/foundation/UiFoundation.java
           ! grep -q 'UiFoundationRuntime' src/com/wtm/app/NorthStarMainStable.java
@@ -150,7 +158,8 @@ jobs:
           grep -q 'AI_ASSISTANT' src/com/wtm/security/Permission.java
           grep -q 'AI_KNOWLEDGE_ADMIN' src/com/wtm/security/Permission.java
           grep -q 'AI_EMPLOYEE_METRICS' src/com/wtm/security/Permission.java
-          grep -q 'dashboardBody' src/com/wtm/app/AiEnabledMain.java
+          grep -q 'mountDashboardExtension' src/com/wtm/app/AiEnabledMain.java
+          ! grep -q 'dashboardBody' src/com/wtm/app/AiEnabledMain.java
           ! grep -q 'DashboardGridPanel' src/com/wtm/app/AiEnabledMain.java
           ! grep -q 'isShowing()' src/com/wtm/app/AiEnabledMain.java
           ! grep -q 'new Timer' src/com/wtm/ui/IntelligenceGlassSettings.java
