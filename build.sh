@@ -267,6 +267,12 @@ if grep -R -n --include='*.java' --exclude='ConfigService.java' -F '.northstar-o
   exit 1
 fi
 
+# Dead compatibility-only UI/sports shims must not return.
+if grep -R -n --include='*.java' -E 'slotWidthLegacy|Retained for source compatibility with older integrations' src; then
+  echo "ERROR: dead compatibility-only code returned." >&2
+  exit 1
+fi
+
 # Redundant workspace movement compatibility state and stale preview markers
 # must not return to canonical source.
 if grep -R -n --include='*.java' -E 'workspaceInfoAutoScroll|northStarPreviewV501' src; then

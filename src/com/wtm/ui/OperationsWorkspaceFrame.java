@@ -1839,13 +1839,6 @@ public final class OperationsWorkspaceFrame extends JFrame {
                 availableWidth/visibleSlots
         );
 
-        int slotWidthLegacy=Math.max(
-                165,
-                Math.max(1,card.getWidth())/workspaceMetricColumnCount()
-        );
-        // slotWidthLegacy is retained only for source compatibility/documentation.
-        // The unified visible-at-once setting above controls actual ticker slot width.
-
         informationTickerTrack=new JPanel();
         informationTickerTrack.setOpaque(false);
         informationTickerTrack.setLayout(

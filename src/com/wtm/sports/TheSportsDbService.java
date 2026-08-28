@@ -145,19 +145,6 @@ public final class TheSportsDbService {
         return events;
     }
 
-    /**
-     * Retained for source compatibility with older integrations. The first
-     * upcoming event is returned; live/recent results are no longer preferred.
-     */
-    public SportsGame fetch(
-            SportsConfig cfg,
-            String configuredKey,
-            boolean premium
-    ) throws Exception {
-        List<SportsGame> upcoming=fetchUpcoming(cfg,configuredKey,1);
-        return upcoming.isEmpty()?unavailable(cfg,false):upcoming.get(0);
-    }
-
     private String v1(String key,String endpoint) throws Exception {
         return http.getText("https://www.thesportsdb.com/api/v1/json/"+enc(key)+"/"+endpoint);
     }
