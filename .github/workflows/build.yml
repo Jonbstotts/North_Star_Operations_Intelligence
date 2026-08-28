@@ -44,7 +44,7 @@ jobs:
           ! grep -q 'WorkspaceUiRecoveryGuard.*install' src/com/wtm/app/NorthStarMainStable.java
           ! grep -q 'MusicWorkspacePolishGuard.*install' src/com/wtm/app/NorthStarMainStable.java
           ! grep -q 'StartupDashboardReadyGuard.*install' src/com/wtm/app/NorthStarMainStable.java
-          ! grep -q 'MusicModuleGuard.*install' src/com/wtm/app/NorthStarMainStable.java
+          ! grep -q 'MusicWorkspaceModule.*install' src/com/wtm/app/NorthStarMainStable.java
           ! grep -q 'DashboardGlyphArtGuard' src/com/wtm/app/NorthStarMainStable.java
           ! test -f src/com/wtm/modular/ui/DashboardGlyphArtGuard.java
           ! test -f src/com/wtm/modular/ui/TrustedEmailUiGuard.java
@@ -70,7 +70,7 @@ jobs:
           ! grep -q 'invokeStaticFrame' src/com/wtm/modular/ui/WorkspaceLifecycleV3.java
           ! grep -q 'DashboardGlyphArtGuard' src/com/wtm/modular/ui/WorkspaceLifecycleV3.java
           grep -q 'AiEnabledMain.injectDashboard' src/com/wtm/modular/ui/WorkspaceLifecycleV3.java
-          grep -q 'MusicModuleGuard.installWorkspace' src/com/wtm/modular/ui/WorkspaceLifecycleV3.java
+          grep -q 'MusicWorkspaceModule.installWorkspace' src/com/wtm/modular/ui/WorkspaceLifecycleV3.java
           grep -q 'WorkspaceLifecycleV3.initializeWorkspace(this)' src/com/wtm/ui/OperationsWorkspaceFrame.java
           grep -q 'WorkspaceLifecycleV3.dashboardMounted(this)' src/com/wtm/ui/OperationsWorkspaceFrame.java
           ! grep -q 'WorkspaceLifecycleV3.routeMounted' src/com/wtm/ui/OperationsWorkspaceFrame.java
@@ -83,18 +83,18 @@ jobs:
           ! grep -qE 'findCheckBox|findMarkedCheckBox|commonParent' src/com/wtm/modular/ui/WorkspaceLifecycleV3.java
           ! grep -q 'SwingUtilities.invokeLater(this::showDashboardRoute)' src/com/wtm/ui/OperationsWorkspaceFrame.java
           grep -q 'showDashboardRoute();' src/com/wtm/ui/OperationsWorkspaceFrame.java
-          ! grep -q 'AWTEventListener' src/com/wtm/modular/ui/MusicModuleGuard.java
-          ! grep -q 'COMPONENT_ADDED' src/com/wtm/modular/ui/MusicModuleGuard.java
-          ! grep -q 'new Timer' src/com/wtm/modular/ui/MusicModuleGuard.java
-          ! grep -q 'w.isDisplayable' src/com/wtm/modular/ui/MusicModuleGuard.java
-          grep -q 'styleCombo(playlists)' src/com/wtm/modular/ui/MusicModuleGuard.java
-          grep -q 'HORIZONTAL_SCROLLBAR_NEVER' src/com/wtm/modular/ui/MusicModuleGuard.java
-          grep -q 'addComponentListener' src/com/wtm/modular/ui/MusicModuleGuard.java
+          ! grep -q 'AWTEventListener' src/com/wtm/modular/ui/MusicWorkspaceModule.java
+          ! grep -q 'COMPONENT_ADDED' src/com/wtm/modular/ui/MusicWorkspaceModule.java
+          ! grep -q 'new Timer' src/com/wtm/modular/ui/MusicWorkspaceModule.java
+          ! grep -q 'w.isDisplayable' src/com/wtm/modular/ui/MusicWorkspaceModule.java
+          grep -q 'styleCombo(playlists)' src/com/wtm/modular/ui/MusicWorkspaceModule.java
+          grep -q 'HORIZONTAL_SCROLLBAR_NEVER' src/com/wtm/modular/ui/MusicWorkspaceModule.java
+          grep -q 'addComponentListener' src/com/wtm/modular/ui/MusicWorkspaceModule.java
           ! grep -q 'polishMusicTree' src/com/wtm/modular/ui/WorkspaceLifecycleV3.java
           grep -q 'mountDashboardExtension(String id' src/com/wtm/ui/OperationsWorkspaceFrame.java
           grep -q 'removeDashboardExtension(String id)' src/com/wtm/ui/OperationsWorkspaceFrame.java
           ! grep -q 'findByName' src/com/wtm/app/AiEnabledMain.java
-          ! grep -q 'findMarked' src/com/wtm/modular/ui/MusicModuleGuard.java
+          ! grep -q 'findMarked' src/com/wtm/modular/ui/MusicWorkspaceModule.java
           ! grep -qE 'findMarked|removeMarked|removeNamed' src/com/wtm/modular/ui/WorkspaceLifecycleV3.java
           ! test -f src/com/wtm/ui/foundation/UiFoundationRuntime.java
           ! test -f src/com/wtm/ui/foundation/UiFoundation.java
@@ -176,7 +176,7 @@ jobs:
           grep -q 'SecureFiles.storePropertiesAtomic' src/com/wtm/config/ApiCredentialService.java
           grep -q 'Fail closed' src/com/wtm/ingest/TrustedSenderPolicy.java
           grep -q 'trusted sender' src/com/wtm/ingest/GmailDataPathService.java
-          grep -q '127.0.0.1' src/com/wtm/modular/ui/MusicModuleGuard.java
+          grep -q '127.0.0.1' src/com/wtm/modular/ui/MusicWorkspaceModule.java
           grep -q '127.0.0.1' src/com/wtm/ai/NorthStarIntelligenceService.java
           if grep -R --line-number -E 'Runtime\.getRuntime\(\)\.exec|ObjectInputStream|BEGIN (RSA |EC |OPENSSH )?PRIVATE KEY' src; then
             echo 'Unsafe execution/deserialization/private-key material found in canonical source.' >&2
@@ -193,7 +193,7 @@ jobs:
           rm -rf out
           mkdir -p out
           javac --release 21 -encoding UTF-8 -d out $(find src -name '*.java')
-          test -f out/com/wtm/modular/ui/MusicModuleGuard.class
+          test -f out/com/wtm/modular/ui/MusicWorkspaceModule.class
           test -f out/com/wtm/modular/ui/WorkspaceLifecycleV3.class
           test -f out/com/wtm/ui/DataCollectionPanel.class
           test -f out/com/wtm/security/LocalSecurityHardening.class
@@ -220,7 +220,7 @@ jobs:
           unzip -tq NorthStar-source-validation.jar >/dev/null
           unzip -p NorthStar-source-validation.jar META-INF/MANIFEST.MF | grep -q '^Implementation-Version: 2.1.34-clean-sweep'
           for entry in \
-            com/wtm/modular/ui/MusicModuleGuard.class \
+            com/wtm/modular/ui/MusicWorkspaceModule.class \
             com/wtm/modular/ui/WorkspaceLifecycleV3.class \
             com/wtm/ui/DataCollectionPanel.class \
             com/wtm/security/LocalSecurityHardening.class \
