@@ -1,0 +1,63 @@
+name: One-shot extension residue cleanup
+
+on:
+  push:
+    branches: [ master ]
+    paths:
+      - '.github/workflows/one-shot-extension-residue-cleanup.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: master
+          fetch-depth: 0
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '21'
+      - name: Remove dead extension compatibility residue
+        run: |
+          set -euo pipefail
+          test "$(grep -R --include='*.java' -F 'injectWorkspace(' src | wc -l | tr -d ' ')" = "1"
+          grep -Fq 'public static void injectWorkspace(JFrame frame)' src/com/wtm/app/AiEnabledMain.java
+          test "$(grep -R --include='*.java' -F 'northstar.ui.skip' src | wc -l | tr -d ' ')" = "1"
+          grep -Fq 'button.putClientProperty("northstar.ui.skip",Boolean.TRUE);' src/com/wtm/ui/OperationsWorkspaceFrame.java
+          python3 - <<'PY'
+          from pathlib import Path
+
+          ai=Path('src/com/wtm/app/AiEnabledMain.java')
+          s=ai.read_text()
+          s=s.replace(''' * <p>The compact dashboard surface is mounted directly into the source-backed\n * OperationsWorkspaceFrame dashboard body. The former DashboardGridPanel\n * reflection path depended on a runtime-only class that does not exist in the\n * canonical source tree and therefore could never be a reliable first-paint\n * integration point.</p>\n''',''' * <p>The compact dashboard surface and full workspace route are mounted through\n * the explicit OperationsWorkspaceFrame extension API. No private-field\n * reflection, component discovery, or first-paint recovery path is required.</p>\n''')
+          old='''    public static void injectWorkspace(JFrame frame){\n        if(frame==null||!frame.isDisplayable()||!AuthorizationService.allowed(Permission.AI_ASSISTANT))return;\n        injectSidebar(frame);\n        injectDashboard(frame);\n    }\n\n'''
+          if s.count(old)!=1: raise SystemExit('Ai injectWorkspace wrapper anchor mismatch')
+          s=s.replace(old,'')
+          s=s.replace('''     * Mounts the compact assistant before the dashboard's trailing vertical\n     * glue. This works before first paint as soon as dashboardBody exists; it\n     * deliberately does not require Component.isShowing().\n''','''     * Mounts the compact assistant before the dashboard's trailing vertical\n     * glue through the bounded workspace extension API. This works before first\n     * paint and deliberately does not require Component.isShowing().\n''')
+          ai.write_text(s)
+
+          workspace=Path('src/com/wtm/ui/OperationsWorkspaceFrame.java')
+          s=workspace.read_text()
+          old='        button.putClientProperty("northstar.ui.skip",Boolean.TRUE);\n'
+          if s.count(old)!=1: raise SystemExit('northstar.ui.skip anchor mismatch')
+          workspace.write_text(s.replace(old,''))
+          PY
+          ! grep -R -q --include='*.java' -F 'northstar.ui.skip' src
+          ! grep -Fq 'injectWorkspace(' src/com/wtm/app/AiEnabledMain.java
+          grep -Fq 'mountDashboardExtension' src/com/wtm/app/AiEnabledMain.java
+          grep -Fq 'registerWorkspaceExtensionRoute' src/com/wtm/app/AiEnabledMain.java
+          git diff --check
+          rm -rf /tmp/ns-out && mkdir -p /tmp/ns-out
+          javac --release 21 -encoding UTF-8 -d /tmp/ns-out $(find src -name '*.java')
+      - name: Commit extension cleanup
+        run: |
+          set -euo pipefail
+          git config user.name 'NorthStar Cleanup Bot'
+          git config user.email 'actions@users.noreply.github.com'
+          git add src/com/wtm/app/AiEnabledMain.java src/com/wtm/ui/OperationsWorkspaceFrame.java
+          git commit -m 'Remove dead workspace extension compatibility residue'
+          git push origin master
