@@ -1,0 +1,67 @@
+name: FlatLaf visual integration cleanup
+on:
+  push:
+    branches:
+      - master
+    paths:
+      - '.github/workflows/one-shot-flatlaf-visual-cleanup.yml'
+permissions:
+  contents: write
+jobs:
+  cleanup:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: master
+          fetch-depth: 0
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '21'
+      - name: Remove residual platform/custom LAF ownership
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+
+          p=Path('src/com/wtm/app/Main.java')
+          s=p.read_text()
+          s=s.replace('            configureDesktopLookAndFeel();\n\n','')
+          start='    private static void configureDesktopLookAndFeel(){\n'
+          if start in s:
+              i=s.index(start)
+              # method is final member before class close
+              s=s[:i]+'}\n'
+          p.write_text(s)
+
+          p=Path('src/com/wtm/ui/NorthStarLoginField.java')
+          s=p.read_text()
+          start=s.find('        /*\n         * IMPORTANT: a JPasswordField must retain a PasswordFieldUI delegate.')
+          end=s.find('    private static void paintFieldPlaceholder', start)
+          if start < 0 or end < 0:
+              raise SystemExit('NorthStarLoginField custom UI block not found')
+          replacement='''        // FlatLaf owns the text/password field delegates. Preserve the explicit\n        // password echo character without replacing the installed Look & Feel UI.\n        if(kind==Kind.PASSWORD)\n            ((JPasswordField)field).setEchoChar(passwordEcho);\n    }\n\n'''
+          s=s[:start]+replacement+s[end:]
+          helper_start=s.find('    private static void paintFieldPlaceholder')
+          helper_end=s.find('    public JTextField textField()', helper_start)
+          if helper_start >= 0 and helper_end >= 0:
+              s=s[:helper_start]+s[helper_end:]
+          p.write_text(s)
+          PY
+
+          ! grep -R -n --include='*.java' 'setUI(' src
+          ! grep -R -n --include='*.java' -E 'BasicPasswordFieldUI|BasicTextFieldUI' src
+          ! grep -q 'configureDesktopLookAndFeel' src/com/wtm/app/Main.java
+          ! grep -q 'UIManager.setLookAndFeel' src/com/wtm/app/Main.java
+          ! grep -q 'UIManager.put' src/com/wtm/app/Main.java
+          git diff --check
+          rm -rf /tmp/ns-out && mkdir -p /tmp/ns-out
+          javac --release 21 -Xlint:unchecked -Werror -encoding UTF-8 -cp 'lib/*' -d /tmp/ns-out $(find src -name '*.java')
+          bash build.sh
+          git config user.name 'NorthStar Cleanup Bot'
+          git config user.email 'actions@users.noreply.github.com'
+          git add -A src
+          git commit -m 'Finish FlatLaf visual ownership cleanup'
+          git push origin master
