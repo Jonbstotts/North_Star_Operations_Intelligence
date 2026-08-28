@@ -89,6 +89,19 @@ if ! grep -q 'scrollableSettingsPage' src/com/wtm/ui/SettingsDialog.java || \
   exit 1
 fi
 
+# Employee layout and compact directory presentation belong to the canonical
+# EmployeeOperationsPanel. ThemeCore must remain a passive cross-cutting styler
+# and must never rediscover Employee internals by class name.
+if grep -qE 'EMPLOYEE_PANEL_CLASS|normalizeEmployeeOperations|northstar\.employee\.compactDirectory|findEmployeeDirectoryTable' src/com/wtm/ui/ThemeCoreV216.java; then
+  echo "ERROR: Employee-specific presentation mutation returned to ThemeCoreV216." >&2
+  exit 1
+fi
+if ! grep -q 'hideDirectoryColumn("Employee #")' src/com/wtm/ui/EmployeeOperationsPanel.java || \
+   ! grep -q 'split.setDividerSize(0)' src/com/wtm/ui/EmployeeOperationsPanel.java; then
+  echo "ERROR: canonical Employee presentation ownership is missing from EmployeeOperationsPanel." >&2
+  exit 1
+fi
+
 # Dynamic workspace integrations must use the canonical source-backed extension
 # API instead of reflecting into OperationsWorkspaceFrame private implementation
 # details. Keep these checks in build.sh so local release builds and CI enforce
