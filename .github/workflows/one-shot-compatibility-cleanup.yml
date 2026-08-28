@@ -1,0 +1,117 @@
+name: One-shot compatibility residue cleanup
+
+on:
+  push:
+    branches: [ master ]
+    paths:
+      - '.github/workflows/one-shot-compatibility-cleanup.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: master
+          fetch-depth: 0
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '21'
+      - name: Retire redundant config and stale product identity residue
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+
+          app=Path('src/com/wtm/config/AppConfig.java')
+          s=app.read_text()
+          old='''    /**\n     * Legacy compatibility flag. It is synchronized from movement mode so\n     * older configuration files can migrate without losing their behavior.\n     */\n    public boolean workspaceInfoAutoScroll = false;\n\n'''
+          if s.count(old)!=1: raise SystemExit('workspaceInfoAutoScroll field anchor mismatch')
+          s=s.replace(old,'')
+          s=s.replace('/** Modular cards shown on the v4 Operations Workspace home dashboard. */',
+                      '/** Modular cards shown on the Operations Workspace home dashboard. */')
+          s=s.replace('public String nwsUserAgent = "WeatherTrafficMonitor/1.6 (workplace-display; contact=local-admin)";',
+                      'public String nwsUserAgent = "NorthStarOperationsIntelligence/2.1.34 (workplace-display; contact=local-admin)";')
+          app.write_text(s)
+
+          cfg=Path('src/com/wtm/config/ConfigService.java')
+          s=cfg.read_text()
+          old='''            /*\n             * v5.0.3 retires implicit page cycling. Existing installs move to\n             * STATIC unless they have explicitly saved one of the new movement\n             * modes. Continuous ticker is available as the recommended overflow\n             * behavior from Workspace Setup.\n             */\n'''
+          new='''            /*\n             * Implicit page cycling is retired. Existing installs use STATIC\n             * unless they explicitly saved one of the supported movement modes.\n             */\n'''
+          if s.count(old)!=1: raise SystemExit('movement migration comment anchor mismatch')
+          s=s.replace(old,new)
+          old='''            cfg.workspaceInfoAutoScroll=\n                    "PAGED".equals(cfg.workspaceInfoMovementMode);\n\n'''
+          if s.count(old)!=1: raise SystemExit('workspaceInfoAutoScroll load assignment mismatch')
+          s=s.replace(old,'')
+          old='''            cfg.nwsUserAgent = p.getProperty("nwsUserAgent", cfg.nwsUserAgent).trim();\n'''
+          new='''            cfg.nwsUserAgent = p.getProperty("nwsUserAgent", cfg.nwsUserAgent).trim();\n            if(cfg.nwsUserAgent.startsWith("WeatherTrafficMonitor/"))\n                cfg.nwsUserAgent="NorthStarOperationsIntelligence/2.1.34 (workplace-display; contact=local-admin)";\n'''
+          if s.count(old)!=1: raise SystemExit('NWS user-agent load anchor mismatch')
+          s=s.replace(old,new)
+          marker='''            p.setProperty("northStarPreviewV501","true");\n'''
+          if s.count(marker)!=1: raise SystemExit('northStarPreview marker mismatch')
+          s=s.replace(marker,'')
+          cfg.write_text(s)
+
+          settings=Path('src/com/wtm/ui/SettingsDialog.java')
+          s=settings.read_text()
+          old='''            cfg.workspaceInfoAutoScroll=\n                    "PAGED".equals(cfg.workspaceInfoMovementMode);\n\n'''
+          if s.count(old)!=1: raise SystemExit('Settings workspaceInfoAutoScroll assignment mismatch')
+          s=s.replace(old,'')
+          s=s.replace('"<html>The v4 workspace is modular. Disable any module that should not "',
+                      '"<html>The Operations Workspace is modular. Disable any module that should not "')
+          s=s.replace('cfg.nwsUserAgent="WeatherTrafficMonitor/1.6 (workplace-display; contact=local-admin)";',
+                      'cfg.nwsUserAgent="NorthStarOperationsIntelligence/2.1.34 (workplace-display; contact=local-admin)";')
+          s=s.replace('Detaches one authorized Settings page so the v4 Operations Workspace can',
+                      'Detaches one authorized Settings page so the Operations Workspace can')
+          s=s.replace('/** Saves an embedded v4 settings page through the same validation path as Classic. */',
+                      '/** Saves an embedded workspace settings page through the same validation path. */')
+          settings.write_text(s)
+
+          frame=Path('src/com/wtm/ui/OperationsWorkspaceFrame.java')
+          s=frame.read_text().replace('v4 settings are first-class workspace routes.',
+                                      'Settings pages are first-class workspace routes.')
+          frame.write_text(s)
+
+          kpi=Path('src/com/wtm/model/OperationsKpiConfig.java')
+          s=kpi.read_text().replace('v4 starts with locally-configurable values so the visual workspace can be',
+                                    'NorthStar starts with locally-configurable values so the visual workspace can be')
+          kpi.write_text(s)
+
+          http=Path('src/com/wtm/net/HttpService.java')
+          s=http.read_text().replace('"WeatherTrafficMonitor/2.9 (workplace-display; contact=local-admin)"',
+                                     '"NorthStarOperationsIntelligence/2.1.34 (workplace-display; contact=local-admin)"')
+          http.write_text(s)
+
+          build=Path('build.sh')
+          s=build.read_text()
+          anchor='''# Intelligence enablement is canonical application configuration. The old\n# java.util.prefs value is read only by ConfigService as a compatibility fallback;\n# WorkspaceLifecycleV3 must not maintain a second source of truth.\n'''
+          gate='''# Redundant workspace movement compatibility state and stale preview/product\n# identity markers must not return to canonical source.\nif grep -R -n --include='*.java' -E 'workspaceInfoAutoScroll|northStarPreviewV501|WeatherTrafficMonitor/' src; then\n  echo "ERROR: retired compatibility or product-identity residue returned." >&2\n  exit 1\nfi\n\n'''+anchor
+          if s.count(anchor)!=1: raise SystemExit('build.sh Intelligence gate anchor mismatch')
+          build.write_text(s.replace(anchor,gate))
+          PY
+          if grep -R -n --include='*.java' -E 'workspaceInfoAutoScroll|northStarPreviewV501|WeatherTrafficMonitor/' src; then
+            echo 'Retired compatibility/product identity residue remains.' >&2
+            exit 1
+          fi
+          git diff --check
+          rm -rf /tmp/ns-out && mkdir -p /tmp/ns-out
+          javac --release 21 -encoding UTF-8 -d /tmp/ns-out $(find src -name '*.java')
+          bash build.sh
+      - name: Commit compatibility cleanup
+        run: |
+          set -euo pipefail
+          git config user.name 'NorthStar Cleanup Bot'
+          git config user.email 'actions@users.noreply.github.com'
+          git add src/com/wtm/config/AppConfig.java \
+                  src/com/wtm/config/ConfigService.java \
+                  src/com/wtm/ui/SettingsDialog.java \
+                  src/com/wtm/ui/OperationsWorkspaceFrame.java \
+                  src/com/wtm/model/OperationsKpiConfig.java \
+                  src/com/wtm/net/HttpService.java \
+                  build.sh
+          git commit -m 'Retire redundant compatibility config residue'
+          git push origin master
