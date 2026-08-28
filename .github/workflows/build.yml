@@ -78,6 +78,12 @@ jobs:
           ! grep -q 'COMPONENT_ADDED' src/com/wtm/ui/foundation/UiFoundationRuntime.java
           ! grep -q 'CONTAINER_EVENT_MASK' src/com/wtm/ui/foundation/UiFoundationRuntime.java
           ! grep -q 'ContainerEvent' src/com/wtm/ui/foundation/UiFoundationRuntime.java
+          ! grep -q 'addAWTEventListener' src/com/wtm/ui/ThemeCoreV216.java
+          ! grep -q 'WindowEvent' src/com/wtm/ui/ThemeCoreV216.java
+          ! grep -q 'ModuleManagerPanel' src/com/wtm/ui/ThemeCoreV216.java
+          ! grep -q 'UiFinalPolish.start' src/com/wtm/ui/ThemeStyler.java
+          ! grep -q 'ThemeCoreV216.start' src/com/wtm/ui/ThemeStyler.java
+          ! grep -q 'AtomicBoolean' src/com/wtm/ui/UiFinalPolish.java
 
       - name: Presentation polish regression
         run: |
