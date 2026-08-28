@@ -955,7 +955,16 @@ public final class SettingsDialog extends JDialog {
         controls.add(addFromPin);
         controls.add(remove);
         outer.add(controls,BorderLayout.SOUTH);
-        return outer;
+
+        // Traffic & Routes owns both commute routing and the reusable first-party
+        // Logistics Network. This replaces the retired runtime route injector
+        // with an explicit source-owned workspace surface.
+        JTabbedPane routePages=new JTabbedPane();
+        routePages.addTab("Commute Routes",outer);
+        routePages.addTab("Logistics Network",new LogisticsNetworkPanel());
+        JPanel page=new JPanel(new BorderLayout());
+        page.add(routePages,BorderLayout.CENTER);
+        return page;
     }
 
     private JPanel sports(){

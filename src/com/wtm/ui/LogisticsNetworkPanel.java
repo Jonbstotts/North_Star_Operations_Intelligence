@@ -153,7 +153,13 @@ public final class LogisticsNetworkPanel extends JPanel {
     private void removeSelected(){
         NetworkLocation n=selected();
         if(n==null)return;
-        if(!ThemedDialogs.confirm(this,"Remove “"+n.name()+"” from the Logistics Network?","Remove Location"))return;
+        if(!ThemedDialogs.confirm(
+                this,
+                "Remove “"+n.name()+"” from the Logistics Network?",
+                "Remove Location",
+                "Remove",
+                ThemedDialogs.Kind.WARNING
+        ))return;
         store.delete(n.id());reload();
     }
 
