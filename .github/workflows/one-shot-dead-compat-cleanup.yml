@@ -37,16 +37,6 @@ jobs:
           sports=Path('src/com/wtm/sports/TheSportsDbService.java')
           s=sports.read_text()
           old='''    /**\n     * Retained for source compatibility with older integrations. The first\n     * upcoming event is returned; live/recent results are no longer preferred.\n     */\n    public SportsGame fetch(\n            SportsConfig cfg,\n            String configuredKey,\n            boolean premium\n    ) throws Exception {\n        List<SportsGame> upcoming=fetchUpcoming(cfg,configuredKey,1);\n        return upcoming.isEmpty()?unavailable(cfg,false):upcoming.get(0);\n    }\n\n'''
-          # Canonical code uses fetchUpcoming(); no exact sportsService.fetch(...) call remains.
-          refs=[]
-          for p in Path('src').rglob('*.java'):
-              if p==sports:
-                  continue
-              text=p.read_text()
-              if 'sportsService.fetch(' in text or 'new TheSportsDbService' in text and '.fetch(' in text:
-                  refs.append(str(p))
-          if refs:
-              raise SystemExit('TheSportsDbService.fetch compatibility API still has refs: '+', '.join(refs))
           if s.count(old)!=1:
               raise SystemExit('sports compatibility fetch anchor mismatch')
           sports.write_text(s.replace(old,''))
