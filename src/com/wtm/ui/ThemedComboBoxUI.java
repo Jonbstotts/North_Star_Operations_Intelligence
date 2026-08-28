@@ -42,29 +42,7 @@ public final class ThemedComboBoxUI extends BasicComboBoxUI {
             combo.setMaximumSize(new Dimension(Integer.MAX_VALUE,CONTROL_HEIGHT));
             combo.setBorder(BorderFactory.createLineBorder(theme.border(),1,true));
 
-            @SuppressWarnings({"rawtypes","unchecked"})
-            JComboBox raw=combo;
-            raw.setRenderer(new DefaultListCellRenderer(){
-                @Override
-                public Component getListCellRendererComponent(
-                        JList<?> list,
-                        Object value,
-                        int index,
-                        boolean selected,
-                        boolean focus
-                ){
-                    JLabel label=(JLabel)super.getListCellRendererComponent(
-                            list,value,index,selected,focus);
-                    label.setOpaque(true);
-                    label.setBorder(new EmptyBorder(8,12,8,12));
-                    label.setFont(new Font(Font.SANS_SERIF,Font.PLAIN,14));
-                    label.setBackground(selected?theme.accent():theme.panel2());
-                    label.setForeground(selected
-                            ?readableText(theme.accent())
-                            :theme.text());
-                    return label;
-                }
-            });
+            installRenderer(combo);
 
             if(combo.isEditable() && combo.getEditor()!=null
                     &&combo.getEditor().getEditorComponent() instanceof JComponent editor){
@@ -73,6 +51,30 @@ public final class ThemedComboBoxUI extends BasicComboBoxUI {
                 editor.setForeground(theme.text());
             }
         }
+    }
+
+    private <T> void installRenderer(JComboBox<T> combo){
+        combo.setRenderer(new DefaultListCellRenderer(){
+            @Override
+            public Component getListCellRendererComponent(
+                    JList<?> list,
+                    Object value,
+                    int index,
+                    boolean selected,
+                    boolean focus
+            ){
+                JLabel label=(JLabel)super.getListCellRendererComponent(
+                        list,value,index,selected,focus);
+                label.setOpaque(true);
+                label.setBorder(new EmptyBorder(8,12,8,12));
+                label.setFont(new Font(Font.SANS_SERIF,Font.PLAIN,14));
+                label.setBackground(selected?theme.accent():theme.panel2());
+                label.setForeground(selected
+                        ?readableText(theme.accent())
+                        :theme.text());
+                return label;
+            }
+        });
     }
 
     @Override
