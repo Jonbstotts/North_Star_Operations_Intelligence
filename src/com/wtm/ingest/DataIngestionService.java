@@ -1,12 +1,13 @@
 package com.wtm.ingest;
 
+import com.wtm.config.ConfigService;
 import com.wtm.firstparty.NetworkLocationStore;import com.wtm.firstparty.TrackerTelemetryStore;
 import java.io.*;import java.nio.charset.StandardCharsets;import java.nio.file.*;import java.security.MessageDigest;import java.time.LocalDateTime;import java.util.*;import java.util.prefs.Preferences;
 
 public final class DataIngestionService {
  public enum Type { DEALER_NETWORK,TRACKER_TELEMETRY,DAILY_PRODUCTIVITY,HOURLY_PICKS,HOURLY_BINNED,FLOOR_DENIALS,TASK_DELETIONS,TICKET_UNDOS,AUDIT_ITEM,AUDIT_LOCATION,AUDIT_TASK,EQUIPMENT_USAGE,RF_TERMINAL,UNKNOWN }
  private static final DataIngestionService INSTANCE=new DataIngestionService();
- private final Path app=Path.of(System.getProperty("user.home"),".northstar-operations-intelligence"),root=app.resolve("ingestion"),incoming=root.resolve("incoming"),archive=root.resolve("archive"),quarantine=root.resolve("quarantine"),history=root.resolve("import-history.csv"),operational=app.resolve("operational-data");
+ private final Path app=ConfigService.appDataDir(),root=app.resolve("ingestion"),incoming=root.resolve("incoming"),archive=root.resolve("archive"),quarantine=root.resolve("quarantine"),history=root.resolve("import-history.csv"),operational=app.resolve("operational-data");
  private final Preferences prefs=Preferences.userRoot().node("com/wtm/northstar/ingestion");
  private DataIngestionService(){try{Files.createDirectories(incoming);Files.createDirectories(archive);Files.createDirectories(quarantine);Files.createDirectories(operational);}catch(IOException ignored){}}
  public static DataIngestionService get(){return INSTANCE;} public Path incoming(){return incoming;} public Path operationalRoot(){return operational;}

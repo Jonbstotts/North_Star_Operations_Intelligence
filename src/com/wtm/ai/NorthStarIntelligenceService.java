@@ -1,5 +1,6 @@
 package com.wtm.ai;
 
+import com.wtm.config.ConfigService;
 import com.wtm.ingest.OperationalAnalytics;
 import com.wtm.security.AuthorizationService;
 import com.wtm.security.Permission;
@@ -55,7 +56,7 @@ public final class NorthStarIntelligenceService {
             "our", "we", "i", "me", "my", "it", "do", "does", "did", "can", "could", "would"
     );
 
-    private final Path appRoot = Path.of(System.getProperty("user.home"), ".northstar-operations-intelligence");
+    private final Path appRoot = ConfigService.appDataDir();
     private final Path aiRoot = appRoot.resolve("ai");
     private final Path knowledgeRoot = aiRoot.resolve("knowledge");
     private final Path settingsFile = aiRoot.resolve("ai.properties");

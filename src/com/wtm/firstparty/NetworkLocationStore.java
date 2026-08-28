@@ -1,7 +1,8 @@
 package com.wtm.firstparty;
+import com.wtm.config.ConfigService;
 import java.nio.file.*;import java.nio.charset.StandardCharsets;import java.io.*;import java.util.*;
 public final class NetworkLocationStore{
- private static final NetworkLocationStore I=new NetworkLocationStore();private final Path file=Path.of(System.getProperty("user.home"),".northstar-operations-intelligence","tracking","logistics-network.csv");private final List<NetworkLocation> rows=new ArrayList<>();private boolean loaded;
+ private static final NetworkLocationStore I=new NetworkLocationStore();private final Path file=ConfigService.appDataDir().resolve("tracking").resolve("logistics-network.csv");private final List<NetworkLocation> rows=new ArrayList<>();private boolean loaded;
  public static NetworkLocationStore get(){return I;}public synchronized List<NetworkLocation> all(){load();return new ArrayList<>(rows);}public synchronized NetworkLocation find(String id){load();return rows.stream().filter(x->Objects.equals(x.id(),id)).findFirst().orElse(null);}
  public synchronized void upsert(NetworkLocation n){load();int ix=index(n.id());if(ix>=0)rows.set(ix,n);else rows.add(n);save();}public synchronized void delete(String id){load();rows.removeIf(x->x.id().equals(id));save();}
  public synchronized int importCsv(Path p)throws IOException{load();List<String>ls=Files.readAllLines(p,StandardCharsets.UTF_8);if(ls.isEmpty())return 0;List<String>h=CsvUtil.parse(ls.get(0));Map<String,Integer>m=header(h);if(isDview(m))return importDview(ls,m);return importGeneric(ls,m);}

@@ -259,6 +259,14 @@ if grep -Fq 'Paths.get(System.getProperty("user.home"), ".northstar")' src/com/w
   exit 1
 fi
 
+# ConfigService is the sole owner of the canonical application-data root.
+# Features derive their storage paths from appDataDir() rather than rebuilding
+# the product directory literal independently.
+if grep -R -n --include='*.java' --exclude='ConfigService.java' -F '.northstar-operations-intelligence' src; then
+  echo "ERROR: canonical app-data directory literal escaped ConfigService ownership." >&2
+  exit 1
+fi
+
 rm -rf out
 mkdir -p out
 javac --release 21 -encoding UTF-8 -d out $(find src -name '*.java')

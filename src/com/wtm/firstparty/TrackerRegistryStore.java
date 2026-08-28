@@ -1,7 +1,8 @@
 package com.wtm.firstparty;
+import com.wtm.config.ConfigService;
 import java.nio.file.*;import java.nio.charset.StandardCharsets;import java.util.*;
 public final class TrackerRegistryStore {
- private static final TrackerRegistryStore I=new TrackerRegistryStore(); private final Path file=Path.of(System.getProperty("user.home"),".northstar-operations-intelligence","tracking","tracker-devices.csv");private final List<TrackerDevice> rows=new ArrayList<>();private boolean loaded;
+ private static final TrackerRegistryStore I=new TrackerRegistryStore(); private final Path file=ConfigService.appDataDir().resolve("tracking").resolve("tracker-devices.csv");private final List<TrackerDevice> rows=new ArrayList<>();private boolean loaded;
  public static TrackerRegistryStore get(){return I;} public synchronized List<TrackerDevice> all(){load();return new ArrayList<>(rows);} public synchronized TrackerDevice find(String id){load();return rows.stream().filter(x->x.id().equals(id)).findFirst().orElse(null);}
  public synchronized void upsert(TrackerDevice d){load();int ix=-1;for(int i=0;i<rows.size();i++)if(rows.get(i).id().equals(d.id())){ix=i;break;}if(ix>=0)rows.set(ix,d);else rows.add(d);save();}
  public synchronized void delete(String id){load();rows.removeIf(x->x.id().equals(id));save();}

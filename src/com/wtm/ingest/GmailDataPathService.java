@@ -1,6 +1,7 @@
 package com.wtm.ingest;
 
 import com.sun.net.httpserver.HttpServer;
+import com.wtm.config.ConfigService;
 import com.wtm.util.MiniJson;
 import java.awt.Desktop;
 import java.io.*;
@@ -26,7 +27,7 @@ public final class GmailDataPathService {
 
     private static final GmailDataPathService INSTANCE=new GmailDataPathService();
     private static final String SCOPE="https://www.googleapis.com/auth/gmail.readonly";
-    private final Path appRoot=Path.of(System.getProperty("user.home"),".northstar-operations-intelligence");
+    private final Path appRoot=ConfigService.appDataDir();
     private final Path credentialsDir=appRoot.resolve("credentials");
     private final Path clientFile=credentialsDir.resolve("gmail-oauth-client.json");
     private final Path tokenFile=credentialsDir.resolve("gmail-token.properties");
