@@ -96,6 +96,32 @@ if grep -q 'UiFoundationRuntime' src/com/wtm/app/NorthStarMainStable.java || \
   exit 1
 fi
 
+# WorkspaceLifecycleV3 is an explicit coordinator, not a global event observer.
+# The workspace and Settings source owners call it at concrete lifecycle points.
+if grep -qE 'addAWTEventListener|AWTEvent|Window\.getWindows|WINDOW_ACTIVATED|WINDOW_OPENED|ACTION_EVENT_MASK|WeakHashMap|SwingUtilities\.invokeLater' \
+    src/com/wtm/modular/ui/WorkspaceLifecycleV3.java; then
+  echo "ERROR: global/delayed workspace lifecycle observation returned to WorkspaceLifecycleV3." >&2
+  exit 1
+fi
+for boundary in \
+  'WorkspaceLifecycleV3.initializeWorkspace(this)' \
+  'WorkspaceLifecycleV3.dashboardMounted(this)' \
+  'WorkspaceLifecycleV3.routeMounted(this)'; do
+  if ! grep -q "$boundary" src/com/wtm/ui/OperationsWorkspaceFrame.java; then
+    echo "ERROR: explicit workspace lifecycle boundary '$boundary' is missing." >&2
+    exit 1
+  fi
+done
+for boundary in \
+  'WorkspaceLifecycleV3.settingsReady(this)' \
+  'WorkspaceLifecycleV3.persistSettings(this)' \
+  'WorkspaceLifecycleV3.settingsApplied(this)'; do
+  if ! grep -q "$boundary" src/com/wtm/ui/SettingsDialog.java; then
+    echo "ERROR: explicit Settings lifecycle boundary '$boundary' is missing." >&2
+    exit 1
+  fi
+done
+
 # Settings pages own their scroll layout through scrollableSettingsPage().
 if ! grep -q 'scrollableSettingsPage' src/com/wtm/ui/SettingsDialog.java || \
    ! grep -q 'VERTICAL_SCROLLBAR_AS_NEEDED' src/com/wtm/ui/SettingsDialog.java || \
