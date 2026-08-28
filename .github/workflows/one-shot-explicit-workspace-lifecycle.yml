@@ -1,0 +1,369 @@
+name: One-shot explicit workspace lifecycle
+
+on:
+  push:
+    branches: [ master ]
+    paths:
+      - '.github/workflows/one-shot-explicit-workspace-lifecycle.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: master
+          fetch-depth: 0
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '21'
+      - name: Replace global workspace listener with explicit source boundaries
+        run: |
+          set -euo pipefail
+          cat > src/com/wtm/modular/ui/WorkspaceLifecycleV3.java <<'JAVA'
+          package com.wtm.modular.ui;
+
+          import com.wtm.app.AiEnabledMain;
+          import com.wtm.config.AppConfig;
+          import com.wtm.ui.OperationsWorkspaceFrame;
+          import com.wtm.ui.SettingsDialog;
+          import com.wtm.ui.Theme;
+
+          import javax.swing.*;
+          import java.awt.*;
+          import java.util.Collections;
+          import java.util.IdentityHashMap;
+          import java.util.Set;
+          import java.util.prefs.Preferences;
+
+          /**
+           * Explicit coordinator for optional workspace additions that live outside
+           * the base OperationsWorkspaceFrame source.
+           *
+           * <p>No global AWT listener, window scan, polling timer, reflection, or
+           * component-added watcher is used. Canonical source owners call these
+           * methods at concrete construction, route-mount, dashboard-mount, and
+           * settings-save boundaries.</p>
+           */
+          public final class WorkspaceLifecycleV3 {
+              private static final String MUSIC_MINI_MARKER = "northstar.music.mini";
+              private static final String INTELLIGENCE_CHECK = "northstar.intelligence.workspace.checkbox";
+              private static final String MUSIC_CHECK = "northstar.music.workspace.checkbox";
+              private static final String INTELLIGENCE_TOKEN = "NORTHSTAR_INTELLIGENCE";
+              private static final String INTELLIGENCE_PREF = "dashboard.intelligence.enabled";
+
+              private static final Preferences WORKSPACE_PREFS =
+                      Preferences.userRoot().node("com/wtm/northstar/workspace");
+              private static boolean installed;
+
+              private WorkspaceLifecycleV3() {}
+
+              /** Loads provider settings before the first workspace is constructed. */
+              public static synchronized void install() {
+                  if (installed) return;
+                  installed = true;
+                  loadMusicSettings();
+              }
+
+              /** Called by OperationsWorkspaceFrame after its canonical UI is built. */
+              public static void initializeWorkspace(OperationsWorkspaceFrame workspace) {
+                  if (workspace == null) return;
+                  AiEnabledMain.injectSidebar(workspace);
+                  MusicModuleGuard.installWorkspace(workspace);
+                  syncDynamicDashboard(workspace);
+                  TrustedEmailUiGuard.apply(workspace);
+                  workspace.getRootPane().revalidate();
+                  workspace.validate();
+                  workspace.repaint();
+              }
+
+              /** Called whenever the canonical Dashboard route has just been mounted. */
+              public static void dashboardMounted(OperationsWorkspaceFrame workspace) {
+                  if (workspace == null) return;
+                  syncDynamicDashboard(workspace);
+              }
+
+              /** Called after a non-Dashboard route is mounted. */
+              public static void routeMounted(OperationsWorkspaceFrame workspace) {
+                  if (workspace == null) return;
+                  TrustedEmailUiGuard.apply(workspace);
+              }
+
+              /** Called after Settings has built all authorized workspace controls. */
+              public static void settingsReady(SettingsDialog settings) {
+                  if (settings == null) return;
+                  injectWorkspaceToggles(settings);
+              }
+
+              /** Persists extension-owned Settings controls before ConfigService.save(). */
+              public static void persistSettings(SettingsDialog settings) {
+                  if (settings == null) return;
+                  persistWorkspaceToggles(settings);
+              }
+
+              /** Reinstalls dynamic routes after Settings has rebuilt its owning workspace. */
+              public static void settingsApplied(SettingsDialog settings) {
+                  if (settings != null && settings.getOwner() instanceof OperationsWorkspaceFrame workspace)
+                      initializeWorkspace(workspace);
+              }
+
+              private static void syncDynamicDashboard(OperationsWorkspaceFrame workspace) {
+                  if (!"Dashboard".equalsIgnoreCase(workspace.activeWorkspaceRouteName())) return;
+
+                  if (intelligenceEnabled()) AiEnabledMain.injectDashboard(workspace);
+                  else removeNamed(workspace, "northstar.ai.compact");
+
+                  MusicModuleGuard.installWorkspace(workspace);
+                  if (!musicDashboardEnabled()) removeMarked(workspace, MUSIC_MINI_MARKER);
+
+                  workspace.getRootPane().revalidate();
+                  workspace.validate();
+                  workspace.repaint();
+              }
+
+              private static boolean intelligenceEnabled() {
+                  return WORKSPACE_PREFS.getBoolean(INTELLIGENCE_PREF, true);
+              }
+
+              private static void injectWorkspaceToggles(SettingsDialog owner) {
+                  JCheckBox weather = findCheckBox(owner, "Local Weather");
+                  JCheckBox operations = findCheckBox(owner, "Operations Snapshot");
+                  if (weather == null || operations == null) return;
+
+                  Container common = commonParent(weather, operations);
+                  if (!(common instanceof JPanel panel)) return;
+
+                  JCheckBox intelligence = findMarkedCheckBox(panel, INTELLIGENCE_CHECK);
+                  if (intelligence == null) {
+                      intelligence = new JCheckBox("NorthStar Intelligence");
+                      intelligence.putClientProperty(INTELLIGENCE_CHECK, Boolean.TRUE);
+                      intelligence.setOpaque(false);
+                      intelligence.setForeground(Theme.text());
+                      intelligence.setSelected(intelligenceEnabled());
+                      panel.add(intelligence);
+                  }
+                  setModuleToken(owner.workspaceConfigForExtensions(),
+                          INTELLIGENCE_TOKEN, intelligence.isSelected());
+
+                  JCheckBox music = findMarkedCheckBox(panel, MUSIC_CHECK);
+                  if (music == null) {
+                      music = new JCheckBox("Music Compact Player");
+                      music.putClientProperty(MUSIC_CHECK, Boolean.TRUE);
+                      music.setOpaque(false);
+                      music.setForeground(Theme.text());
+                      music.setSelected(musicDashboardEnabled());
+                      panel.add(music);
+                  } else {
+                      music.setSelected(musicDashboardEnabled());
+                  }
+
+                  panel.revalidate();
+                  panel.repaint();
+              }
+
+              private static void persistWorkspaceToggles(SettingsDialog owner) {
+                  JCheckBox intelligence = findMarkedCheckBox(owner, INTELLIGENCE_CHECK);
+                  if (intelligence != null) {
+                      WORKSPACE_PREFS.putBoolean(INTELLIGENCE_PREF, intelligence.isSelected());
+                      setModuleToken(owner.workspaceConfigForExtensions(),
+                              INTELLIGENCE_TOKEN, intelligence.isSelected());
+                  }
+
+                  JCheckBox music = findMarkedCheckBox(owner, MUSIC_CHECK);
+                  if (music != null) setMusicDashboardEnabled(music.isSelected());
+              }
+
+              private static void setModuleToken(AppConfig cfg, String token, boolean enabled) {
+                  if (cfg == null) return;
+                  cfg.workspaceModules.removeIf(value -> token.equalsIgnoreCase(String.valueOf(value)));
+                  if (enabled) cfg.workspaceModules.add(token);
+              }
+
+              private static void loadMusicSettings() {
+                  MusicModuleGuard.loadSettings();
+                  restrictMusicStorage();
+              }
+
+              private static boolean musicDashboardEnabled() {
+                  return MusicModuleGuard.dashboardPlayerEnabled();
+              }
+
+              private static void setMusicDashboardEnabled(boolean enabled) {
+                  MusicModuleGuard.setDashboardPlayerEnabled(enabled);
+                  restrictMusicStorage();
+              }
+
+              private static void restrictMusicStorage() {
+                  try {
+                      java.nio.file.Path directory = java.nio.file.Paths.get(
+                              System.getProperty("user.home"), ".northstar");
+                      com.wtm.util.SecureFiles.ensurePrivateDirectory(directory);
+                      java.nio.file.Path file = directory.resolve("music.properties");
+                      if (java.nio.file.Files.isRegularFile(file))
+                          com.wtm.util.SecureFiles.restrictFile(file);
+                  } catch (Exception ignored) {
+                  }
+              }
+
+              private static JCheckBox findCheckBox(Container root, String text) {
+                  for (Component component : root.getComponents()) {
+                      if (component instanceof JCheckBox box
+                              && text.equalsIgnoreCase(clean(box.getText()))) return box;
+                      if (component instanceof Container child) {
+                          JCheckBox found = findCheckBox(child, text);
+                          if (found != null) return found;
+                      }
+                  }
+                  return null;
+              }
+
+              private static JCheckBox findMarkedCheckBox(Container root, String marker) {
+                  for (Component component : root.getComponents()) {
+                      if (component instanceof JCheckBox box
+                              && Boolean.TRUE.equals(box.getClientProperty(marker))) return box;
+                      if (component instanceof Container child) {
+                          JCheckBox found = findMarkedCheckBox(child, marker);
+                          if (found != null) return found;
+                      }
+                  }
+                  return null;
+              }
+
+              private static Container commonParent(Component a, Component b) {
+                  Set<Container> ancestors = Collections.newSetFromMap(new IdentityHashMap<>());
+                  for (Container p = a.getParent(); p != null; p = p.getParent()) ancestors.add(p);
+                  for (Container p = b.getParent(); p != null; p = p.getParent())
+                      if (ancestors.contains(p)) return p;
+                  return null;
+              }
+
+              private static void removeMarked(Container root, String marker) {
+                  Component found = findMarked(root, marker);
+                  if (found == null || found.getParent() == null) return;
+                  Container parent = found.getParent();
+                  parent.remove(found);
+                  parent.revalidate();
+                  parent.repaint();
+              }
+
+              private static Component findMarked(Container root, String marker) {
+                  for (Component component : root.getComponents()) {
+                      if (component instanceof JComponent jc
+                              && Boolean.TRUE.equals(jc.getClientProperty(marker))) return component;
+                      if (component instanceof Container child) {
+                          Component found = findMarked(child, marker);
+                          if (found != null) return found;
+                      }
+                  }
+                  return null;
+              }
+
+              private static void removeNamed(Container root, String name) {
+                  for (Component component : root.getComponents()) {
+                      if (name.equals(component.getName()) && component.getParent() != null) {
+                          Container parent = component.getParent();
+                          parent.remove(component);
+                          parent.revalidate();
+                          parent.repaint();
+                          return;
+                      }
+                      if (component instanceof Container child) removeNamed(child, name);
+                  }
+              }
+
+              private static String clean(String text) {
+                  return text == null ? "" : text.replaceAll("^[^A-Za-z0-9]+", "").trim();
+              }
+          }
+          JAVA
+
+          python3 - <<'PY'
+          from pathlib import Path
+
+          frame=Path('src/com/wtm/ui/OperationsWorkspaceFrame.java')
+          text=frame.read_text(encoding='utf-8')
+          if 'import com.wtm.modular.ui.WorkspaceLifecycleV3;\n' not in text:
+              anchor='import com.wtm.media.MediaService;\n'
+              if text.count(anchor)!=1: raise SystemExit('frame import anchor mismatch')
+              text=text.replace(anchor,anchor+'import com.wtm.modular.ui.WorkspaceLifecycleV3;\n',1)
+
+          old='''        buildUi();\n        ThemeStyler.apply(this,Theme.active());\n        startRefreshers();'''
+          new='''        buildUi();\n        ThemeStyler.apply(this,Theme.active());\n        WorkspaceLifecycleV3.initializeWorkspace(this);\n        startRefreshers();'''
+          if text.count(old)!=1: raise SystemExit(f'frame constructor lifecycle anchor mismatch: {text.count(old)}')
+          text=text.replace(old,new,1)
+
+          old='''        refreshVisibleModules();\n    }\n\n    private JComponent buildSidebar(){'''
+          new='''        refreshVisibleModules();\n        WorkspaceLifecycleV3.dashboardMounted(this);\n    }\n\n    private JComponent buildSidebar(){'''
+          if text.count(old)!=1: raise SystemExit(f'dashboard route anchor mismatch: {text.count(old)}')
+          text=text.replace(old,new,1)
+
+          old='''        workspaceContentHost.repaint();\n        updateSidebarSelection();\n        return true;'''
+          new='''        workspaceContentHost.repaint();\n        updateSidebarSelection();\n        WorkspaceLifecycleV3.routeMounted(this);\n        return true;'''
+          if text.count(old)!=1: raise SystemExit(f'extension route anchor mismatch: {text.count(old)}')
+          text=text.replace(old,new,1)
+
+          old='''            workspaceContentHost.add(shell,BorderLayout.CENTER);\n            workspaceContentHost.revalidate();\n            workspaceContentHost.repaint();\n        }\n    }\n\n    private void releaseDashboardModules(){'''
+          new='''            workspaceContentHost.add(shell,BorderLayout.CENTER);\n            workspaceContentHost.revalidate();\n            workspaceContentHost.repaint();\n        }\n        WorkspaceLifecycleV3.routeMounted(this);\n    }\n\n    private void releaseDashboardModules(){'''
+          if text.count(old)!=1: raise SystemExit(f'embedded route anchor mismatch: {text.count(old)}')
+          text=text.replace(old,new,1)
+          frame.write_text(text,encoding='utf-8')
+
+          settings=Path('src/com/wtm/ui/SettingsDialog.java')
+          text=settings.read_text(encoding='utf-8')
+          if 'import com.wtm.modular.ui.WorkspaceLifecycleV3;\n' not in text:
+              anchor='import com.wtm.media.*;\n'
+              if text.count(anchor)!=1: raise SystemExit('settings import anchor mismatch')
+              text=text.replace(anchor,anchor+'import com.wtm.modular.ui.WorkspaceLifecycleV3;\n',1)
+
+          old='''        updateAutomaticSevereControls();\n        applySettingsTheme(AppTheme.fromId(cfg.themeId));\n    }'''
+          new='''        updateAutomaticSevereControls();\n        applySettingsTheme(AppTheme.fromId(cfg.themeId));\n        WorkspaceLifecycleV3.settingsReady(this);\n    }'''
+          if text.count(old)!=1: raise SystemExit(f'settings ready anchor mismatch: {text.count(old)}')
+          text=text.replace(old,new,1)
+
+          old='''            cfg.widgetTypes.clear();\n            for(JComboBox<WidgetChoice> box:widgetBoxes){\n                WidgetChoice choice=(WidgetChoice)box.getSelectedItem();\n                cfg.widgetTypes.add(choice==null?"STATUS":choice.id());\n            }\n\n            ConfigService.save(cfg);'''
+          new='''            cfg.widgetTypes.clear();\n            for(JComboBox<WidgetChoice> box:widgetBoxes){\n                WidgetChoice choice=(WidgetChoice)box.getSelectedItem();\n                cfg.widgetTypes.add(choice==null?"STATUS":choice.id());\n            }\n\n            WorkspaceLifecycleV3.persistSettings(this);\n            ConfigService.save(cfg);'''
+          if text.count(old)!=1: raise SystemExit(f'settings persist anchor mismatch: {text.count(old)}')
+          text=text.replace(old,new,1)
+
+          old='''            AuditService.record("Saved application settings");\n            onSave.accept(cfg);\n            dispose();'''
+          new='''            AuditService.record("Saved application settings");\n            onSave.accept(cfg);\n            WorkspaceLifecycleV3.settingsApplied(this);\n            dispose();'''
+          if text.count(old)!=1: raise SystemExit(f'settings applied anchor mismatch: {text.count(old)}')
+          text=text.replace(old,new,1)
+          settings.write_text(text,encoding='utf-8')
+
+          music=Path('src/com/wtm/modular/ui/MusicModuleGuard.java')
+          text=music.read_text(encoding='utf-8')
+          old='''    public static void installWorkspace(Window w){\n        if(w==null||!w.isDisplayable())return;'''
+          new='''    public static void installWorkspace(Window w){\n        if(w==null)return;'''
+          if text.count(old)!=1: raise SystemExit(f'music displayability anchor mismatch: {text.count(old)}')
+          music.write_text(text.replace(old,new,1),encoding='utf-8')
+          PY
+
+          git diff --check
+          ! grep -q 'addAWTEventListener' src/com/wtm/modular/ui/WorkspaceLifecycleV3.java
+          ! grep -q 'AWTEvent' src/com/wtm/modular/ui/WorkspaceLifecycleV3.java
+          ! grep -q 'Window.getWindows' src/com/wtm/modular/ui/WorkspaceLifecycleV3.java
+          ! grep -q 'WINDOW_ACTIVATED\|WINDOW_OPENED\|ACTION_EVENT_MASK' src/com/wtm/modular/ui/WorkspaceLifecycleV3.java
+          ! grep -q 'WeakHashMap' src/com/wtm/modular/ui/WorkspaceLifecycleV3.java
+          grep -q 'WorkspaceLifecycleV3.initializeWorkspace(this)' src/com/wtm/ui/OperationsWorkspaceFrame.java
+          grep -q 'WorkspaceLifecycleV3.dashboardMounted(this)' src/com/wtm/ui/OperationsWorkspaceFrame.java
+          grep -q 'WorkspaceLifecycleV3.settingsReady(this)' src/com/wtm/ui/SettingsDialog.java
+          grep -q 'WorkspaceLifecycleV3.persistSettings(this)' src/com/wtm/ui/SettingsDialog.java
+          grep -q 'WorkspaceLifecycleV3.settingsApplied(this)' src/com/wtm/ui/SettingsDialog.java
+          rm -rf /tmp/northstar-explicit-lifecycle
+          mkdir -p /tmp/northstar-explicit-lifecycle
+          javac --release 21 -encoding UTF-8 -d /tmp/northstar-explicit-lifecycle $(find src -name '*.java')
+          bash build.sh
+          unzip -tq NorthStarOperations.jar >/dev/null
+      - name: Commit explicit lifecycle ownership
+        run: |
+          set -euo pipefail
+          git config user.name 'NorthStar Cleanup Bot'
+          git config user.email 'actions@users.noreply.github.com'
+          git add src/com/wtm/modular/ui/WorkspaceLifecycleV3.java src/com/wtm/modular/ui/MusicModuleGuard.java src/com/wtm/ui/OperationsWorkspaceFrame.java src/com/wtm/ui/SettingsDialog.java
+          git commit -m 'Replace global workspace listener with explicit lifecycle boundaries'
+          git push origin HEAD:master
