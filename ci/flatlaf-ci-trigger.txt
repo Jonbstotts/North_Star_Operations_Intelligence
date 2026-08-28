@@ -1,0 +1,1 @@
+FlatLaf canonical CI migration validation trigger.
