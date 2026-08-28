@@ -89,20 +89,10 @@ public final class MusicModuleGuard {
     private static void injectDashboardPlayer(Window w){
         if(!MusicService.instance().settings.dashboardPlayer
                 ||!(w instanceof OperationsWorkspaceFrame workspace))return;
-        if(findMarked(workspace,MINI_MARK)!=null)return;
         MiniPlayer mini=new MiniPlayer(workspace);
-        mini.putClientProperty(MINI_MARK,Boolean.TRUE);
         mini.setAlignmentX(Component.LEFT_ALIGNMENT);
         mini.setMaximumSize(new Dimension(Integer.MAX_VALUE,72));
-        workspace.mountDashboardExtension(mini,2);
-    }
-
-    private static Component findMarked(Container root,String marker){
-        for(Component c:root.getComponents()){
-            if(c instanceof JComponent jc&&Boolean.TRUE.equals(jc.getClientProperty(marker)))return c;
-            if(c instanceof Container child){Component found=findMarked(child,marker);if(found!=null)return found;}
-        }
-        return null;
+        workspace.mountDashboardExtension(MINI_MARK,mini,2);
     }
 
     // Provider-neutral model ------------------------------------------------

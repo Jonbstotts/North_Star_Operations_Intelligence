@@ -76,6 +76,8 @@ public final class OperationsWorkspaceFrame extends JFrame {
     private String activeWorkspaceRoute="Dashboard";
     private final Map<String,JButton> sidebarRouteButtons=
             new LinkedHashMap<>();
+    private final Map<String,JComponent> dashboardExtensions=
+            new LinkedHashMap<>();
     private JLabel dateTimeLabel;
     private JLabel topWeatherLabel;
     private JLabel topTrafficLabel;
@@ -253,6 +255,7 @@ public final class OperationsWorkspaceFrame extends JFrame {
     }
 
     private JComponent createDashboardView(){
+        dashboardExtensions.clear();
         dashboardBody=new JPanel();
         dashboardBody.setLayout(new BoxLayout(dashboardBody,BoxLayout.Y_AXIS));
         dashboardBody.setBackground(Theme.bg());
@@ -508,11 +511,29 @@ public final class OperationsWorkspaceFrame extends JFrame {
         return true;
     }
 
-    /** Mounts a dashboard extension at a bounded position without exposing dashboardBody. */
-    public boolean mountDashboardExtension(JComponent component,int preferredIndex){
-        if(component==null||dashboardBody==null||dashboardBody.getParent()==null)return false;
+    /**
+     * Mounts an identified dashboard extension without exposing dashboardBody.
+     * Identity is tracked by the workspace owner, so extension code never needs
+     * to scan the Swing component tree to detect or remove its own surface.
+     */
+    public boolean mountDashboardExtension(String id,JComponent component,int preferredIndex){
+        if(id==null||id.isBlank()||component==null||dashboardBody==null||dashboardBody.getParent()==null)return false;
+        JComponent existing=dashboardExtensions.get(id);
+        if(existing!=null&&existing.getParent()==dashboardBody)return true;
         int index=Math.max(0,Math.min(preferredIndex,dashboardBody.getComponentCount()));
         dashboardBody.add(component,index);
+        dashboardExtensions.put(id,component);
+        dashboardBody.revalidate();
+        dashboardBody.repaint();
+        return true;
+    }
+
+    /** Removes a dashboard extension previously mounted by id. */
+    public boolean removeDashboardExtension(String id){
+        if(id==null||id.isBlank())return false;
+        JComponent component=dashboardExtensions.remove(id);
+        if(component==null||component.getParent()!=dashboardBody)return false;
+        dashboardBody.remove(component);
         dashboardBody.revalidate();
         dashboardBody.repaint();
         return true;

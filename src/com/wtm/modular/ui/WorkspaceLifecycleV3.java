@@ -4,10 +4,8 @@ import com.wtm.app.AiEnabledMain;
 import com.wtm.config.AppConfig;
 import com.wtm.ui.OperationsWorkspaceFrame;
 import com.wtm.ui.SettingsDialog;
-import com.wtm.ui.Theme;
 
 import javax.swing.*;
-import java.awt.*;
 import java.util.prefs.Preferences;
 
 /**
@@ -78,10 +76,10 @@ public final class WorkspaceLifecycleV3 {
         if (!"Dashboard".equalsIgnoreCase(workspace.activeWorkspaceRouteName())) return;
 
         if (intelligenceEnabled()) AiEnabledMain.injectDashboard(workspace);
-        else removeNamed(workspace, "northstar.ai.compact");
+        else workspace.removeDashboardExtension("northstar.ai.compact");
 
         MusicModuleGuard.installWorkspace(workspace);
-        if (!musicDashboardEnabled()) removeMarked(workspace, MUSIC_MINI_MARKER);
+        if (!musicDashboardEnabled()) workspace.removeDashboardExtension(MUSIC_MINI_MARKER);
 
         workspace.getRootPane().revalidate();
         workspace.validate();
@@ -144,40 +142,6 @@ public final class WorkspaceLifecycleV3 {
             if (java.nio.file.Files.isRegularFile(file))
                 com.wtm.util.SecureFiles.restrictFile(file);
         } catch (Exception ignored) {
-        }
-    }
-
-    private static void removeMarked(Container root, String marker) {
-        Component found = findMarked(root, marker);
-        if (found == null || found.getParent() == null) return;
-        Container parent = found.getParent();
-        parent.remove(found);
-        parent.revalidate();
-        parent.repaint();
-    }
-
-    private static Component findMarked(Container root, String marker) {
-        for (Component component : root.getComponents()) {
-            if (component instanceof JComponent jc
-                    && Boolean.TRUE.equals(jc.getClientProperty(marker))) return component;
-            if (component instanceof Container child) {
-                Component found = findMarked(child, marker);
-                if (found != null) return found;
-            }
-        }
-        return null;
-    }
-
-    private static void removeNamed(Container root, String name) {
-        for (Component component : root.getComponents()) {
-            if (name.equals(component.getName()) && component.getParent() != null) {
-                Container parent = component.getParent();
-                parent.remove(component);
-                parent.revalidate();
-                parent.repaint();
-                return;
-            }
-            if (component instanceof Container child) removeNamed(child, name);
         }
     }
 

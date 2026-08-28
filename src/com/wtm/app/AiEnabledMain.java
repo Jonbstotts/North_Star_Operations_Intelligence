@@ -25,8 +25,7 @@ public final class AiEnabledMain {
 
     public static void injectSidebar(JFrame frame){
         if(!(frame instanceof OperationsWorkspaceFrame workspace)
-                ||!AuthorizationService.allowed(Permission.AI_ASSISTANT)
-                ||findByName(frame,"northstar.ai.sidebar")!=null)return;
+                ||!AuthorizationService.allowed(Permission.AI_ASSISTANT))return;
         workspace.registerWorkspaceExtensionRoute(
                 "NorthStar Intelligence",
                 "✦  NorthStar Intelligence",
@@ -58,8 +57,7 @@ public final class AiEnabledMain {
      */
     public static void injectDashboard(JFrame frame){
         if(!(frame instanceof OperationsWorkspaceFrame workspace)
-                ||!AuthorizationService.allowed(Permission.AI_ASSISTANT)
-                ||findByName(frame,COMPACT_NAME)!=null)return;
+                ||!AuthorizationService.allowed(Permission.AI_ASSISTANT))return;
 
         NorthStarIntelligenceCompactPanel compact=
                 new NorthStarIntelligenceCompactPanel(()->openFull(workspace));
@@ -76,18 +74,8 @@ public final class AiEnabledMain {
         mount.setMaximumSize(new Dimension(Integer.MAX_VALUE,height+14));
         mount.add(compact,BorderLayout.CENTER);
 
-        workspace.mountDashboardExtension(mount,Integer.MAX_VALUE-1);
+        workspace.mountDashboardExtension(COMPACT_NAME,mount,Integer.MAX_VALUE-1);
     }
 
-    private static Component findByName(Container root,String name){
-        for(Component c:root.getComponents()){
-            if(name.equals(c.getName()))return c;
-            if(c instanceof Container child){
-                Component found=findByName(child,name);
-                if(found!=null)return found;
-            }
-        }
-        return null;
-    }
 
 }
