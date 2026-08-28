@@ -4,7 +4,6 @@ import com.wtm.ui.Theme;
 import com.wtm.ui.ThemedComboBoxUI;
 
 import javax.swing.*;
-import javax.swing.border.EmptyBorder;
 import java.awt.*;
 import java.awt.event.*;
 import java.lang.reflect.Field;
@@ -74,7 +73,6 @@ public final class WorkspaceLifecycleV3 {
                     persistWorkspaceToggles(source);
                     Window workspace = findWorkspace(source);
                     if (workspace != null) {
-                        // The button's own listener must finish ConfigService.save/buildUi first.
                         SwingUtilities.invokeLater(() -> scheduleDashboardBoundary(workspace, 520));
                     }
                     return;
@@ -83,20 +81,15 @@ public final class WorkspaceLifecycleV3 {
                 if (text.endsWith("Dashboard") || "Dashboard".equalsIgnoreCase(text)) {
                     Window workspace = findWorkspace(SwingUtilities.getWindowAncestor(button));
                     if (workspace != null) {
-                        // Native Dashboard handler runs first; dynamic additions attach afterward.
                         SwingUtilities.invokeLater(() -> syncDynamicDashboard(workspace));
                     }
                 }
             }
 
             if (event instanceof ContainerEvent ce && ce.getID() == ContainerEvent.COMPONENT_ADDED) {
-                Component child = ce.getChild();
-                // Cosmetic/configuration work only. No route/sidebar/dashboard mutation here.
-                polishMusicTree(child);
-                Window window = child == null ? null : SwingUtilities.getWindowAncestor(child);
-                if (isSettings(window) || isWorkspace(window)) {
-                    SwingUtilities.invokeLater(() -> injectWorkspaceToggles(window));
-                }
+                // Cosmetic only: never insert controls or rebuild routes from a
+                // generic component-add callback.
+                polishMusicTree(ce.getChild());
             }
         }, AWTEvent.WINDOW_EVENT_MASK | AWTEvent.ACTION_EVENT_MASK | AWTEvent.CONTAINER_EVENT_MASK);
 
