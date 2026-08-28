@@ -8,7 +8,6 @@ import javax.swing.*;
 import java.awt.*;
 import java.awt.event.*;
 import java.lang.reflect.Field;
-import java.lang.reflect.Method;
 import java.util.Collections;
 import java.util.IdentityHashMap;
 import java.util.List;
@@ -21,11 +20,15 @@ import java.util.prefs.Preferences;
  * base OperationsWorkspaceFrame source.
  *
  * <p>The key rule is intentionally strict: COMPONENT_ADDED is cosmetic only.
- * Structural work (Dashboard remount, dynamic sidebar routes, Intelligence and
- * Music dashboard additions) runs only at real lifecycle boundaries: first
- * workspace activation and Settings Save & Apply. This avoids the historical
- * component-add rebuild storms and removes the competing recovery guards that
- * could leave the first Dashboard tree detached.</p>
+ * Structural work (dynamic sidebar routes, Intelligence and Music dashboard
+ * additions) runs only at real lifecycle boundaries: first workspace
+ * activation and Settings Save & Apply. This avoids the historical
+ * component-add rebuild storms and removes competing recovery guards.</p>
+ *
+ * <p>WINDOW_OPENED is intentionally not a structural workspace boundary. Swing
+ * can publish it while the base frame still has queued construction work. The
+ * first WINDOW_ACTIVATED event is later, unique per workspace, and guarantees
+ * we synchronize the already-mounted canonical dashboard only once.</p>
  */
 public final class WorkspaceLifecycleV3 {
     private static final String WORKSPACE_CLASS = "com.wtm.ui.OperationsWorkspaceFrame";
@@ -57,7 +60,6 @@ public final class WorkspaceLifecycleV3 {
                 Window window = we.getWindow();
                 if (we.getID() == WindowEvent.WINDOW_OPENED) {
                     if (isSettings(window)) SwingUtilities.invokeLater(() -> injectWorkspaceToggles(window));
-                    if (isWorkspace(window)) activateWorkspace(window);
                     return;
                 }
                 if (we.getID() == WindowEvent.WINDOW_ACTIVATED && isWorkspace(window)) {
@@ -87,15 +89,15 @@ public final class WorkspaceLifecycleV3 {
             }
 
             if (event instanceof ContainerEvent ce && ce.getID() == ContainerEvent.COMPONENT_ADDED) {
-                // Cosmetic only: never insert controls or rebuild routes from a
-                // generic component-add callback.
+                // COMPONENT_ADDED is cosmetic only: never insert controls or
+                // rebuild routes from a generic component-add callback.
                 polishMusicTree(ce.getChild());
             }
         }, AWTEvent.WINDOW_EVENT_MASK | AWTEvent.ACTION_EVENT_MASK | AWTEvent.CONTAINER_EVENT_MASK);
 
         for (Window window : Window.getWindows()) {
             if (isSettings(window)) injectWorkspaceToggles(window);
-            if (isWorkspace(window) && window.isShowing()) activateWorkspace(window);
+            if (isWorkspace(window) && window.isActive() && ACTIVATED.add(window)) activateWorkspace(window);
         }
     }
 
@@ -118,8 +120,8 @@ public final class WorkspaceLifecycleV3 {
     }
 
     /**
-     * Workspace activation is a synchronous structural boundary. No delayed
-     * timers or health-watchdog behavior is permitted here.
+     * First workspace activation is the synchronous structural startup boundary.
+     * No delayed timers or health-watchdog behavior is permitted here.
      */
     private static void activateWorkspace(Window window) {
         if (!(window instanceof JFrame frame)) return;
