@@ -166,6 +166,7 @@ public final class WorkspaceLifecycleV3 {
         MusicModuleGuard.installWorkspace(workspace);
         if (!musicDashboardEnabled()) removeMarked((Container) frame, MUSIC_MINI_MARKER);
 
+        DashboardGlyphArtGuard.apply(workspace);
         frame.getRootPane().revalidate();
         frame.validate();
         frame.repaint();
