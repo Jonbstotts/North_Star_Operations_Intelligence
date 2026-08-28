@@ -88,14 +88,11 @@ public final class WorkspaceLifecycleV3 {
                     return;
                 }
 
-                String lower = text.toLowerCase(java.util.Locale.ROOT);
-                if (lower.contains("data collection")
-                        || lower.contains("gmail")
-                        || lower.contains("datapath")) {
+                if (text.contains("Data Collection")
+                        || text.contains("Gmail")
+                        || text.contains("DataPath")) {
                     Window workspace = findWorkspace(SwingUtilities.getWindowAncestor(button));
-                    if (workspace != null) {
-                        SwingUtilities.invokeLater(() -> TrustedEmailUiGuard.apply(workspace));
-                    }
+                    if (workspace != null) SwingUtilities.invokeLater(() -> TrustedEmailUiGuard.apply(workspace));
                 }
             }
 
@@ -145,8 +142,8 @@ public final class WorkspaceLifecycleV3 {
         AiEnabledMain.injectSidebar(frame);
         MusicModuleGuard.installWorkspace(window);
         syncDynamicDashboard(frame);
-        polishMusicTree(frame);
         TrustedEmailUiGuard.apply(frame);
+        polishMusicTree(frame);
         frame.getRootPane().revalidate();
         frame.validate();
         frame.repaint();
@@ -162,8 +159,8 @@ public final class WorkspaceLifecycleV3 {
         AiEnabledMain.injectSidebar(frame);
         MusicModuleGuard.installWorkspace(window);
         syncDynamicDashboard(frame);
-        polishMusicTree(frame);
         TrustedEmailUiGuard.apply(frame);
+        polishMusicTree(frame);
         frame.getRootPane().revalidate();
         frame.validate();
         frame.repaint();
@@ -179,7 +176,6 @@ public final class WorkspaceLifecycleV3 {
         MusicModuleGuard.installWorkspace(workspace);
         if (!musicDashboardEnabled()) removeMarked((Container) frame, MUSIC_MINI_MARKER);
 
-        DashboardGlyphArtGuard.apply(workspace);
         frame.getRootPane().revalidate();
         frame.validate();
         frame.repaint();
