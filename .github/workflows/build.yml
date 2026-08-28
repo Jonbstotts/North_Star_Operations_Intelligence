@@ -75,6 +75,18 @@ jobs:
           ! grep -q 'COMPONENT_ADDED' src/com/wtm/modular/ui/MusicModuleGuard.java
           ! grep -q 'new Timer' src/com/wtm/modular/ui/MusicModuleGuard.java
 
+      - name: Presentation polish regression
+        run: |
+          set -euo pipefail
+          test -f src/com/wtm/ui/UiFinalPolish.java
+          ! grep -q 'java.lang.reflect' src/com/wtm/ui/UiFinalPolish.java
+          ! grep -q 'getDeclaredField' src/com/wtm/ui/UiFinalPolish.java
+          ! grep -q 'rotationTimer' src/com/wtm/ui/UiFinalPolish.java
+          ! grep -q 'mainShowcaseMediaEnabled' src/com/wtm/ui/UiFinalPolish.java
+          ! grep -q 'operationsAnnouncementsEnabled' src/com/wtm/ui/UiFinalPolish.java
+          ! grep -q 'mainShowcaseIntervalSeconds' src/com/wtm/ui/UiFinalPolish.java
+          grep -q 'presentation-only' src/com/wtm/ui/UiFinalPolish.java
+
       - name: Intelligence reconciliation regression
         run: |
           set -euo pipefail
