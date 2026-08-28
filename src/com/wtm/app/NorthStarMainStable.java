@@ -1,7 +1,6 @@
 package com.wtm.app;
 
 import com.wtm.modular.core.ModularBootstrap;
-import com.wtm.modular.ui.DashboardGlyphArtGuard;
 import com.wtm.modular.ui.SidebarModulesGlyphGuard;
 import com.wtm.modular.ui.TrustedEmailUiGuard;
 import com.wtm.modular.ui.WorkspaceLifecycleV3;
@@ -22,7 +21,6 @@ public final class NorthStarMainStable {
         LocalSecurityHardening.install();
         SidebarModulesGlyphGuard.install();
         TrustedEmailUiGuard.install();
-        DashboardGlyphArtGuard.install();
         WorkspaceLifecycleV3.install();
         ModularBootstrap.start();
         Main.main(args);
