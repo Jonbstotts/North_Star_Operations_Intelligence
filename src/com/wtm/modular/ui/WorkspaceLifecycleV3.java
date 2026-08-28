@@ -1,5 +1,6 @@
 package com.wtm.modular.ui;
 
+import com.wtm.app.AiEnabledMain;
 import com.wtm.ui.Theme;
 import com.wtm.ui.ThemedComboBoxUI;
 
@@ -42,7 +43,6 @@ public final class WorkspaceLifecycleV3 {
             Collections.newSetFromMap(new WeakHashMap<>());
     private static final Set<JScrollPane> MUSIC_SCROLLS =
             Collections.newSetFromMap(new IdentityHashMap<>());
-    private static final WeakHashMap<Window, Timer> PENDING = new WeakHashMap<>();
     private static boolean installed;
 
     private WorkspaceLifecycleV3() {}
@@ -57,11 +57,11 @@ public final class WorkspaceLifecycleV3 {
                 Window window = we.getWindow();
                 if (we.getID() == WindowEvent.WINDOW_OPENED) {
                     if (isSettings(window)) SwingUtilities.invokeLater(() -> injectWorkspaceToggles(window));
-                    if (isWorkspace(window)) scheduleDashboardBoundary(window, 650);
+                    if (isWorkspace(window)) activateWorkspace(window);
                     return;
                 }
                 if (we.getID() == WindowEvent.WINDOW_ACTIVATED && isWorkspace(window)) {
-                    if (ACTIVATED.add(window)) scheduleDashboardBoundary(window, 420);
+                    if (ACTIVATED.add(window)) activateWorkspace(window);
                     return;
                 }
             }
@@ -73,7 +73,7 @@ public final class WorkspaceLifecycleV3 {
                     persistWorkspaceToggles(source);
                     Window workspace = findWorkspace(source);
                     if (workspace != null) {
-                        SwingUtilities.invokeLater(() -> scheduleDashboardBoundary(workspace, 520));
+                        SwingUtilities.invokeLater(() -> refreshWorkspaceBoundary(workspace));
                     }
                     return;
                 }
@@ -95,7 +95,7 @@ public final class WorkspaceLifecycleV3 {
 
         for (Window window : Window.getWindows()) {
             if (isSettings(window)) injectWorkspaceToggles(window);
-            if (isWorkspace(window) && window.isShowing()) scheduleDashboardBoundary(window, 300);
+            if (isWorkspace(window) && window.isShowing()) activateWorkspace(window);
         }
     }
 
@@ -118,48 +118,50 @@ public final class WorkspaceLifecycleV3 {
     }
 
     /**
-     * Reproduce the known-good manual Dashboard navigation exactly once after a
-     * lifecycle boundary. Unlike the old watchdog this is not a health guess or
-     * polling loop: the first post-transition/save Dashboard is deliberately
-     * remounted after all competing buildUi/injector work has settled.
+     * Workspace activation is a synchronous structural boundary. No delayed
+     * timers or health-watchdog behavior is permitted here.
      */
-    private static void scheduleDashboardBoundary(Window window, int delayMs) {
+    private static void activateWorkspace(Window window) {
         if (!(window instanceof JFrame frame)) return;
         if (!SwingUtilities.isEventDispatchThread()) {
-            SwingUtilities.invokeLater(() -> scheduleDashboardBoundary(window, delayMs));
+            SwingUtilities.invokeLater(() -> activateWorkspace(window));
             return;
         }
+        if (!frame.isDisplayable()) return;
 
-        Timer previous = PENDING.remove(window);
-        if (previous != null) previous.stop();
+        AiEnabledMain.injectSidebar(frame);
+        MusicModuleGuard.installWorkspace(window);
+        syncDynamicDashboard(frame);
+        polishMusicTree(frame);
+        frame.getRootPane().revalidate();
+        frame.validate();
+        frame.repaint();
+    }
 
-        Timer timer = new Timer(Math.max(250, delayMs), e -> {
-            ((Timer)e.getSource()).stop();
-            PENDING.remove(window);
-            if (!frame.isDisplayable() || !frame.isShowing()) return;
-
-            invoke(frame, "showDashboardRoute");
-            SwingUtilities.invokeLater(() -> {
-                syncDynamicDashboard(frame);
-                polishMusicTree(frame);
-                frame.getRootPane().revalidate();
-                frame.validate();
-                frame.repaint();
-            });
-        });
-        timer.setRepeats(false);
-        PENDING.put(window, timer);
-        timer.start();
+    /**
+     * Settings Save & Apply is the other structural boundary. The base workspace
+     * owns its own rebuild; after that event we synchronize source-backed
+     * modular additions once, without a delayed corrective remount.
+     */
+    private static void refreshWorkspaceBoundary(Window window) {
+        if (!(window instanceof JFrame frame) || !frame.isDisplayable()) return;
+        AiEnabledMain.injectSidebar(frame);
+        MusicModuleGuard.installWorkspace(window);
+        syncDynamicDashboard(frame);
+        polishMusicTree(frame);
+        frame.getRootPane().revalidate();
+        frame.validate();
+        frame.repaint();
     }
 
     private static void syncDynamicDashboard(Window workspace) {
         if (!(workspace instanceof JFrame frame) || !frame.isDisplayable()) return;
         if (!"Dashboard".equalsIgnoreCase(activeRoute(frame))) return;
 
-        if (intelligenceEnabled()) invokeStaticFrame("com.wtm.app.AiEnabledMain", "injectDashboard", frame);
+        if (intelligenceEnabled()) AiEnabledMain.injectDashboard(frame);
         else removeNamed((Container) frame, "northstar.ai.compact");
 
-        invokeStaticWindow("com.wtm.modular.ui.MusicModuleGuard", "installWorkspace", workspace);
+        MusicModuleGuard.installWorkspace(workspace);
         if (!musicDashboardEnabled()) removeMarked((Container) frame, MUSIC_MINI_MARKER);
 
         frame.getRootPane().revalidate();
@@ -256,52 +258,17 @@ public final class WorkspaceLifecycleV3 {
     }
 
     private static void loadMusicSettings() {
-        try {
-            Object service = musicService();
-            Method load = service.getClass().getDeclaredMethod("load");
-            load.setAccessible(true);
-            load.invoke(service);
-            restrictMusicStorage();
-        } catch (ReflectiveOperationException ignored) {
-        }
+        MusicModuleGuard.loadSettings();
+        restrictMusicStorage();
     }
 
     private static boolean musicDashboardEnabled() {
-        try {
-            Object service = musicService();
-            Field settingsField = service.getClass().getDeclaredField("settings");
-            settingsField.setAccessible(true);
-            Object settings = settingsField.get(service);
-            Field dashboard = settings.getClass().getDeclaredField("dashboardPlayer");
-            dashboard.setAccessible(true);
-            return dashboard.getBoolean(settings);
-        } catch (ReflectiveOperationException ex) {
-            return true;
-        }
+        return MusicModuleGuard.dashboardPlayerEnabled();
     }
 
     private static void setMusicDashboardEnabled(boolean enabled) {
-        try {
-            Object service = musicService();
-            Field settingsField = service.getClass().getDeclaredField("settings");
-            settingsField.setAccessible(true);
-            Object settings = settingsField.get(service);
-            Field dashboard = settings.getClass().getDeclaredField("dashboardPlayer");
-            dashboard.setAccessible(true);
-            dashboard.setBoolean(settings, enabled);
-            Method save = service.getClass().getDeclaredMethod("save");
-            save.setAccessible(true);
-            save.invoke(service);
-            restrictMusicStorage();
-        } catch (ReflectiveOperationException ignored) {
-        }
-    }
-
-    private static Object musicService() throws ReflectiveOperationException {
-        Class<?> serviceClass = Class.forName("com.wtm.modular.ui.MusicModuleGuard$MusicService");
-        Method instance = serviceClass.getDeclaredMethod("instance");
-        instance.setAccessible(true);
-        return instance.invoke(null);
+        MusicModuleGuard.setDashboardPlayerEnabled(enabled);
+        restrictMusicStorage();
     }
 
     private static void restrictMusicStorage() {
@@ -426,48 +393,20 @@ public final class WorkspaceLifecycleV3 {
         }
     }
 
-    private static Object fieldValue(Object instance, String fieldName) {
-        if (instance == null) return null;
-        try {
-            Field field = instance.getClass().getDeclaredField(fieldName);
-            field.setAccessible(true);
-            return field.get(instance);
-        } catch (ReflectiveOperationException ignored) {
-            return null;
+    private static Object fieldValue(Object target, String name) {
+        if (target == null) return null;
+        for (Class<?> type = target.getClass(); type != null; type = type.getSuperclass()) {
+            try {
+                Field field = type.getDeclaredField(name);
+                field.setAccessible(true);
+                return field.get(target);
+            } catch (ReflectiveOperationException ignored) {
+            }
         }
-    }
-
-    private static void invoke(Object target, String methodName) {
-        try {
-            Method method = target.getClass().getDeclaredMethod(methodName);
-            method.setAccessible(true);
-            method.invoke(target);
-        } catch (ReflectiveOperationException ignored) {
-        }
-    }
-
-    private static void invokeStaticFrame(String className, String methodName, JFrame frame) {
-        try {
-            Class<?> type = Class.forName(className);
-            Method method = type.getDeclaredMethod(methodName, JFrame.class);
-            method.setAccessible(true);
-            method.invoke(null, frame);
-        } catch (ReflectiveOperationException ignored) {
-        }
-    }
-
-    private static void invokeStaticWindow(String className, String methodName, Window window) {
-        try {
-            Class<?> type = Class.forName(className);
-            Method method = type.getDeclaredMethod(methodName, Window.class);
-            method.setAccessible(true);
-            method.invoke(null, window);
-        } catch (ReflectiveOperationException ignored) {
-        }
+        return null;
     }
 
     private static String clean(String text) {
-        if (text == null) return "";
-        return text.replaceAll("^[^A-Za-z0-9]+", "").trim();
+        return text == null ? "" : text.replaceAll("^[^A-Za-z0-9]+", "").trim();
     }
 }
