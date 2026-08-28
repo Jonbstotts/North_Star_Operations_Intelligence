@@ -77,8 +77,32 @@ if grep -q 'ThemeCoreV216' src/com/wtm/ui/ThemeStyler.java || \
   echo "ERROR: canonical dialog theme ownership is not fully contained in ThemeStyler." >&2
   exit 1
 fi
-if ! grep -q 'ThemeStyler.apply(security, Theme.active())' src/com/wtm/modular/ui/TrustedEmailUiGuard.java; then
-  echo "ERROR: trusted-sender injected UI is not themed directly by its source owner." >&2
+
+# Sidebar route identity must be explicit at construction. ThemeStyler must not
+# rediscover routes by implementation class names or button text.
+if ! grep -q 'button.putClientProperty("northstar.sidebar.route",Boolean.TRUE)' src/com/wtm/ui/OperationsWorkspaceFrame.java; then
+  echo "ERROR: canonical sidebar buttons are not explicitly marked as routes." >&2
+  exit 1
+fi
+if grep -qE 'getClass\(\)\.getName|OperationsWorkspaceFrame\$RoundedSidebarButton|data collection|northstar intelligence' src/com/wtm/ui/ThemeStyler.java; then
+  echo "ERROR: ThemeStyler contains stale sidebar route discovery heuristics." >&2
+  exit 1
+fi
+
+# Data Collection and Gmail trusted-sender management are source-owned by a
+# concrete workspace panel. The old component-discovery guard and GlassSurface
+# runtime target must not return.
+if [ ! -f src/com/wtm/ui/DataCollectionPanel.java ] || \
+   ! grep -q 'class DataCollectionPanel' src/com/wtm/ui/DataCollectionPanel.java || \
+   ! grep -q 'TRUSTED EMAIL SENDERS' src/com/wtm/ui/DataCollectionPanel.java || \
+   ! grep -q 'TrustedSenderPolicy.parse' src/com/wtm/ui/DataCollectionPanel.java || \
+   ! grep -q 'sideDataCollectionButton' src/com/wtm/ui/OperationsWorkspaceFrame.java; then
+  echo "ERROR: canonical Data Collection/Gmail management workspace is missing." >&2
+  exit 1
+fi
+if [ -e src/com/wtm/modular/ui/TrustedEmailUiGuard.java ] || \
+   grep -R -q --include='*.java' 'GlassSurfacePanel' src; then
+  echo "ERROR: obsolete trusted-email component discovery returned to canonical source." >&2
   exit 1
 fi
 
@@ -105,13 +129,17 @@ if grep -qE 'addAWTEventListener|AWTEvent|Window\.getWindows|WINDOW_ACTIVATED|WI
 fi
 for boundary in \
   'WorkspaceLifecycleV3.initializeWorkspace(this)' \
-  'WorkspaceLifecycleV3.dashboardMounted(this)' \
-  'WorkspaceLifecycleV3.routeMounted(this)'; do
+  'WorkspaceLifecycleV3.dashboardMounted(this)'; do
   if ! grep -q "$boundary" src/com/wtm/ui/OperationsWorkspaceFrame.java; then
     echo "ERROR: explicit workspace lifecycle boundary '$boundary' is missing." >&2
     exit 1
   fi
 done
+if grep -q 'routeMounted' src/com/wtm/modular/ui/WorkspaceLifecycleV3.java || \
+   grep -q 'WorkspaceLifecycleV3.routeMounted' src/com/wtm/ui/OperationsWorkspaceFrame.java; then
+  echo "ERROR: obsolete generic route-mounted compatibility boundary returned." >&2
+  exit 1
+fi
 for boundary in \
   'WorkspaceLifecycleV3.settingsReady(this)' \
   'WorkspaceLifecycleV3.persistSettings(this)' \
