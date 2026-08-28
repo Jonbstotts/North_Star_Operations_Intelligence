@@ -14,15 +14,12 @@ import java.awt.*;
  */
 public final class UiFinalPolish {
     private static final String EMPLOYEE_CLASS="com.wtm.ui.EmployeeOperationsPanel";
-    private static final String TRUCK_CLASS="com.wtm.ui.TruckTrackingPanel";
-    private static final String PLAYBACK_TITLE="Playback / Live Map";
 
     private UiFinalPolish(){}
 
     static void prepareBeforePaint(Component component){
         if(component==null)return;
         polishEmployeeLayout(component,false);
-        polishTruckTracking(component);
         polishAppearanceScroll(component);
         polishUiFoundation(component);
     }
@@ -55,67 +52,6 @@ public final class UiFinalPolish {
         wrapper.setBorder(new EmptyBorder(0,0,0,18));
         split.setLeftComponent(wrapper);wrapper.add(left,BorderLayout.CENTER);
         split.setDividerSize(0);split.putClientProperty("northstar.employee.columnGap",Boolean.TRUE);
-    }
-
-    private static void polishTruckTracking(Component component){
-        if(TRUCK_CLASS.equals(component.getClass().getName())&&component instanceof JComponent root){
-            if(Boolean.TRUE.equals(root.getClientProperty("northstar.truck.prepared.v217")))return;
-            root.putClientProperty("northstar.truck.prepared.v217",Boolean.TRUE);
-            JTabbedPane tabs=findTabbedPane(root);if(tabs!=null)polishPlaybackTab(tabs);
-            return;
-        }
-        if(component instanceof Container container)
-            for(Component child:container.getComponents())polishTruckTracking(child);
-    }
-
-    private static void polishPlaybackTab(JTabbedPane tabs){
-        for(int i=0;i<tabs.getTabCount();i++){
-            String title=tabs.getTitleAt(i);
-            if(title==null||!title.equalsIgnoreCase(PLAYBACK_TITLE))continue;
-            Component current=tabs.getComponentAt(i);
-            if(current instanceof JComponent jc&&Boolean.TRUE.equals(jc.getClientProperty("northstar.playback.scroll.fixed")))return;
-            JSplitPane split=findSplit(current);if(split==null)return;
-            Component controls=split.getTopComponent(),map=split.getBottomComponent();
-            if(controls==null||map==null)return;
-            split.setTopComponent(null);split.setBottomComponent(null);
-            JPanel stack=new JPanel();stack.setLayout(new BoxLayout(stack,BoxLayout.Y_AXIS));
-            stack.setBackground(Theme.bg());stack.setBorder(new EmptyBorder(0,0,24,0));
-            normalizeFullWidth(controls);normalizeFullWidth(map);
-            Dimension cp=controls.getPreferredSize();int ch=Math.max(360,cp==null?360:cp.height);
-            controls.setPreferredSize(new Dimension(Math.max(900,cp==null?900:cp.width),ch));
-            controls.setMaximumSize(new Dimension(Integer.MAX_VALUE,ch));
-            Dimension mp=map.getPreferredSize();int mh=Math.max(520,mp==null?520:mp.height);
-            map.setPreferredSize(new Dimension(Math.max(900,mp==null?900:mp.width),mh));
-            map.setMinimumSize(new Dimension(360,380));map.setMaximumSize(new Dimension(Integer.MAX_VALUE,mh));
-            stack.add(controls);stack.add(Box.createVerticalStrut(14));stack.add(map);
-            JScrollPane scroll=new JScrollPane(stack,ScrollPaneConstants.VERTICAL_SCROLLBAR_AS_NEEDED,ScrollPaneConstants.HORIZONTAL_SCROLLBAR_NEVER);
-            scroll.setBorder(null);scroll.getViewport().setBackground(Theme.bg());
-            scroll.getVerticalScrollBar().setUnitIncrement(22);scroll.getVerticalScrollBar().setBlockIncrement(140);
-            scroll.putClientProperty("northstar.playback.scroll.fixed",Boolean.TRUE);
-            tabs.setComponentAt(i,scroll);return;
-        }
-    }
-
-    private static void normalizeFullWidth(Component component){
-        if(component instanceof JComponent jc){
-            jc.setAlignmentX(Component.LEFT_ALIGNMENT);Dimension pref=jc.getPreferredSize();
-            jc.setMaximumSize(new Dimension(Integer.MAX_VALUE,pref==null?1:Math.max(1,pref.height)));
-        }
-    }
-
-    private static JTabbedPane findTabbedPane(Container root){
-        for(Component child:root.getComponents()){
-            if(child instanceof JTabbedPane tabs)return tabs;
-            if(child instanceof Container nested){JTabbedPane found=findTabbedPane(nested);if(found!=null)return found;}
-        }
-        return null;
-    }
-
-    private static JSplitPane findSplit(Component component){
-        if(component instanceof JSplitPane split)return split;
-        if(component instanceof Container container)
-            for(Component child:container.getComponents()){JSplitPane found=findSplit(child);if(found!=null)return found;}
-        return null;
     }
 
     private static void polishAppearanceScroll(Component component){
