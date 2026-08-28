@@ -35,7 +35,7 @@ public final class OverlayEffectsPanel extends JComponent {
 
     private final javax.swing.Timer timer;
 
-    private AppTheme theme=AppTheme.DARK;
+    private AppTheme theme=AppTheme.FLATLAF_DARK;
     private boolean themeEffectsEnabled=true;
     private boolean severeSuppressed=false;
     private String intensity="LOW";
@@ -74,7 +74,7 @@ public final class OverlayEffectsPanel extends JComponent {
             String intensity,
             String performanceMode
     ){
-        this.theme=theme==null?AppTheme.DARK:theme;
+        this.theme=theme==null?AppTheme.FLATLAF_DARK:theme;
         this.themeEffectsEnabled=enabled;
         this.intensity=intensity==null?"LOW":intensity.toUpperCase();
         this.performanceMode=performanceMode==null

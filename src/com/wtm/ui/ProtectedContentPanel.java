@@ -229,7 +229,7 @@ public final class ProtectedContentPanel extends JPanel {
             if(window instanceof SettingsDialog settings)
                 return settings.activeThemeForProtectedContent();
 
-            return AppTheme.DARK;
+            return AppTheme.FLATLAF_DARK;
         }
 
         private Color currentThemePanel(){

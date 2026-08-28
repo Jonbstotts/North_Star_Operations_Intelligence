@@ -840,7 +840,7 @@ public final class SettingsDialog extends JDialog {
 
     private void updateThemePreview(){
         AppTheme t=(AppTheme)themeSelector.getSelectedItem();
-        if(t==null)t=AppTheme.DARK;
+        if(t==null)t=AppTheme.FLATLAF_DARK;
 
         themePreview.removeAll();
         themePreview.setLayout(new GridLayout(1,4,8,8));
