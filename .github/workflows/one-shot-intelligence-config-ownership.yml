@@ -1,0 +1,102 @@
+name: One-shot Intelligence config ownership cleanup
+
+on:
+  push:
+    branches: [ master ]
+    paths:
+      - '.github/workflows/one-shot-intelligence-config-ownership.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: master
+          fetch-depth: 0
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '21'
+      - name: Consolidate Intelligence setting ownership
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+
+          app=Path('src/com/wtm/config/AppConfig.java')
+          s=app.read_text()
+          anchor='''    public final List<String> workspaceModules = new ArrayList<>(List.of(\n            "WEATHER",\n            "TRAFFIC_MAP",\n            "UPCOMING_EVENTS",\n            "TEAM_CELEBRATIONS",\n            "OPERATIONS_SNAPSHOT"\n    ));\n\n'''
+          insert=anchor+'''    /** Source-owned toggle for the optional NorthStar Intelligence dashboard/route integration. */\n    public boolean workspaceIntelligenceEnabled = true;\n\n'''
+          if s.count(anchor)!=1: raise SystemExit('AppConfig workspaceModules anchor mismatch')
+          app.write_text(s.replace(anchor,insert))
+
+          cfg=Path('src/com/wtm/config/ConfigService.java')
+          s=cfg.read_text()
+          anchor='''            if(cfg.workspaceModules.isEmpty())\n                cfg.workspaceModules.addAll(java.util.List.of(\n                        "WEATHER","TRAFFIC_MAP","UPCOMING_EVENTS",\n                        "TEAM_CELEBRATIONS","OPERATIONS_SNAPSHOT"));\n\n'''
+          insert=anchor+'''            String intelligenceSetting=p.getProperty("workspace.intelligence.enabled");\n            if(intelligenceSetting!=null){\n                cfg.workspaceIntelligenceEnabled=Boolean.parseBoolean(intelligenceSetting.trim());\n            }else if(cfg.workspaceModules.stream().anyMatch(\n                    value->"NORTHSTAR_INTELLIGENCE".equalsIgnoreCase(value))){\n                cfg.workspaceIntelligenceEnabled=true;\n            }else{\n                // One-time compatibility fallback for builds that stored this toggle\n                // only in java.util.prefs. New saves persist it in config.properties.\n                cfg.workspaceIntelligenceEnabled=java.util.prefs.Preferences.userRoot()\n                        .node("com/wtm/northstar/workspace")\n                        .getBoolean("dashboard.intelligence.enabled",true);\n            }\n            cfg.workspaceModules.removeIf(\n                    value->"NORTHSTAR_INTELLIGENCE".equalsIgnoreCase(value));\n\n'''
+          if s.count(anchor)!=1: raise SystemExit('ConfigService load anchor mismatch')
+          s=s.replace(anchor,insert)
+          save_anchor='''            p.setProperty("workspaceModules",String.join(",",cfg.workspaceModules));\n'''
+          save_insert=save_anchor+'''            p.setProperty("workspace.intelligence.enabled",\n                    Boolean.toString(cfg.workspaceIntelligenceEnabled));\n'''
+          if s.count(save_anchor)!=1: raise SystemExit('ConfigService save anchor mismatch')
+          cfg.write_text(s.replace(save_anchor,save_insert))
+
+          life=Path('src/com/wtm/modular/ui/WorkspaceLifecycleV3.java')
+          s=life.read_text()
+          s=s.replace('import java.util.prefs.Preferences;\n','')
+          for old in [
+              '    private static final String INTELLIGENCE_TOKEN = "NORTHSTAR_INTELLIGENCE";\n',
+              '    private static final String INTELLIGENCE_PREF = "dashboard.intelligence.enabled";\n\n',
+              '    private static final Preferences WORKSPACE_PREFS =\n            Preferences.userRoot().node("com/wtm/northstar/workspace");\n'
+          ]:
+              if old not in s: raise SystemExit(f'WorkspaceLifecycle missing expected fragment: {old!r}')
+              s=s.replace(old,'')
+          s=s.replace('if (intelligenceEnabled()) AiEnabledMain.injectDashboard(workspace);',
+                      'if (intelligenceEnabled(workspace)) AiEnabledMain.injectDashboard(workspace);')
+          old='''    private static boolean intelligenceEnabled() {\n        return WORKSPACE_PREFS.getBoolean(INTELLIGENCE_PREF, true);\n    }\n'''
+          new='''    private static boolean intelligenceEnabled(OperationsWorkspaceFrame workspace) {\n        AppConfig cfg=workspace.workspaceConfigForExtensions();\n        return cfg==null||cfg.workspaceIntelligenceEnabled;\n    }\n'''
+          if s.count(old)!=1: raise SystemExit('intelligenceEnabled method anchor mismatch')
+          s=s.replace(old,new)
+          old='''        JCheckBox intelligence=owner.registerWorkspaceModuleToggle(\n                INTELLIGENCE_CHECK,"NorthStar Intelligence",intelligenceEnabled());\n        if(intelligence!=null)\n            setModuleToken(owner.workspaceConfigForExtensions(),\n                    INTELLIGENCE_TOKEN,intelligence.isSelected());\n'''
+          new='''        AppConfig cfg=owner.workspaceConfigForExtensions();\n        JCheckBox intelligence=owner.registerWorkspaceModuleToggle(\n                INTELLIGENCE_CHECK,"NorthStar Intelligence",\n                cfg==null||cfg.workspaceIntelligenceEnabled);\n'''
+          if s.count(old)!=1: raise SystemExit('inject Intelligence toggle anchor mismatch')
+          s=s.replace(old,new)
+          old='''        JCheckBox intelligence=owner.workspaceModuleToggle(INTELLIGENCE_CHECK);\n        if(intelligence!=null){\n            WORKSPACE_PREFS.putBoolean(INTELLIGENCE_PREF,intelligence.isSelected());\n            setModuleToken(owner.workspaceConfigForExtensions(),\n                    INTELLIGENCE_TOKEN,intelligence.isSelected());\n        }\n'''
+          new='''        JCheckBox intelligence=owner.workspaceModuleToggle(INTELLIGENCE_CHECK);\n        AppConfig cfg=owner.workspaceConfigForExtensions();\n        if(intelligence!=null&&cfg!=null)\n            cfg.workspaceIntelligenceEnabled=intelligence.isSelected();\n'''
+          if s.count(old)!=1: raise SystemExit('persist Intelligence toggle anchor mismatch')
+          s=s.replace(old,new)
+          old='''    private static void setModuleToken(AppConfig cfg, String token, boolean enabled) {\n        if (cfg == null) return;\n        cfg.workspaceModules.removeIf(value -> token.equalsIgnoreCase(String.valueOf(value)));\n        if (enabled) cfg.workspaceModules.add(token);\n    }\n\n'''
+          if s.count(old)!=1: raise SystemExit('setModuleToken helper anchor mismatch')
+          s=s.replace(old,'')
+          life.write_text(s)
+
+          build=Path('build.sh')
+          s=build.read_text()
+          anchor='''# ConfigService is the sole owner of the canonical application-data root.\n# Features derive their storage paths from appDataDir() rather than rebuilding\n# the product directory literal independently.\nif grep -R -n --include='*.java' --exclude='ConfigService.java' -F '.northstar-operations-intelligence' src; then\n  echo "ERROR: canonical app-data directory literal escaped ConfigService ownership." >&2\n  exit 1\nfi\n\n'''
+          gate=anchor+'''# Intelligence enablement is canonical application configuration. The old\n# java.util.prefs value is read only by ConfigService as a compatibility fallback;\n# WorkspaceLifecycleV3 must not maintain a second source of truth.\nif grep -qE 'java\\.util\\.prefs|Preferences|WORKSPACE_PREFS|INTELLIGENCE_PREF|setModuleToken' src/com/wtm/modular/ui/WorkspaceLifecycleV3.java; then\n  echo "ERROR: Intelligence workspace enablement has duplicate Preferences ownership." >&2\n  exit 1\nfi\nif ! grep -Fq 'public boolean workspaceIntelligenceEnabled = true;' src/com/wtm/config/AppConfig.java || \\\n   ! grep -Fq 'workspace.intelligence.enabled' src/com/wtm/config/ConfigService.java; then\n  echo "ERROR: source-owned Intelligence configuration is missing." >&2\n  exit 1\nfi\n\n'''
+          if s.count(anchor)!=1: raise SystemExit('build.sh app-data gate anchor mismatch')
+          build.write_text(s.replace(anchor,gate))
+          PY
+          git diff --check
+          if grep -qE 'java\.util\.prefs|Preferences|WORKSPACE_PREFS|INTELLIGENCE_PREF|setModuleToken' src/com/wtm/modular/ui/WorkspaceLifecycleV3.java; then
+            echo 'Duplicate Intelligence Preferences ownership remains.' >&2
+            exit 1
+          fi
+          rm -rf /tmp/ns-out && mkdir -p /tmp/ns-out
+          javac --release 21 -encoding UTF-8 -d /tmp/ns-out $(find src -name '*.java')
+          bash build.sh
+      - name: Commit Intelligence config ownership
+        run: |
+          set -euo pipefail
+          git config user.name 'NorthStar Cleanup Bot'
+          git config user.email 'actions@users.noreply.github.com'
+          git add src/com/wtm/config/AppConfig.java \
+                  src/com/wtm/config/ConfigService.java \
+                  src/com/wtm/modular/ui/WorkspaceLifecycleV3.java \
+                  build.sh
+          git commit -m 'Make Intelligence enablement source-owned configuration'
+          git push origin master
