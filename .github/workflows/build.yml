@@ -84,21 +84,28 @@ jobs:
           ! grep -q 'COMPONENT_ADDED' src/com/wtm/ui/foundation/UiFoundationRuntime.java
           ! grep -q 'CONTAINER_EVENT_MASK' src/com/wtm/ui/foundation/UiFoundationRuntime.java
           ! grep -q 'ContainerEvent' src/com/wtm/ui/foundation/UiFoundationRuntime.java
-          ! grep -q 'addAWTEventListener' src/com/wtm/ui/ThemeCoreV216.java
-          ! grep -q 'WindowEvent' src/com/wtm/ui/ThemeCoreV216.java
-          ! grep -q 'ModuleManagerPanel' src/com/wtm/ui/ThemeCoreV216.java
-          ! grep -q 'UiFinalPolish.start' src/com/wtm/ui/ThemeStyler.java
-          ! grep -q 'ThemeCoreV216.start' src/com/wtm/ui/ThemeStyler.java
+          ! grep -q 'markSidebarRoutes' src/com/wtm/ui/foundation/UiFoundationRuntime.java
+          ! test -f src/com/wtm/ui/UiFinalPolish.java
+          ! test -f src/com/wtm/ui/ThemeCoreV216.java
+          ! grep -q 'ThemeCoreV216' src/com/wtm/ui/ThemeStyler.java
+          grep -q 'apple.awt.windowAppearance' src/com/wtm/ui/ThemeStyler.java
 
       - name: Presentation ownership regression
         run: |
           set -euo pipefail
-          ! grep -q 'java.lang.reflect' src/com/wtm/ui/ThemeCoreV216.java
-          ! grep -q 'getDeclaredField' src/com/wtm/ui/ThemeCoreV216.java
-          ! grep -q 'rotationTimer' src/com/wtm/ui/ThemeCoreV216.java
-          ! grep -q 'mainShowcaseMediaEnabled' src/com/wtm/ui/ThemeCoreV216.java
-          ! grep -q 'operationsAnnouncementsEnabled' src/com/wtm/ui/ThemeCoreV216.java
-          ! grep -q 'mainShowcaseIntervalSeconds' src/com/wtm/ui/ThemeCoreV216.java
+          ! test -f src/com/wtm/ui/UiFinalPolish.java
+          ! test -f src/com/wtm/ui/ThemeCoreV216.java
+          grep -q 'hideDirectoryColumn("Employee #")' src/com/wtm/ui/EmployeeOperationsPanel.java
+          grep -q 'split.setDividerSize(0)' src/com/wtm/ui/EmployeeOperationsPanel.java
+          grep -q 'scrollableSettingsPage' src/com/wtm/ui/SettingsDialog.java
+          grep -q 'VERTICAL_SCROLLBAR_AS_NEEDED' src/com/wtm/ui/SettingsDialog.java
+          grep -q 'HORIZONTAL_SCROLLBAR_NEVER' src/com/wtm/ui/SettingsDialog.java
+          ! grep -q 'java.lang.reflect' src/com/wtm/ui/ThemeStyler.java
+          ! grep -q 'getDeclaredField' src/com/wtm/ui/ThemeStyler.java
+          ! grep -q 'rotationTimer' src/com/wtm/ui/ThemeStyler.java
+          ! grep -q 'mainShowcaseMediaEnabled' src/com/wtm/ui/ThemeStyler.java
+          ! grep -q 'operationsAnnouncementsEnabled' src/com/wtm/ui/ThemeStyler.java
+          ! grep -q 'mainShowcaseIntervalSeconds' src/com/wtm/ui/ThemeStyler.java
 
       - name: Intelligence reconciliation regression
         run: |
