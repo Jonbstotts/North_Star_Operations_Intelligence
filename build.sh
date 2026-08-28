@@ -66,13 +66,33 @@ fi
 # Generic presentation compatibility shims have been retired. Feature layout
 # belongs to canonical source components and dialog platform theming belongs to
 # ThemeStyler directly.
-if [ -e src/com/wtm/ui/UiFinalPolish.java ] || [ -e src/com/wtm/ui/ThemeCoreV216.java ]; then
+if [ -e src/com/wtm/ui/UiFinalPolish.java ] || \
+   [ -e src/com/wtm/ui/ThemeCoreV216.java ] || \
+   [ -e src/com/wtm/ui/NorthStarThemeCompliance.java ]; then
   echo "ERROR: retired presentation compatibility shim returned to canonical source." >&2
   exit 1
 fi
 if grep -q 'ThemeCoreV216' src/com/wtm/ui/ThemeStyler.java || \
    ! grep -q 'apple.awt.windowAppearance' src/com/wtm/ui/ThemeStyler.java; then
   echo "ERROR: canonical dialog theme ownership is not fully contained in ThemeStyler." >&2
+  exit 1
+fi
+if ! grep -q 'ThemeStyler.apply(security, Theme.active())' src/com/wtm/modular/ui/TrustedEmailUiGuard.java; then
+  echo "ERROR: trusted-sender injected UI is not themed directly by its source owner." >&2
+  exit 1
+fi
+
+# The former global UI Foundation listener is retired. Initial workspace styling
+# is applied synchronously by OperationsWorkspaceFrame, while dialogs and late
+# feature surfaces theme themselves at construction/mount boundaries.
+if [ -e src/com/wtm/ui/foundation/UiFoundationRuntime.java ] || \
+   [ -e src/com/wtm/ui/foundation/UiFoundation.java ]; then
+  echo "ERROR: retired global UI Foundation runtime returned to canonical source." >&2
+  exit 1
+fi
+if grep -q 'UiFoundationRuntime' src/com/wtm/app/NorthStarMainStable.java || \
+   ! grep -q 'ThemeStyler.apply(this,Theme.active())' src/com/wtm/ui/OperationsWorkspaceFrame.java; then
+  echo "ERROR: canonical workspace theme ownership is not local to OperationsWorkspaceFrame." >&2
   exit 1
 fi
 
