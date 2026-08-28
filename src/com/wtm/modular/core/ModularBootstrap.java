@@ -1,7 +1,6 @@
 package com.wtm.modular.core;
 
 import com.wtm.modular.ui.ModuleUiCoordinatorLifecycle;
-import com.wtm.modular.ui.RuntimeStabilizer;
 import com.wtm.ui.MapPinStandardizer;
 import com.wtm.ui.foundation.UiFoundationRuntime;
 import javax.swing.SwingUtilities;
@@ -15,7 +14,6 @@ public final class ModularBootstrap {
             ModuleUiCoordinatorLifecycle.start();
             UiFoundationRuntime.start();
             MapPinStandardizer.start();
-            RuntimeStabilizer.start();
         };
         if(SwingUtilities.isEventDispatchThread())boot.run(); else SwingUtilities.invokeLater(boot);
     }
