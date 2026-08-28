@@ -19,8 +19,8 @@ import java.util.prefs.Preferences;
  *
  * <p>No global AWT listener, window scan, polling timer, reflection, or
  * component-added watcher is used. Canonical source owners call these
- * methods at concrete construction, route-mount, dashboard-mount, and
- * settings-save boundaries.</p>
+ * methods at concrete construction, dashboard-mount, and settings-save
+ * boundaries.</p>
  */
 public final class WorkspaceLifecycleV3 {
     private static final String MUSIC_MINI_MARKER = "northstar.music.mini";
@@ -57,11 +57,6 @@ public final class WorkspaceLifecycleV3 {
     public static void dashboardMounted(OperationsWorkspaceFrame workspace) {
         if (workspace == null) return;
         syncDynamicDashboard(workspace);
-    }
-
-    /** Called after a non-Dashboard route is mounted. */
-    public static void routeMounted(OperationsWorkspaceFrame workspace) {
-        if (workspace == null) return;
     }
 
     /** Called after Settings has built all authorized workspace controls. */
