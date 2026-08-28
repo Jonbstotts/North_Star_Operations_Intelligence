@@ -1,0 +1,62 @@
+name: FlatLaf phase two cleanup
+on:
+  push:
+    branches:
+      - master
+    paths:
+      - '.github/workflows/one-shot-flatlaf-phase2-cleanup.yml'
+permissions:
+  contents: write
+jobs:
+  cleanup:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: master
+          fetch-depth: 0
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '21'
+      - name: Remove retired custom control delegate
+        shell: bash
+        run: |
+          set -euo pipefail
+          git rm src/com/wtm/ui/ThemedComboBoxUI.java
+          python3 - <<'PY'
+          from pathlib import Path
+          p=Path('src/com/wtm/ui/SettingsDialog.java')
+          s=p.read_text()
+          s=s.replace('. North Star remains the base interface outside automatic holiday windows.</html>',
+                      '. Your selected FlatLaf theme remains the base interface outside automatic holiday windows.</html>')
+          p.write_text(s)
+
+          p=Path('build.sh')
+          s=p.read_text()
+          anchor="if [ ! -f lib/flatlaf-3.7.2.jar ] || [ ! -f lib/flatlaf-intellij-themes-3.7.2.jar ]; then\n"
+          gate=(
+              "# Real FlatLaf owns ordinary Swing controls. North Star may layer branded semantics,\n"
+              "# but custom ComboBox/TabbedPane look-and-feel delegates must not return.\n"
+              "if [ ! -f src/com/wtm/ui/ThemeManager.java ] || \\\n"
+              "   ! grep -Fq 'FlatDarkLaf.setup()' src/com/wtm/ui/ThemeManager.java || \\\n"
+              "   grep -qE 'ThemedComboBoxUI|BasicTabbedPaneUI' src/com/wtm/ui/ThemeStyler.java || \\\n"
+              "   [ -f src/com/wtm/ui/ThemedComboBoxUI.java ]; then\n"
+              "  echo \"ERROR: canonical theme ownership is not delegated to real FlatLaf.\" >&2\n"
+              "  exit 1\n"
+              "fi\n\n"
+          )
+          if gate not in s:
+              if s.count(anchor)!=1: raise SystemExit('FlatLaf build anchor mismatch')
+              s=s.replace(anchor,gate+anchor,1)
+          p.write_text(s)
+          PY
+          git diff --check
+          rm -rf /tmp/ns-out && mkdir -p /tmp/ns-out
+          javac --release 21 -Xlint:unchecked -Werror -encoding UTF-8 -cp 'lib/*' -d /tmp/ns-out $(find src -name '*.java')
+          bash build.sh
+          git config user.name 'NorthStar Cleanup Bot'
+          git config user.email 'actions@users.noreply.github.com'
+          git add -A src build.sh
+          git commit -m 'Retire custom Swing control theming after FlatLaf migration'
+          git push origin master
