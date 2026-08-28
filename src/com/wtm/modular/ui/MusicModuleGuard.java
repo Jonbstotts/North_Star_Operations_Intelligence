@@ -7,10 +7,6 @@ import com.wtm.ui.Theme;
 import javax.swing.*;
 import javax.swing.border.EmptyBorder;
 import java.awt.*;
-import java.awt.event.AWTEventListener;
-import java.awt.event.ActionEvent;
-import java.awt.event.ContainerEvent;
-import java.awt.event.WindowEvent;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
@@ -37,52 +33,43 @@ import java.util.concurrent.atomic.AtomicReference;
 /**
  * NorthStar Music & Audio workspace.
  *
+ * <p>This class is intentionally passive with respect to application lifecycle.
+ * WorkspaceLifecycleV3 owns activation and Save & Apply boundaries and calls the
+ * explicit methods below. No global AWT listener, component-added reaction, or
+ * delayed UI scheduler lives here.</p>
+ *
  * Provider-neutral control is exposed by MusicProvider. Apple Music is the
  * first provider. Playback is performed by MusicKit in a browser page served
  * only on 127.0.0.1; NorthStar never downloads or stores audio files.
  */
 public final class MusicModuleGuard {
-    private static final String WORKSPACE_CLASS="com.wtm.ui.OperationsWorkspaceFrame";
     private static final String ROUTE="Music & Audio";
     private static final String ROUTE_LABEL="♫  Music & Audio";
     private static final String MINI_MARK="northstar.music.mini";
-    private static boolean installed;
 
     private MusicModuleGuard(){}
 
-    public static synchronized void install(){
-        if(installed)return;
-        installed=true;
+    /** Retained only as a compatibility no-op for older callers. */
+    @Deprecated
+    public static void install(){
+        loadSettings();
+    }
+
+    public static void loadSettings(){
         MusicService.instance().load();
-
-        AWTEventListener listener=event->{
-            if(event instanceof WindowEvent we&&we.getID()==WindowEvent.WINDOW_OPENED){
-                if(isWorkspace(we.getWindow()))schedule(we.getWindow());
-            }else if(event instanceof ContainerEvent ce&&ce.getID()==ContainerEvent.COMPONENT_ADDED){
-                Window w=SwingUtilities.getWindowAncestor(ce.getChild());
-                if(isWorkspace(w))schedule(w);
-            }else if(event instanceof ActionEvent ae&&ae.getSource() instanceof AbstractButton b){
-                if("Save & Apply".equalsIgnoreCase(clean(b.getText()))){
-                    Window w=findWorkspace(SwingUtilities.getWindowAncestor(b));
-                    if(w!=null)schedule(w);
-                }
-            }
-        };
-        Toolkit.getDefaultToolkit().addAWTEventListener(listener,
-                AWTEvent.WINDOW_EVENT_MASK|AWTEvent.CONTAINER_EVENT_MASK|AWTEvent.ACTION_EVENT_MASK);
-        for(Window w:Window.getWindows())if(isWorkspace(w))schedule(w);
     }
 
-    private static void schedule(Window w){SwingUtilities.invokeLater(()->installWorkspace(w));}
-    private static boolean isWorkspace(Window w){return w!=null&&WORKSPACE_CLASS.equals(w.getClass().getName());}
-    private static Window findWorkspace(Window source){
-        if(isWorkspace(source))return source;
-        for(Window o=source==null?null:source.getOwner();o!=null;o=o.getOwner())if(isWorkspace(o))return o;
-        for(Window w:Window.getWindows())if(isWorkspace(w)&&w.isDisplayable())return w;
-        return null;
+    public static boolean dashboardPlayerEnabled(){
+        return MusicService.instance().settings.dashboardPlayer;
     }
 
-    private static void installWorkspace(Window w){
+    public static void setDashboardPlayerEnabled(boolean enabled){
+        MusicService service=MusicService.instance();
+        service.settings.dashboardPlayer=enabled;
+        service.save();
+    }
+
+    public static void installWorkspace(Window w){
         if(w==null||!w.isDisplayable())return;
         injectSidebar(w);
         injectDashboardPlayer(w);
@@ -133,10 +120,18 @@ public final class MusicModuleGuard {
         try{
             JPanel body=(JPanel)field(w,"dashboardBody");
             if(body==null||body.getParent()==null)return;
-            for(Component c:body.getComponents())if(c instanceof JComponent jc&&Boolean.TRUE.equals(jc.getClientProperty(MINI_MARK)))return;
+            if(findMarked(body,MINI_MARK)!=null)return;
             MiniPlayer mini=new MiniPlayer(w);mini.putClientProperty(MINI_MARK,Boolean.TRUE);mini.setAlignmentX(Component.LEFT_ALIGNMENT);mini.setMaximumSize(new Dimension(Integer.MAX_VALUE,72));
             int at=Math.min(2,body.getComponentCount());body.add(mini,at);body.add(Box.createVerticalStrut(10),Math.min(at+1,body.getComponentCount()));body.revalidate();body.repaint();
         }catch(ReflectiveOperationException ignored){}
+    }
+
+    private static Component findMarked(Container root,String marker){
+        for(Component c:root.getComponents()){
+            if(c instanceof JComponent jc&&Boolean.TRUE.equals(jc.getClientProperty(marker)))return c;
+            if(c instanceof Container child){Component found=findMarked(child,marker);if(found!=null)return found;}
+        }
+        return null;
     }
 
     private static Object field(Object o,String name)throws ReflectiveOperationException{Field f=o.getClass().getDeclaredField(name);f.setAccessible(true);return f.get(o);}
@@ -188,7 +183,7 @@ public final class MusicModuleGuard {
         }
         void open(Component parent){
             if(settings.developerToken==null||settings.developerToken.isBlank()){JOptionPane.showMessageDialog(parent,"Enter and save an Apple Music developer token first.\nNorthStar never receives your Apple ID password.","Apple Music Setup",JOptionPane.INFORMATION_MESSAGE);return;}
-            try{URI u=bridge();if(!Desktop.isDesktopSupported()||!Desktop.getDesktop().isSupported(Desktop.Action.BROWSE))throw new IOException("Browser integration unavailable");Desktop.getDesktop().browse(u);}catch(Exception e){JOptionPane.showMessageDialog(parent,"Unable to open Apple Music: "+e.getMessage(),"Apple Music",JOptionPane.ERROR_MESSAGE);}
+            try{URI u=bridge();if(!Desktop.isDesktopSupported()||!Desktop.getDesktop().isSupported(Desktop.Action.BROWSE))throw new IOException("Browser integration unavailable");Desktop.getDesktop().browse(u);}catch(Exception e){JOptionPane.showMessageDialog(parent,"Unable to open Apple Music: "+e.getMessage(),"NorthStar Music",JOptionPane.ERROR_MESSAGE);}
         }
         private void home(HttpExchange x)throws IOException{send(x,200,"text/html; charset=utf-8",playerHtml(settings.developerToken));}
         private void commands(HttpExchange x)throws IOException{send(x,200,"text/plain; charset=utf-8",command.getAndSet(""));}
@@ -215,56 +210,49 @@ let music=null;const DEV='__NORTHSTAR_DEV_TOKEN__';
 async function setup(){try{await MusicKit.configure({developerToken:DEV,app:{name:'NorthStar Operations Intelligence',build:'2.1.30'}});music=MusicKit.getInstance();status('MusicKit ready • authorize Apple Music');}catch(e){status('MusicKit setup failed: '+e);}}
 function status(s){document.getElementById('status').textContent=s;}
 async function auth(){try{await music.authorize();status('Connected • Apple Music');await sync();}catch(e){status('Authorization failed: '+e);}}
-async function sync(){try{if(!music)return;if(!music.isAuthorized)await music.authorize();const ut=music.musicUserToken;const r=await fetch('https://api.music.apple.com/v1/me/library/playlists?limit=100',{headers:{Authorization:'Bearer '+DEV,'Music-User-Token':ut}});if(!r.ok)throw new Error('Apple Music API '+r.status);const j=await r.json();const rows=(j.data||[]).map(p=>{const a=p.attributes||{},pp=a.playParams||{};return [p.id,pp.globalId||pp.id||p.id,a.name||p.id,(a.artwork&&a.artwork.url)||''].join('\t');});await post('/playlists',{items:rows.join('\n')});status('Connected • '+rows.length+' playlists synchronized');}catch(e){status('Playlist sync failed: '+e);}}
-async function post(path,data){await fetch(path,{method:'POST',headers:{'Content-Type':'application/x-www-form-urlencoded'},body:new URLSearchParams(data)});}
-async function exec(c){if(!music||!c)return;try{if(c==='sync')await sync();else if(c==='play')await music.play();else if(c==='pause')await music.pause();else if(c==='next')await music.skipToNextItem();else if(c==='prev')await music.skipToPreviousItem();else if(c.startsWith('playlist:')){await music.setQueue({playlist:c.substring(9)});await music.play();}else if(c.startsWith('volume:'))music.volume=Math.max(0,Math.min(1,Number(c.substring(7))));else if(c.startsWith('shuffle:'))music.shuffleMode=Number(c.substring(8));else if(c.startsWith('repeat:'))music.repeatMode=Number(c.substring(7));}catch(e){status('Playback command failed: '+e);}}
-async function beat(){try{const c=await (await fetch('/command',{cache:'no-store'})).text();if(c)await exec(c);if(music){const n=music.nowPlayingItem;const title=n&&n.title||'Nothing Playing',artist=n&&n.artistName||'',album=n&&n.albumName||'',artwork=n&&n.artworkURL||'';document.getElementById('now').textContent=title;document.getElementById('artist').textContent=artist;await post('/state',{title,artist,album,artwork,playing:String(!!music.isPlaying),current:String(music.currentPlaybackTime||0),duration:String(music.currentPlaybackDuration||0),volume:String(music.volume==null?.7:music.volume),connection:music.isAuthorized?'Connected • Apple Music':'MusicKit ready'});}}catch(e){}setTimeout(beat,900);}
-document.getElementById('auth').onclick=auth;document.getElementById('sync').onclick=sync;setup().then(beat);
+async function sync(){try{if(!music)return;if(!music.isAuthorized)await music.authorize();const ut=music.musicUserToken;const r=await fetch('https://api.music.apple.com/v1/me/library/playlists?limit=100',{headers:{Authorization:'Bearer '+DEV,'Music-User-Token':ut}});const j=await r.json();const rows=(j.data||[]).map(x=>[x.id,(x.attributes||{}).playParams?.id||x.id,(x.attributes||{}).name||'Playlist',(x.attributes||{}).artwork?.url||''].join('\\t')).join('\\n');await post('/playlists',{items:rows});status('Connected • '+(j.data||[]).length+' playlists');}catch(e){status('Playlist sync failed: '+e);}}
+async function post(url,o){const body=Object.entries(o).map(([k,v])=>encodeURIComponent(k)+'='+encodeURIComponent(v??'')).join('&');await fetch(url,{method:'POST',headers:{'Content-Type':'application/x-www-form-urlencoded'},body});}
+async function pump(){try{const r=await fetch('/command',{cache:'no-store'});const c=(await r.text()).trim();if(c&&music){if(c==='play')await music.play();else if(c==='pause')await music.pause();else if(c==='next')await music.skipToNextItem();else if(c==='prev')await music.skipToPreviousItem();else if(c.startsWith('playlist:')){const id=c.substring(9);await music.setQueue({playlist:id});await music.play();}else if(c.startsWith('volume:'))music.volume=Math.max(0,Math.min(1,Number(c.substring(7))));}if(music){const item=music.nowPlayingItem;const title=item?.title||'Nothing Playing';const artist=item?.artistName||'';document.getElementById('now').textContent=title;document.getElementById('artist').textContent=artist;await post('/state',{title,artist,album:item?.albumName||'',artwork:item?.artworkURL||'',playing:music.playbackState===2,current:music.currentPlaybackTime||0,duration:music.currentPlaybackDuration||0,volume:music.volume||0,connection:music.isAuthorized?'Connected • Apple Music':'Disconnected'});}}catch(e){}setTimeout(pump,1000);}
+document.getElementById('auth').onclick=auth;document.getElementById('sync').onclick=sync;document.addEventListener('musickitloaded',setup);if(window.MusicKit)setup();pump();
 </script></body></html>
 """;
             return html.replace("__NORTHSTAR_DEV_TOKEN__",js(developerToken));
         }
     }
 
-    // Full workspace --------------------------------------------------------
+    // Swing UI --------------------------------------------------------------
 
-    private static final class MusicPanel extends JPanel{
-        private final MusicService s=MusicService.instance();
-        private final DefaultListModel<MusicPlaylist> model=new DefaultListModel<>();
-        private final JList<MusicPlaylist> list=new JList<>(model);
-        private final JLabel status=new JLabel(),title=new JLabel("Nothing Playing"),artist=new JLabel(),time=new JLabel("0:00 / 0:00");
-        private final JProgressBar progress=new JProgressBar(0,1000);
-        private final JSlider volume=new JSlider(0,100,70),bass=new JSlider(-12,12,0),mid=new JSlider(-12,12,0),treble=new JSlider(-12,12,0);
-        private final JPasswordField token=new JPasswordField();private final JCheckBox dashboard=new JCheckBox("Show compact player on Dashboard");
-        private final JTextField zone=new JTextField();private final JComboBox<String> preset=new JComboBox<>(new String[]{"Flat","Balanced","Speech Clarity","Bass Reduction","Warm","Custom"});
-        private final javax.swing.Timer timer;
-
-        MusicPanel(Window w){
-            super(new BorderLayout());setBackground(Theme.bg());JPanel page=new JPanel();page.setBackground(Theme.bg());page.setLayout(new BoxLayout(page,BoxLayout.Y_AXIS));page.setBorder(new EmptyBorder(20,24,24,24));
-            page.add(header());page.add(Box.createVerticalStrut(12));page.add(provider());page.add(Box.createVerticalStrut(12));JPanel columns=new JPanel(new GridLayout(1,2,12,0));columns.setOpaque(false);columns.add(library());columns.add(controls());columns.setMaximumSize(new Dimension(Integer.MAX_VALUE,650));page.add(columns);
-            JScrollPane sc=new JScrollPane(page);sc.setBorder(null);sc.getViewport().setBackground(Theme.bg());sc.getVerticalScrollBar().setUnitIncrement(18);add(sc,BorderLayout.CENTER);timer=new javax.swing.Timer(900,e->refresh());timer.start();refresh();
+    static final class MusicPanel extends JPanel{
+        private final Window owner;private final MusicService service=MusicService.instance();
+        private final DefaultComboBoxModel<MusicPlaylist> playlistModel=new DefaultComboBoxModel<>();
+        private final JComboBox<MusicPlaylist> playlists=new JComboBox<>(playlistModel);
+        private final JLabel state=new JLabel("Apple Music • not connected");
+        private final JTextField token=new JTextField();
+        MusicPanel(Window owner){super(new BorderLayout());this.owner=owner;setBackground(Theme.bg());setBorder(new EmptyBorder(22,22,22,22));build();refresh();}
+        private void build(){
+            JPanel top=new JPanel(new BorderLayout(14,14));top.setOpaque(false);JLabel title=new JLabel("Music & Audio");title.setForeground(Theme.text());title.setFont(title.getFont().deriveFont(Font.BOLD,26f));top.add(title,BorderLayout.WEST);state.setForeground(Theme.muted());top.add(state,BorderLayout.SOUTH);add(top,BorderLayout.NORTH);
+            JPanel body=new JPanel();body.setOpaque(false);body.setLayout(new BoxLayout(body,BoxLayout.Y_AXIS));body.setBorder(new EmptyBorder(22,0,0,0));
+            body.add(section("Apple Music",applePanel()));body.add(Box.createVerticalStrut(14));body.add(section("Playback",playbackPanel()));body.add(Box.createVerticalStrut(14));body.add(section("Facility Audio",facilityPanel()));
+            JScrollPane scroll=new JScrollPane(body);scroll.setBorder(null);scroll.setOpaque(false);scroll.getViewport().setOpaque(false);scroll.getVerticalScrollBar().setUnitIncrement(18);add(scroll,BorderLayout.CENTER);
         }
-        @Override public void removeNotify(){timer.stop();super.removeNotify();}
-        private JComponent header(){JPanel p=new JPanel();p.setOpaque(false);p.setLayout(new BoxLayout(p,BoxLayout.Y_AXIS));p.setAlignmentX(Component.LEFT_ALIGNMENT);JLabel h=new JLabel("Music & Audio");h.setForeground(Theme.text());h.setFont(new Font(Font.SANS_SERIF,Font.BOLD,25));JLabel sub=new JLabel("Apple Music playlists, playback control, facility audio zones and provider-ready audio settings");sub.setForeground(Theme.muted());sub.setFont(new Font(Font.SANS_SERIF,Font.PLAIN,12));p.add(h);p.add(sub);return p;}
-        private JComponent provider(){JPanel c=card("APPLE MUSIC • PROVIDER CONNECTION");c.setLayout(new BorderLayout(8,8));JPanel top=new JPanel(new BorderLayout());top.setOpaque(false);JLabel help=muted("Authorize in the browser. NorthStar receives playlist metadata and playback state only.");top.add(help,BorderLayout.WEST);status.setForeground(new Color(45,205,142));top.add(status,BorderLayout.EAST);c.add(top,BorderLayout.NORTH);JPanel row=new JPanel(new GridBagLayout());row.setOpaque(false);GridBagConstraints g=g();g.gridx=0;row.add(text("Developer token"),g);g.gridx=1;g.weightx=1;token.setText(s.settings.developerToken);fieldStyle(token);row.add(token,g);g.gridx=2;g.weightx=0;JButton save=button("Save Token");save.addActionListener(e->{s.settings.developerToken=new String(token.getPassword()).trim();s.save();});row.add(save,g);g.gridx=3;JButton open=button("Open / Authorize Apple Music");open.addActionListener(e->s.open(this));row.add(open,g);c.add(row,BorderLayout.CENTER);c.add(muted("Requires an Apple Music developer token. Apple ID credentials remain with Apple and are never entered into NorthStar."),BorderLayout.SOUTH);return c;}
-        private JComponent library(){JPanel c=card("PLAYLIST LIBRARY • READ ONLY");c.setLayout(new BorderLayout(0,8));list.setBackground(Theme.panel2());list.setForeground(Theme.text());list.setSelectionBackground(Theme.accent());list.setSelectionForeground(Color.WHITE);list.setFixedCellHeight(34);JScrollPane sc=new JScrollPane(list);sc.setBorder(BorderFactory.createLineBorder(Theme.border()));c.add(sc,BorderLayout.CENTER);JPanel b=new JPanel(new FlowLayout(FlowLayout.LEFT,6,0));b.setOpaque(false);JButton play=button("Play Selected");play.addActionListener(e->{MusicPlaylist p=list.getSelectedValue();if(p!=null)s.command("playlist:"+p.playId());});JButton sync=button("Refresh from Apple Music");sync.addActionListener(e->s.command("sync"));b.add(play);b.add(sync);c.add(b,BorderLayout.SOUTH);return c;}
-        private JComponent controls(){JPanel p=new JPanel();p.setOpaque(false);p.setLayout(new BoxLayout(p,BoxLayout.Y_AXIS));p.add(now());p.add(Box.createVerticalStrut(10));p.add(playback());p.add(Box.createVerticalStrut(10));p.add(audio());return p;}
-        private JComponent now(){JPanel c=card("NOW PLAYING");c.setLayout(new BorderLayout(8,8));JPanel words=new JPanel();words.setOpaque(false);words.setLayout(new BoxLayout(words,BoxLayout.Y_AXIS));title.setForeground(Theme.text());title.setFont(new Font(Font.SANS_SERIF,Font.BOLD,18));artist.setForeground(Theme.muted());words.add(title);words.add(artist);c.add(words,BorderLayout.NORTH);JPanel center=new JPanel();center.setOpaque(false);center.setLayout(new BoxLayout(center,BoxLayout.Y_AXIS));progress.setForeground(Theme.accent());progress.setBackground(Theme.panel2());center.add(progress);time.setForeground(Theme.muted());center.add(time);JPanel ctl=new JPanel(new FlowLayout(FlowLayout.CENTER,8,6));ctl.setOpaque(false);for(String[] q:new String[][]{{"⏮","prev"},{"▶","play"},{"Ⅱ","pause"},{"⏭","next"}}){JButton b=button(q[0]);b.addActionListener(e->s.command(q[1]));ctl.add(b);}center.add(ctl);c.add(center,BorderLayout.CENTER);JPanel v=new JPanel(new BorderLayout(8,0));v.setOpaque(false);v.add(text("Volume"),BorderLayout.WEST);volume.addChangeListener(e->{if(!volume.getValueIsAdjusting())s.command("volume:"+(volume.getValue()/100.0));});v.add(volume,BorderLayout.CENTER);c.add(v,BorderLayout.SOUTH);return c;}
-        private JComponent playback(){JPanel c=card("PLAYBACK SETTINGS");c.setLayout(new GridLayout(2,2,8,8));JToggleButton shuffle=new JToggleButton("Shuffle");style(shuffle);shuffle.addActionListener(e->s.command("shuffle:"+(shuffle.isSelected()?1:0)));JComboBox<String> repeat=new JComboBox<>(new String[]{"Repeat Off","Repeat Track","Repeat Playlist"});repeat.addActionListener(e->s.command("repeat:"+repeat.getSelectedIndex()));dashboard.setOpaque(false);dashboard.setForeground(Theme.text());dashboard.setSelected(s.settings.dashboardPlayer);dashboard.addActionListener(e->{s.settings.dashboardPlayer=dashboard.isSelected();s.save();});c.add(shuffle);c.add(repeat);c.add(dashboard);c.add(muted("Playlist editing remains in Apple Music"));return c;}
-        private JComponent audio(){JPanel c=card("FACILITY AUDIO ZONE / EQ PROFILE");c.setLayout(new GridBagLayout());zone.setText(s.settings.facilityZone);fieldStyle(zone);preset.setSelectedItem(s.settings.eqPreset);bass.setValue(s.settings.bass);mid.setValue(s.settings.mid);treble.setValue(s.settings.treble);int y=0;for(Object[] r:new Object[][]{{"Audio zone",zone},{"EQ preset",preset},{"Bass",bass},{"Mid",mid},{"Treble",treble}}){GridBagConstraints g=g();g.gridy=y;g.gridx=0;c.add(text((String)r[0]),g);g.gridx=1;g.weightx=1;c.add((Component)r[1],g);y++;}JButton save=button("Save Facility Audio Profile");save.addActionListener(e->{s.settings.facilityZone=zone.getText().trim();s.settings.eqPreset=String.valueOf(preset.getSelectedItem());s.settings.bass=bass.getValue();s.settings.mid=mid.getValue();s.settings.treble=treble.getValue();s.save();});GridBagConstraints g=g();g.gridy=y++;g.gridx=0;g.gridwidth=2;c.add(save,g);g.gridy=y;c.add(muted("EQ is stored as an output/DSP profile. This build does not alter the protected Apple Music stream; a hardware or OS DSP adapter can consume these settings later."),g);return c;}
-        private void refresh(){PlaybackState st=s.playback();status.setText(s.connected()?"● CONNECTED • Apple Music":"○ NOT AUTHORIZED");title.setText(st.title());artist.setText(st.artist().isBlank()?st.connection():st.artist());double d=Math.max(0,st.duration()),cur=Math.max(0,st.current());progress.setValue(d<=0?0:(int)Math.min(1000,1000*cur/d));time.setText(clock(cur)+" / "+clock(d));if(!volume.getValueIsAdjusting())volume.setValue((int)Math.round(Math.max(0,Math.min(1,st.volume()))*100));List<MusicPlaylist> p=s.playlists();if(!same(p)){model.clear();for(MusicPlaylist x:p)model.addElement(x);}}
-        private boolean same(List<MusicPlaylist> p){if(model.size()!=p.size())return false;for(int i=0;i<p.size();i++)if(!Objects.equals(model.get(i).id(),p.get(i).id()))return false;return true;}
-        private static String clock(double sec){int n=(int)Math.max(0,sec);return n/60+":"+String.format("%02d",n%60);}
-        private JPanel card(String title){JPanel p=new JPanel(new BorderLayout(0,8));p.setBackground(Theme.panel());p.setBorder(BorderFactory.createCompoundBorder(BorderFactory.createLineBorder(Theme.border()),new EmptyBorder(12,12,12,12)));p.setAlignmentX(Component.LEFT_ALIGNMENT);JLabel h=text(title);h.setFont(new Font(Font.SANS_SERIF,Font.BOLD,11));p.add(h,BorderLayout.NORTH);return p;}
-        private JLabel text(String s){JLabel l=new JLabel(s);l.setForeground(Theme.text());l.setFont(new Font(Font.SANS_SERIF,Font.PLAIN,11));return l;}private JLabel muted(String s){JLabel l=new JLabel(s);l.setForeground(Theme.muted());l.setFont(new Font(Font.SANS_SERIF,Font.PLAIN,10));return l;}private JButton button(String s){JButton b=new JButton(s);style(b);return b;}private void style(AbstractButton b){b.setFocusPainted(false);b.setForeground(Theme.text());b.setBackground(Theme.panel2());b.setBorder(BorderFactory.createCompoundBorder(BorderFactory.createLineBorder(Theme.border()),new EmptyBorder(7,10,7,10)));}private void fieldStyle(JTextField f){f.setBackground(Theme.panel2());f.setForeground(Theme.text());f.setCaretColor(Theme.text());f.setBorder(BorderFactory.createCompoundBorder(BorderFactory.createLineBorder(Theme.border()),new EmptyBorder(7,8,7,8)));}private GridBagConstraints g(){GridBagConstraints g=new GridBagConstraints();g.insets=new Insets(4,4,4,4);g.fill=GridBagConstraints.HORIZONTAL;return g;}
+        private JPanel applePanel(){
+            JPanel p=flow();token.setText(service.settings.developerToken);token.setPreferredSize(new Dimension(430,34));p.add(new JLabel("Developer Token"));p.add(token);p.add(button("Save",()->{service.settings.developerToken=token.getText().trim();service.save();refresh();}));p.add(button("Authorize / Open Apple Music",()->service.open(this)));p.add(button("Refresh",this::refresh));return p;
+        }
+        private JPanel playbackPanel(){
+            JPanel p=flow();playlists.setPreferredSize(new Dimension(280,34));p.add(playlists);p.add(button("Play Playlist",()->{MusicPlaylist x=(MusicPlaylist)playlists.getSelectedItem();if(x!=null)service.command("playlist:"+x.playId());}));p.add(button("◀",()->service.command("prev")));p.add(button("▶",()->service.command("play")));p.add(button("❚❚",()->service.command("pause")));p.add(button("▶▶",()->service.command("next")));return p;
+        }
+        private JPanel facilityPanel(){
+            JPanel p=flow();JTextField zone=new JTextField(service.settings.facilityZone,18);JComboBox<String> eq=new JComboBox<>(new String[]{"Balanced","Voice","Bass Boost","Bright"});eq.setSelectedItem(service.settings.eqPreset);p.add(new JLabel("Zone"));p.add(zone);p.add(new JLabel("EQ"));p.add(eq);p.add(button("Save",()->{service.settings.facilityZone=zone.getText().trim();service.settings.eqPreset=Objects.toString(eq.getSelectedItem(),"Balanced");service.save();}));return p;
+        }
+        private JPanel section(String name,JComponent inner){JPanel p=new JPanel(new BorderLayout());p.setBackground(Theme.panel());p.setBorder(BorderFactory.createCompoundBorder(BorderFactory.createLineBorder(Theme.border()),new EmptyBorder(14,14,14,14)));JLabel h=new JLabel(name);h.setForeground(Theme.text());h.setFont(h.getFont().deriveFont(Font.BOLD,17f));p.add(h,BorderLayout.NORTH);p.add(inner,BorderLayout.CENTER);p.setMaximumSize(new Dimension(Integer.MAX_VALUE,180));return p;}
+        private JPanel flow(){JPanel p=new JPanel(new FlowLayout(FlowLayout.LEFT,9,10));p.setOpaque(false);return p;}
+        private JButton button(String s,Runnable r){JButton b=new JButton(s);b.addActionListener(e->r.run());return b;}
+        private void refresh(){playlistModel.removeAllElements();for(MusicPlaylist x:service.playlists())playlistModel.addElement(x);PlaybackState ps=service.playback();state.setText((service.connected()?"Connected":"Not connected")+" • "+ps.title()+("".equals(ps.artist())?"":" — "+ps.artist()));repaint();}
     }
 
-    // Dashboard compact controls ------------------------------------------
-
     private static final class MiniPlayer extends JPanel{
-        private final MusicService s=MusicService.instance();private final Window w;private final JLabel title=new JLabel("Nothing Playing"),artist=new JLabel("Apple Music not connected");private final JButton play=new JButton("▶");private final javax.swing.Timer timer;
-        MiniPlayer(Window w){super(new BorderLayout(10,0));this.w=w;setBackground(Theme.panel());setBorder(BorderFactory.createCompoundBorder(BorderFactory.createLineBorder(Theme.border()),new EmptyBorder(9,12,9,12)));JLabel icon=new JLabel("♫");icon.setForeground(Theme.accent());icon.setFont(new Font(Font.SANS_SERIF,Font.BOLD,23));add(icon,BorderLayout.WEST);JPanel words=new JPanel();words.setOpaque(false);words.setLayout(new BoxLayout(words,BoxLayout.Y_AXIS));title.setForeground(Theme.text());title.setFont(new Font(Font.SANS_SERIF,Font.BOLD,12));artist.setForeground(Theme.muted());artist.setFont(new Font(Font.SANS_SERIF,Font.PLAIN,10));words.add(title);words.add(artist);add(words,BorderLayout.CENTER);JPanel ctl=new JPanel(new FlowLayout(FlowLayout.RIGHT,5,0));ctl.setOpaque(false);JButton prev=new JButton("⏮"),next=new JButton("⏭"),open=new JButton("Open");prev.addActionListener(e->s.command("prev"));next.addActionListener(e->s.command("next"));play.addActionListener(e->s.command(s.playback().playing()?"pause":"play"));open.addActionListener(e->showMusic(w));ctl.add(prev);ctl.add(play);ctl.add(next);ctl.add(open);add(ctl,BorderLayout.EAST);timer=new javax.swing.Timer(1000,e->refresh());timer.start();refresh();}
-        @Override public void removeNotify(){timer.stop();super.removeNotify();}
-        private void refresh(){PlaybackState st=s.playback();title.setText(st.title());artist.setText(st.artist().isBlank()?st.connection():st.artist());play.setText(st.playing()?"Ⅱ":"▶");}
+        private final MusicService service=MusicService.instance();private final JLabel now=new JLabel();private final Window owner;
+        MiniPlayer(Window owner){super(new BorderLayout(10,0));this.owner=owner;setOpaque(false);setBorder(new EmptyBorder(7,10,7,10));JButton open=new JButton("Music");open.addActionListener(e->showMusic(owner));JPanel buttons=new JPanel(new FlowLayout(FlowLayout.RIGHT,5,0));buttons.setOpaque(false);for(String[] x:new String[][]{{"◀","prev"},{"▶","play"},{"❚❚","pause"},{"▶▶","next"}}){JButton b=new JButton(x[0]);b.addActionListener(e->service.command(x[1]));buttons.add(b);}now.setForeground(Theme.text());add(open,BorderLayout.WEST);add(now,BorderLayout.CENTER);add(buttons,BorderLayout.EAST);refresh();}
+        private void refresh(){PlaybackState p=service.playback();now.setText("♫  "+p.title()+("".equals(p.artist())?"":" — "+p.artist()));}
     }
 }
