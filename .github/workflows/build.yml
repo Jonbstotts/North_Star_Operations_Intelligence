@@ -46,13 +46,14 @@ jobs:
           ! grep -q 'StartupDashboardReadyGuard.*install' src/com/wtm/app/NorthStarMainStable.java
           ! grep -q 'MusicModuleGuard.*install' src/com/wtm/app/NorthStarMainStable.java
           ! grep -q 'DashboardGlyphArtGuard.*install' src/com/wtm/app/NorthStarMainStable.java
+          ! grep -q 'SidebarModulesGlyphGuard' src/com/wtm/app/NorthStarMainStable.java
+          ! test -f src/com/wtm/modular/ui/SidebarModulesGlyphGuard.java
           ! grep -q 'AnnouncementBorderGuard' src/com/wtm/app/NorthStarMainStable.java
           ! grep -q 'StartupUiGuard' src/com/wtm/app/NorthStarMainStable.java
           ! grep -q 'NetworkGeocodingService' src/com/wtm/app/NorthStarMainStable.java
           ! test -f src/com/wtm/modular/ui/RuntimeStabilizer.java
           ! grep -q 'RuntimeStabilizer' src/com/wtm/modular/core/ModularBootstrap.java
           ! grep -q 'COMPONENT_ADDED' src/com/wtm/modular/ui/TrustedEmailUiGuard.java
-          ! grep -q 'new Timer' src/com/wtm/modular/ui/SidebarModulesGlyphGuard.java
           grep -q 'COMPONENT_ADDED is cosmetic only' src/com/wtm/modular/ui/WorkspaceLifecycleV3.java
           grep -q 'WINDOW_ACTIVATED' src/com/wtm/modular/ui/WorkspaceLifecycleV3.java
           ! grep -q 'if (isWorkspace(window)) activateWorkspace(window);' src/com/wtm/modular/ui/WorkspaceLifecycleV3.java
@@ -120,7 +121,6 @@ jobs:
           javac --release 21 -encoding UTF-8 -d out $(find src -name '*.java')
           test -f out/com/wtm/modular/ui/MusicModuleGuard.class
           test -f out/com/wtm/modular/ui/WorkspaceLifecycleV3.class
-          test -f out/com/wtm/modular/ui/SidebarModulesGlyphGuard.class
           test -f out/com/wtm/modular/ui/TrustedEmailUiGuard.class
           test -f out/com/wtm/modular/ui/DashboardGlyphArtGuard.class
           test -f out/com/wtm/security/LocalSecurityHardening.class
@@ -149,7 +149,6 @@ jobs:
           for entry in \
             com/wtm/modular/ui/MusicModuleGuard.class \
             com/wtm/modular/ui/WorkspaceLifecycleV3.class \
-            com/wtm/modular/ui/SidebarModulesGlyphGuard.class \
             com/wtm/modular/ui/TrustedEmailUiGuard.class \
             com/wtm/modular/ui/DashboardGlyphArtGuard.class \
             com/wtm/security/LocalSecurityHardening.class \
