@@ -69,6 +69,13 @@ if grep -q 'polishModulesOrganization' src/com/wtm/ui/UiFinalPolish.java; then
   exit 1
 fi
 
+# Truck Tracking is no longer represented by a canonical TruckTrackingPanel;
+# stale pre-paint code must not silently target the archived legacy class.
+if grep -qE 'TruckTrackingPanel|polishTruckTracking|Playback / Live Map' src/com/wtm/ui/UiFinalPolish.java; then
+  echo "ERROR: dead Truck Tracking compatibility polish returned to UiFinalPolish." >&2
+  exit 1
+fi
+
 # Dynamic workspace integrations must use the canonical source-backed extension
 # API instead of reflecting into OperationsWorkspaceFrame private implementation
 # details. Keep these checks in build.sh so local release builds and CI enforce
