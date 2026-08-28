@@ -38,10 +38,10 @@ jobs:
 
           frame=Path('src/com/wtm/ui/OperationsWorkspaceFrame.java')
           text=frame.read_text(encoding='utf-8')
-          old='''        buildUi();\n        startRefreshers();'''
-          new='''        buildUi();\n        ThemeStyler.apply(this,Theme.active());\n        startRefreshers();'''
+          old='''        overlayEffects.setVisible(true);\n\n        buildUi();\n        startRefreshers();'''
+          new='''        overlayEffects.setVisible(true);\n\n        buildUi();\n        ThemeStyler.apply(this,Theme.active());\n        startRefreshers();'''
           if text.count(old)!=1:
-              raise SystemExit(f'workspace theme anchor mismatch: {text.count(old)}')
+              raise SystemExit(f'workspace constructor theme anchor mismatch: {text.count(old)}')
           frame.write_text(text.replace(old,new,1),encoding='utf-8')
           PY
           git rm src/com/wtm/ui/foundation/UiFoundationRuntime.java src/com/wtm/ui/foundation/UiFoundation.java
