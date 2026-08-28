@@ -245,7 +245,7 @@ public final class OperationsWorkspaceFrame extends JFrame {
         workspaceContentHost.setBackground(Theme.bg());
         workspace.add(workspaceContentHost,BorderLayout.CENTER);
 
-        SwingUtilities.invokeLater(this::showDashboardRoute);
+        showDashboardRoute();
         return workspace;
     }
 
