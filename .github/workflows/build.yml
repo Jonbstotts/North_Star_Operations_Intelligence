@@ -74,6 +74,10 @@ jobs:
           ! grep -q 'AWTEventListener' src/com/wtm/modular/ui/MusicModuleGuard.java
           ! grep -q 'COMPONENT_ADDED' src/com/wtm/modular/ui/MusicModuleGuard.java
           ! grep -q 'new Timer' src/com/wtm/modular/ui/MusicModuleGuard.java
+          grep -q 'WINDOW_OPENED' src/com/wtm/ui/foundation/UiFoundationRuntime.java
+          ! grep -q 'COMPONENT_ADDED' src/com/wtm/ui/foundation/UiFoundationRuntime.java
+          ! grep -q 'CONTAINER_EVENT_MASK' src/com/wtm/ui/foundation/UiFoundationRuntime.java
+          ! grep -q 'ContainerEvent' src/com/wtm/ui/foundation/UiFoundationRuntime.java
 
       - name: Presentation polish regression
         run: |
