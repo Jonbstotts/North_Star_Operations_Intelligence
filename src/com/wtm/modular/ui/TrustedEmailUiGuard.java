@@ -8,73 +8,24 @@ import com.wtm.ui.Theme;
 import javax.swing.*;
 import javax.swing.border.EmptyBorder;
 import java.awt.*;
-import java.awt.event.*;
+import java.awt.event.ActionListener;
 import java.util.Set;
 
 /**
- * Visible trusted-sender management for the Gmail DataPath connector.
+ * Passive trusted-sender management for the Gmail DataPath connector.
  *
- * Security remains fail-closed: no configured trusted senders means Gmail
- * document ingestion is blocked. Injection runs only at explicit workspace
- * boundaries instead of scanning every Swing component-add event.
+ * <p>Security remains fail-closed: no configured trusted senders means Gmail
+ * document ingestion is blocked. This class owns no global AWT listener or
+ * delayed lifecycle; WorkspaceLifecycleV3 invokes {@link #apply(Component)} at
+ * explicit workspace/navigation boundaries.</p>
  */
 public final class TrustedEmailUiGuard {
-    private static final String WORKSPACE_CLASS = "com.wtm.ui.OperationsWorkspaceFrame";
     private static final String INSTALLED = "northstar.gmail.trustedSenderUi";
-    private static boolean installed;
 
     private TrustedEmailUiGuard() {}
 
-    public static synchronized void install() {
-        if (installed) return;
-        installed = true;
-
-        Toolkit.getDefaultToolkit().addAWTEventListener(event -> {
-            if (event instanceof WindowEvent we
-                    && we.getID() == WindowEvent.WINDOW_OPENED
-                    && isWorkspace(we.getWindow())) {
-                SwingUtilities.invokeLater(() -> scan(we.getWindow()));
-                return;
-            }
-
-            if (event instanceof ActionEvent ae
-                    && ae.getSource() instanceof AbstractButton button) {
-                String text = clean(button.getText()).toLowerCase();
-                if (!text.contains("data collection")
-                        && !text.contains("gmail")
-                        && !text.contains("datapath")) {
-                    return;
-                }
-                Window workspace = findWorkspace(
-                        SwingUtilities.getWindowAncestor(button));
-                if (workspace != null) {
-                    SwingUtilities.invokeLater(() -> scan(workspace));
-                }
-            }
-        }, AWTEvent.WINDOW_EVENT_MASK | AWTEvent.ACTION_EVENT_MASK);
-
-        for (Window window : Window.getWindows()) {
-            if (isWorkspace(window) && window.isDisplayable()) scan(window);
-        }
-    }
-
-    private static boolean isWorkspace(Window window) {
-        return window != null && WORKSPACE_CLASS.equals(window.getClass().getName());
-    }
-
-    private static Window findWorkspace(Window source) {
-        for (Window current = source; current != null; current = current.getOwner()) {
-            if (isWorkspace(current)) return current;
-        }
-        for (Window window : Window.getWindows()) {
-            if (isWorkspace(window) && window.isDisplayable()) return window;
-        }
-        return null;
-    }
-
-    private static String clean(String text) {
-        if (text == null) return "";
-        return text.replaceAll("^[^A-Za-z0-9]+", "").trim();
+    public static void apply(Component component) {
+        scan(component);
     }
 
     private static void scan(Component component) {
