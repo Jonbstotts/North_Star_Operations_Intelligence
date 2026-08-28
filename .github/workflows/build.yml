@@ -65,6 +65,8 @@ jobs:
           grep -q 'AiEnabledMain.injectDashboard' src/com/wtm/modular/ui/WorkspaceLifecycleV3.java
           grep -q 'MusicModuleGuard.installWorkspace' src/com/wtm/modular/ui/WorkspaceLifecycleV3.java
           grep -q 'TrustedEmailUiGuard.apply' src/com/wtm/modular/ui/WorkspaceLifecycleV3.java
+          ! grep -q 'SwingUtilities.invokeLater(this::showDashboardRoute)' src/com/wtm/ui/OperationsWorkspaceFrame.java
+          grep -q 'showDashboardRoute();' src/com/wtm/ui/OperationsWorkspaceFrame.java
           ! grep -q 'AWTEventListener' src/com/wtm/modular/ui/TrustedEmailUiGuard.java
           ! grep -q 'addAWTEventListener' src/com/wtm/modular/ui/TrustedEmailUiGuard.java
           ! grep -q 'COMPONENT_ADDED' src/com/wtm/modular/ui/TrustedEmailUiGuard.java
