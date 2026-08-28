@@ -4,7 +4,8 @@ import com.wtm.ui.NorthStarDashboardGlyphs;
 
 import javax.swing.*;
 import java.awt.*;
-import java.awt.event.*;
+import java.awt.event.ActionEvent;
+import java.awt.event.WindowEvent;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
@@ -12,11 +13,14 @@ import java.util.Locale;
 /**
  * Applies supplied high-resolution NorthStar artwork to dashboard event and
  * recognition rows. Cosmetic only: no route/module/workspace mutation.
+ *
+ * <p>The guard is intentionally timer-free. It runs only when a workspace opens
+ * or when a user action reaches a real Dashboard/Save & Apply boundary; it does
+ * not watch every component insertion in the Swing application.</p>
  */
 public final class DashboardGlyphArtGuard {
     private static final String WORKSPACE_CLASS = "com.wtm.ui.OperationsWorkspaceFrame";
     private static boolean installed;
-    private static Timer pending;
 
     private DashboardGlyphArtGuard() {}
 
@@ -25,41 +29,49 @@ public final class DashboardGlyphArtGuard {
         installed = true;
 
         Toolkit.getDefaultToolkit().addAWTEventListener(event -> {
-            if (event instanceof WindowEvent we && we.getID() == WindowEvent.WINDOW_OPENED) {
-                if (isWorkspace(we.getWindow())) schedule(we.getWindow());
+            if (event instanceof WindowEvent we
+                    && we.getID() == WindowEvent.WINDOW_OPENED
+                    && isWorkspace(we.getWindow())) {
+                apply(we.getWindow());
                 return;
             }
-            if (event instanceof ContainerEvent ce && ce.getID() == ContainerEvent.COMPONENT_ADDED) {
-                Component child = ce.getChild();
-                Window window = child == null ? null : SwingUtilities.getWindowAncestor(child);
-                if (isWorkspace(window)) schedule(window);
-            }
-        }, AWTEvent.WINDOW_EVENT_MASK | AWTEvent.CONTAINER_EVENT_MASK);
 
-        for (Window window : Window.getWindows()) if (isWorkspace(window)) schedule(window);
+            if (event instanceof ActionEvent ae && ae.getSource() instanceof AbstractButton button) {
+                String text = clean(button.getText());
+                if (!"Dashboard".equalsIgnoreCase(text)
+                        && !text.endsWith("Dashboard")
+                        && !"Save & Apply".equalsIgnoreCase(text)) {
+                    return;
+                }
+                Window workspace = findWorkspace(SwingUtilities.getWindowAncestor(button));
+                if (workspace != null) SwingUtilities.invokeLater(() -> apply(workspace));
+            }
+        }, AWTEvent.WINDOW_EVENT_MASK | AWTEvent.ACTION_EVENT_MASK);
+
+        for (Window window : Window.getWindows()) {
+            if (isWorkspace(window) && window.isDisplayable()) apply(window);
+        }
     }
 
     private static boolean isWorkspace(Window window) {
         return window != null && WORKSPACE_CLASS.equals(window.getClass().getName());
     }
 
-    private static void schedule(Window window) {
-        if (window == null) return;
-        if (!SwingUtilities.isEventDispatchThread()) {
-            SwingUtilities.invokeLater(() -> schedule(window));
-            return;
+    private static Window findWorkspace(Window source) {
+        for (Window current = source; current != null; current = current.getOwner()) {
+            if (isWorkspace(current)) return current;
         }
-        if (pending == null) {
-            pending = new Timer(70, e -> {
-                pending.stop();
-                for (Window w : Window.getWindows()) if (isWorkspace(w) && w.isDisplayable()) apply(w);
-            });
-            pending.setRepeats(false);
+        for (Window window : Window.getWindows()) {
+            if (isWorkspace(window) && window.isDisplayable()) return window;
         }
-        pending.restart();
+        return null;
     }
 
-    private static void apply(Window window) {
+    private static String clean(String text) {
+        return text == null ? "" : text.replaceAll("^[^A-Za-z0-9]+", "").trim();
+    }
+
+    public static void apply(Window window) {
         if (!(window instanceof Container root)) return;
         Container events = findCard(root, "UPCOMING EVENTS");
         if (events != null) scanRows(events, false);
