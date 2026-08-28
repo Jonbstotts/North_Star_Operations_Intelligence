@@ -80,13 +80,13 @@ jobs:
           grep -q 'HORIZONTAL_SCROLLBAR_NEVER' src/com/wtm/modular/ui/MusicModuleGuard.java
           grep -q 'addComponentListener' src/com/wtm/modular/ui/MusicModuleGuard.java
           ! grep -q 'polishMusicTree' src/com/wtm/modular/ui/WorkspaceLifecycleV3.java
-          grep -q 'WINDOW_OPENED' src/com/wtm/ui/foundation/UiFoundationRuntime.java
-          ! grep -q 'COMPONENT_ADDED' src/com/wtm/ui/foundation/UiFoundationRuntime.java
-          ! grep -q 'CONTAINER_EVENT_MASK' src/com/wtm/ui/foundation/UiFoundationRuntime.java
-          ! grep -q 'ContainerEvent' src/com/wtm/ui/foundation/UiFoundationRuntime.java
-          ! grep -q 'markSidebarRoutes' src/com/wtm/ui/foundation/UiFoundationRuntime.java
+          ! test -f src/com/wtm/ui/foundation/UiFoundationRuntime.java
+          ! test -f src/com/wtm/ui/foundation/UiFoundation.java
+          ! grep -q 'UiFoundationRuntime' src/com/wtm/app/NorthStarMainStable.java
+          grep -q 'ThemeStyler.apply(this,Theme.active())' src/com/wtm/ui/OperationsWorkspaceFrame.java
           ! test -f src/com/wtm/ui/UiFinalPolish.java
           ! test -f src/com/wtm/ui/ThemeCoreV216.java
+          ! test -f src/com/wtm/ui/NorthStarThemeCompliance.java
           ! grep -q 'ThemeCoreV216' src/com/wtm/ui/ThemeStyler.java
           grep -q 'apple.awt.windowAppearance' src/com/wtm/ui/ThemeStyler.java
 
@@ -95,6 +95,8 @@ jobs:
           set -euo pipefail
           ! test -f src/com/wtm/ui/UiFinalPolish.java
           ! test -f src/com/wtm/ui/ThemeCoreV216.java
+          ! test -f src/com/wtm/ui/NorthStarThemeCompliance.java
+          grep -q 'ThemeStyler.apply(security, Theme.active())' src/com/wtm/modular/ui/TrustedEmailUiGuard.java
           grep -q 'hideDirectoryColumn("Employee #")' src/com/wtm/ui/EmployeeOperationsPanel.java
           grep -q 'split.setDividerSize(0)' src/com/wtm/ui/EmployeeOperationsPanel.java
           grep -q 'scrollableSettingsPage' src/com/wtm/ui/SettingsDialog.java
