@@ -4,7 +4,6 @@ import javax.swing.*;
 import javax.swing.border.*;
 import javax.swing.plaf.basic.BasicTabbedPaneUI;
 import java.awt.*;
-import java.util.Locale;
 
 /**
  * Recursively applies the active application theme to Swing component trees.
@@ -151,14 +150,7 @@ public final class ThemeStyler {
     }
 
     private static boolean isSidebarRouteButton(JButton button){
-        if(Boolean.TRUE.equals(button.getClientProperty("northstar.sidebar.route")))return true;
-        String className=button.getClass().getName();
-        if(className.contains("OperationsWorkspaceFrame$RoundedSidebarButton"))return true;
-        String text=button.getText();
-        if(text==null)return false;
-        String normalized=text.replaceAll("\\s+"," ").trim().toLowerCase(Locale.ROOT);
-        return normalized.contains("data collection")
-                ||normalized.contains("northstar intelligence");
+        return Boolean.TRUE.equals(button.getClientProperty("northstar.sidebar.route"));
     }
 
     private static void styleTextField(JTextField field,AppTheme theme){

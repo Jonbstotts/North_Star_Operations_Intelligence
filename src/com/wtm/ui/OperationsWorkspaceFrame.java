@@ -425,6 +425,7 @@ public final class OperationsWorkspaceFrame extends JFrame {
                 12
         ));
         button.setFocusPainted(false);
+        button.putClientProperty("northstar.sidebar.route",Boolean.TRUE);
         button.setBorder(new EmptyBorder(9,12,9,12));
         button.setMaximumSize(new Dimension(Integer.MAX_VALUE,42));
         button.setAlignmentX(Component.LEFT_ALIGNMENT);
@@ -465,7 +466,6 @@ public final class OperationsWorkspaceFrame extends JFrame {
 
         JButton button=createSidebarButton(label,false);
         if(componentName!=null&&!componentName.isBlank())button.setName(componentName);
-        button.putClientProperty("northstar.sidebar.route",Boolean.TRUE);
         button.putClientProperty("northstar.ui.skip",Boolean.TRUE);
         button.addActionListener(e->action.run());
         sidebarRouteButtons.put(route,button);
