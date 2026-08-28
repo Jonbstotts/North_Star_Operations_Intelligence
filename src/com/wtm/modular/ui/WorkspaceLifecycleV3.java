@@ -31,14 +31,14 @@ public final class WorkspaceLifecycleV3 {
 
     private static final Preferences WORKSPACE_PREFS =
             Preferences.userRoot().node("com/wtm/northstar/workspace");
-    private static boolean installed;
+    private static boolean bootstrapped;
 
     private WorkspaceLifecycleV3() {}
 
     /** Loads provider settings before the first workspace is constructed. */
-    public static synchronized void install() {
-        if (installed) return;
-        installed = true;
+    public static synchronized void bootstrap() {
+        if (bootstrapped) return;
+        bootstrapped = true;
         loadMusicSettings();
     }
 
