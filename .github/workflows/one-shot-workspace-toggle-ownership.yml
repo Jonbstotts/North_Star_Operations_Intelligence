@@ -1,0 +1,85 @@
+name: One-shot workspace toggle ownership cleanup
+
+on:
+  push:
+    branches: [ master ]
+    paths:
+      - '.github/workflows/one-shot-workspace-toggle-ownership.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: master
+          fetch-depth: 0
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '21'
+      - name: Move workspace toggle placement into SettingsDialog source API
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+
+          settings=Path('src/com/wtm/ui/SettingsDialog.java')
+          s=settings.read_text()
+
+          old='''    /** Returns this settings session configuration to trusted workspace integrations. */\n    public AppConfig workspaceConfigForExtensions(){\n        return cfg;\n    }\n'''
+          new='''    /** Returns this settings session configuration to trusted workspace integrations. */\n    public AppConfig workspaceConfigForExtensions(){\n        return cfg;\n    }\n\n    /**\n     * Registers an optional dashboard-module toggle in the canonical Workspace\n     * Setup module grid. Extension owners no longer need to discover controls\n     * by visible label text or walk the Settings component tree.\n     */\n    public JCheckBox registerWorkspaceModuleToggle(String marker,String label,boolean selected){\n        if(marker==null||marker.isBlank()||label==null||label.isBlank()||workspaceModulesPanel==null)return null;\n        JCheckBox existing=workspaceModuleToggle(marker);\n        if(existing!=null)return existing;\n        JCheckBox box=new JCheckBox(label,selected);\n        box.putClientProperty(marker,Boolean.TRUE);\n        workspaceModulesPanel.add(box);\n        workspaceModulesPanel.revalidate();\n        workspaceModulesPanel.repaint();\n        return box;\n    }\n\n    /** Returns a previously registered optional Workspace Setup module toggle. */\n    public JCheckBox workspaceModuleToggle(String marker){\n        if(marker==null||workspaceModulesPanel==null)return null;\n        for(Component component:workspaceModulesPanel.getComponents())\n            if(component instanceof JCheckBox box\n                    &&Boolean.TRUE.equals(box.getClientProperty(marker)))return box;\n        return null;\n    }\n'''
+          if s.count(old)!=1: raise SystemExit('Settings config accessor anchor mismatch')
+          s=s.replace(old,new)
+
+          old='''    private final JCheckBox workspaceInfoStrip=\n            new JCheckBox("Custom Information Blocks");\n'''
+          new='''    private final JCheckBox workspaceInfoStrip=\n            new JCheckBox("Custom Information Blocks");\n    private JPanel workspaceModulesPanel;\n'''
+          if s.count(old)!=1: raise SystemExit('Workspace module field anchor mismatch')
+          s=s.replace(old,new)
+
+          old='''        JPanel modules=new JPanel(new GridLayout(0,2,10,8));\n        modules.setBorder(BorderFactory.createTitledBorder("Home dashboard modules"));\n        modules.add(workspaceWeather);\n        modules.add(workspaceTrafficMap);\n        modules.add(workspaceEvents);\n        modules.add(workspaceCelebrations);\n        modules.add(workspaceOperationsSnapshot);\n        addFull(p,y++,modules);\n'''
+          new='''        workspaceModulesPanel=new JPanel(new GridLayout(0,2,10,8));\n        workspaceModulesPanel.setBorder(BorderFactory.createTitledBorder("Home dashboard modules"));\n        workspaceModulesPanel.add(workspaceWeather);\n        workspaceModulesPanel.add(workspaceTrafficMap);\n        workspaceModulesPanel.add(workspaceEvents);\n        workspaceModulesPanel.add(workspaceCelebrations);\n        workspaceModulesPanel.add(workspaceOperationsSnapshot);\n        addFull(p,y++,workspaceModulesPanel);\n'''
+          if s.count(old)!=1: raise SystemExit('Workspace modules panel anchor mismatch')
+          s=s.replace(old,new)
+          settings.write_text(s)
+
+          lifecycle=Path('src/com/wtm/modular/ui/WorkspaceLifecycleV3.java')
+          s=lifecycle.read_text()
+          s=s.replace('import java.util.Collections;\nimport java.util.IdentityHashMap;\nimport java.util.Set;\n','')
+
+          start=s.index('    private static void injectWorkspaceToggles(SettingsDialog owner) {')
+          end=s.index('    private static void setModuleToken(',start)
+          replacement='''    private static void injectWorkspaceToggles(SettingsDialog owner) {\n        JCheckBox intelligence=owner.registerWorkspaceModuleToggle(\n                INTELLIGENCE_CHECK,"NorthStar Intelligence",intelligenceEnabled());\n        if(intelligence!=null)\n            setModuleToken(owner.workspaceConfigForExtensions(),\n                    INTELLIGENCE_TOKEN,intelligence.isSelected());\n\n        owner.registerWorkspaceModuleToggle(\n                MUSIC_CHECK,"Music Compact Player",musicDashboardEnabled());\n    }\n\n    private static void persistWorkspaceToggles(SettingsDialog owner) {\n        JCheckBox intelligence=owner.workspaceModuleToggle(INTELLIGENCE_CHECK);\n        if(intelligence!=null){\n            WORKSPACE_PREFS.putBoolean(INTELLIGENCE_PREF,intelligence.isSelected());\n            setModuleToken(owner.workspaceConfigForExtensions(),\n                    INTELLIGENCE_TOKEN,intelligence.isSelected());\n        }\n\n        JCheckBox music=owner.workspaceModuleToggle(MUSIC_CHECK);\n        if(music!=null)setMusicDashboardEnabled(music.isSelected());\n    }\n\n'''
+          s=s[:start]+replacement+s[end:]
+
+          # Remove now-obsolete component discovery helpers that existed only to
+          # locate the Workspace Setup module grid and its injected checkboxes.
+          start=s.index('    private static JCheckBox findCheckBox(')
+          end=s.index('    private static void removeMarked(',start)
+          s=s[:start]+s[end:]
+          start=s.index('    private static String clean(')
+          end=s.index('\n}',start)
+          s=s[:start]+s[end:]
+
+          lifecycle.write_text(s)
+          PY
+          ! grep -q 'findCheckBox' src/com/wtm/modular/ui/WorkspaceLifecycleV3.java
+          ! grep -q 'commonParent' src/com/wtm/modular/ui/WorkspaceLifecycleV3.java
+          ! grep -q 'findMarkedCheckBox' src/com/wtm/modular/ui/WorkspaceLifecycleV3.java
+          grep -q 'registerWorkspaceModuleToggle' src/com/wtm/ui/SettingsDialog.java
+          grep -q 'workspaceModuleToggle' src/com/wtm/ui/SettingsDialog.java
+          grep -q 'workspaceModulesPanel' src/com/wtm/ui/SettingsDialog.java
+          git diff --check
+          rm -rf /tmp/ns-out && mkdir -p /tmp/ns-out
+          javac --release 21 -encoding UTF-8 -d /tmp/ns-out $(find src -name '*.java')
+      - name: Commit source-owned workspace toggles
+        run: |
+          set -euo pipefail
+          git config user.name 'NorthStar Cleanup Bot'
+          git config user.email 'actions@users.noreply.github.com'
+          git add src/com/wtm/ui/SettingsDialog.java src/com/wtm/modular/ui/WorkspaceLifecycleV3.java
+          git commit -m 'Make workspace module toggles source-owned'
+          git push origin master
