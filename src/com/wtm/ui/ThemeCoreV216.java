@@ -4,28 +4,23 @@ import javax.swing.*;
 import javax.swing.border.EmptyBorder;
 import javax.swing.table.TableColumn;
 import java.awt.*;
-import java.awt.event.WindowEvent;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.concurrent.atomic.AtomicBoolean;
 
-/** Shared NorthStar theme/layout core. */
+/**
+ * Shared NorthStar theme/layout core.
+ *
+ * ThemeCore is deliberately passive: callers hand it a concrete component
+ * tree and it normalizes that tree synchronously. Window lifecycle ownership
+ * belongs to UiFoundationRuntime rather than a second global listener here.
+ */
 public final class ThemeCoreV216 {
-    private static final AtomicBoolean STARTED=new AtomicBoolean(false);
     private static final String EMPLOYEE_PANEL_CLASS="com.wtm.ui.EmployeeOperationsPanel";
 
     private ThemeCoreV216(){}
 
-    public static void start(){
-        if(!STARTED.compareAndSet(false,true))return;
-        Toolkit.getDefaultToolkit().addAWTEventListener(event->{
-            if(event instanceof WindowEvent we
-                    &&we.getID()==WindowEvent.WINDOW_OPENED
-                    &&we.getWindow() instanceof JDialog dialog){
-                polishDialog(dialog);
-            }
-        },AWTEvent.WINDOW_EVENT_MASK);
-    }
+    /** Retained as a no-op compatibility entry point for existing callers. */
+    public static void start(){}
 
     /** Called synchronously for the root passed to ThemeStyler. */
     public static void applyImmediate(Component component){
