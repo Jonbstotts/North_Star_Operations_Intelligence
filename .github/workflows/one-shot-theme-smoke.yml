@@ -23,6 +23,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
+          mkdir -p ci
           cat > ci/ThemeSmokeTest.java <<'JAVA'
           import com.wtm.ui.AppTheme;
           import com.wtm.ui.Theme;
