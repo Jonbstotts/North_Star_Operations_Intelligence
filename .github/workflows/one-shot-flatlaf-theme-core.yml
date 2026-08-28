@@ -1,0 +1,392 @@
+name: FlatLaf theme core migration
+on:
+  push:
+    branches: [master]
+    paths:
+      - .github/workflows/one-shot-flatlaf-theme-core.yml
+permissions:
+  contents: write
+jobs:
+  migrate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: master
+          fetch-depth: 0
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '21'
+      - name: Replace custom control theming with real FlatLaf
+        shell: bash
+        run: |
+          set -euo pipefail
+          cat > src/com/wtm/ui/AppTheme.java <<'EOF'
+          package com.wtm.ui;
+
+          import java.awt.*;
+
+          /**
+           * Theme catalog. Ordinary application themes are genuine FlatLaf
+           * look-and-feels. North Star and holiday entries are intentional
+           * branded overlays on top of a real FlatLaf base.
+           */
+          public enum AppTheme {
+              NORTH_STAR("NORTH_STAR","North Star • Silver / Black",true,true,
+                      c(5,7,9),c(17,20,24),c(43,47,54),c(107,114,128),
+                      c(209,213,219),c(150,155,165),c(13,110,253)),
+
+              FLATLAF_LIGHT("FLATLAF_LIGHT","FlatLaf • Light",false,false,
+                      c(247,248,250),Color.WHITE,c(242,244,247),c(205,209,214),
+                      c(35,38,42),c(108,113,120),c(38,117,191)),
+              FLATLAF_DARK("FLATLAF_DARK","FlatLaf • Dark",true,false,
+                      c(60,63,65),c(69,73,74),c(76,80,82),c(96,99,102),
+                      c(238,238,238),c(174,177,179),c(75,110,175)),
+              FLATLAF_INTELLIJ("FLATLAF_INTELLIJ","FlatLaf • IntelliJ",false,false,
+                      c(242,242,242),Color.WHITE,c(248,248,248),c(198,198,198),
+                      c(30,30,30),c(105,105,105),c(53,116,240)),
+              FLATLAF_DARCULA("FLATLAF_DARCULA","FlatLaf • Darcula",true,false,
+                      c(43,43,43),c(60,63,65),c(69,73,74),c(85,85,85),
+                      c(187,187,187),c(150,150,150),c(74,136,199)),
+              ARC("ARC","FlatLaf • Arc",false,false,
+                      c(244,245,247),c(250,250,250),c(238,240,243),c(200,204,210),
+                      c(48,52,58),c(112,118,126),c(82,139,255)),
+              ARC_DARK("ARC_DARK","FlatLaf • Arc Dark",true,false,
+                      c(45,48,54),c(56,60,67),c(63,67,75),c(82,87,96),
+                      c(220,223,228),c(155,161,170),c(82,139,255)),
+              CARBON("CARBON","FlatLaf • Carbon",true,false,
+                      c(31,31,31),c(42,42,42),c(50,50,50),c(76,76,76),
+                      c(222,222,222),c(160,160,160),c(180,180,180)),
+              COBALT_2("COBALT_2","FlatLaf • Cobalt 2",true,false,
+                      c(12,32,51),c(18,45,70),c(24,55,84),c(44,78,108),
+                      c(237,246,255),c(152,181,207),c(0,165,255)),
+              DRACULA("DRACULA","FlatLaf • Dracula",true,false,
+                      c(40,42,54),c(48,50,65),c(56,58,75),c(76,78,95),
+                      c(248,248,242),c(170,170,180),c(189,147,249)),
+              NORD("NORD","FlatLaf • Nord",true,false,
+                      c(46,52,64),c(59,66,82),c(67,76,94),c(76,86,106),
+                      c(236,239,244),c(174,181,194),c(136,192,208)),
+              ONE_DARK("ONE_DARK","FlatLaf • One Dark",true,false,
+                      c(40,44,52),c(48,53,63),c(57,63,75),c(78,84,98),
+                      c(220,223,228),c(158,164,176),c(97,175,239)),
+              SOLARIZED_LIGHT("SOLARIZED_LIGHT","FlatLaf • Solarized Light",false,false,
+                      c(253,246,227),c(238,232,213),c(250,244,226),c(210,204,185),
+                      c(88,110,117),c(101,123,131),c(38,139,210)),
+              SOLARIZED_DARK("SOLARIZED_DARK","FlatLaf • Solarized Dark",true,false,
+                      c(0,43,54),c(7,54,66),c(13,63,74),c(42,83,91),
+                      c(147,161,161),c(101,123,131),c(38,139,210)),
+              GRADIANTO_MIDNIGHT("GRADIANTO_MIDNIGHT","FlatLaf • Gradianto Midnight Blue",true,false,
+                      c(25,30,44),c(32,38,55),c(40,47,66),c(62,72,95),
+                      c(224,229,239),c(154,164,183),c(92,139,255)),
+              GRADIANTO_NATURE("GRADIANTO_NATURE","FlatLaf • Gradianto Nature Green",true,false,
+                      c(25,38,34),c(33,49,44),c(42,59,53),c(62,85,76),
+                      c(228,239,234),c(159,183,173),c(86,181,130)),
+              ARC_DARK_ORANGE("ARC_DARK_ORANGE","FlatLaf • Arc Dark Orange",true,false,
+                      c(45,48,54),c(56,60,67),c(63,67,75),c(82,87,96),
+                      c(224,226,230),c(158,164,172),c(255,152,48)),
+              HIGH_CONTRAST("HIGH_CONTRAST","FlatLaf • High Contrast",true,false,
+                      Color.BLACK,c(12,12,12),c(22,22,22),c(135,135,135),
+                      Color.WHITE,c(220,220,220),c(0,190,255)),
+
+              CHRISTMAS("CHRISTMAS","Holiday • Christmas",true,true,
+                      c(10,24,18),c(18,43,32),c(25,55,40),c(70,103,82),
+                      c(250,248,242),c(191,211,198),c(220,45,55)),
+              HALLOWEEN("HALLOWEEN","Holiday • Halloween",true,true,
+                      c(20,13,25),c(37,24,45),c(48,31,57),c(92,65,104),
+                      c(248,241,252),c(196,173,207),c(245,132,31)),
+              THANKSGIVING("THANKSGIVING","Holiday • Thanksgiving",true,true,
+                      c(28,18,11),c(53,34,19),c(65,42,24),c(108,74,45),
+                      c(255,246,232),c(216,186,148),c(205,105,42)),
+              INDEPENDENCE("INDEPENDENCE","Holiday • Independence Day",true,true,
+                      c(7,20,44),c(15,39,73),c(22,52,92),c(59,88,128),
+                      c(248,251,255),c(177,197,224),c(220,45,55)),
+              VALENTINE("VALENTINE","Holiday • Valentine’s Day",false,true,
+                      c(255,242,246),c(255,250,252),c(255,235,242),c(238,191,206),
+                      c(74,35,52),c(134,87,105),c(220,64,112)),
+              ST_PATRICKS("ST_PATRICKS","Holiday • St. Patrick’s Day",true,true,
+                      c(7,29,20),c(14,53,35),c(20,66,43),c(55,104,76),
+                      c(242,252,247),c(166,207,184),c(62,193,112)),
+              WINTER_FROST("WINTER_FROST","Seasonal • Winter Frost",false,true,
+                      c(235,244,250),c(248,252,255),c(226,239,248),c(186,209,226),
+                      c(31,55,72),c(91,120,140),c(55,143,205));
+
+              private final String id;
+              private final String display;
+              private final boolean dark;
+              private final boolean branded;
+              private final Color bg,panel,panel2,border,text,muted,accent;
+
+              AppTheme(String id,String display,boolean dark,boolean branded,
+                       Color bg,Color panel,Color panel2,Color border,
+                       Color text,Color muted,Color accent){
+                  this.id=id;this.display=display;this.dark=dark;this.branded=branded;
+                  this.bg=bg;this.panel=panel;this.panel2=panel2;this.border=border;
+                  this.text=text;this.muted=muted;this.accent=accent;
+              }
+
+              public String id(){return id;}
+              public String display(){return display;}
+              public boolean dark(){return dark;}
+              public boolean branded(){return branded;}
+              public Color bg(){return bg;}
+              public Color panel(){return panel;}
+              public Color panel2(){return panel2;}
+              public Color border(){return border;}
+              public Color text(){return text;}
+              public Color muted(){return muted;}
+              public Color accent(){return accent;}
+
+              @Override public String toString(){return display;}
+
+              public static AppTheme fromId(String id){
+                  if(id!=null){
+                      String normalized=id.trim();
+                      AppTheme migrated=switch(normalized.toUpperCase()){
+                          case "DARK"->FLATLAF_DARK;
+                          case "LIGHT"->FLATLAF_LIGHT;
+                          case "GRAPHITE"->CARBON;
+                          case "OPERATIONS_BLUE"->COBALT_2;
+                          case "MIDNIGHT"->GRADIANTO_MIDNIGHT;
+                          case "SLATE"->ARC_DARK;
+                          case "EMERALD"->GRADIANTO_NATURE;
+                          case "AMBER_NIGHT"->ARC_DARK_ORANGE;
+                          case "WARM_NEUTRAL"->ARC;
+                          default->null;
+                      };
+                      if(migrated!=null)return migrated;
+                      for(AppTheme t:values())
+                          if(t.id.equalsIgnoreCase(normalized)||t.display.equalsIgnoreCase(normalized))
+                              return t;
+                  }
+                  return NORTH_STAR;
+              }
+
+              private static Color c(int r,int g,int b){return new Color(r,g,b);}
+          }
+          EOF
+
+          cat > src/com/wtm/ui/ThemeManager.java <<'EOF'
+          package com.wtm.ui;
+
+          import com.formdev.flatlaf.*;
+          import com.formdev.flatlaf.intellijthemes.*;
+
+          import javax.swing.*;
+          import java.awt.*;
+
+          /**
+           * Single owner for installing the Swing look-and-feel. Real FlatLaf
+           * themes own ordinary controls; North Star only layers brand semantics.
+           */
+          public final class ThemeManager {
+              private ThemeManager(){}
+
+              public static void install(AppTheme theme){
+                  AppTheme resolved=theme==null?AppTheme.NORTH_STAR:theme;
+                  boolean installed=switch(resolved){
+                      case FLATLAF_LIGHT->FlatLightLaf.setup();
+                      case FLATLAF_DARK->FlatDarkLaf.setup();
+                      case FLATLAF_INTELLIJ->FlatIntelliJLaf.setup();
+                      case FLATLAF_DARCULA->FlatDarculaLaf.setup();
+                      case ARC->FlatArcIJTheme.setup();
+                      case ARC_DARK->FlatArcDarkIJTheme.setup();
+                      case CARBON->FlatCarbonIJTheme.setup();
+                      case COBALT_2->FlatCobalt2IJTheme.setup();
+                      case DRACULA->FlatDraculaIJTheme.setup();
+                      case NORD->FlatNordIJTheme.setup();
+                      case ONE_DARK->FlatOneDarkIJTheme.setup();
+                      case SOLARIZED_LIGHT->FlatSolarizedLightIJTheme.setup();
+                      case SOLARIZED_DARK->FlatSolarizedDarkIJTheme.setup();
+                      case GRADIANTO_MIDNIGHT->FlatGradiantoMidnightBlueIJTheme.setup();
+                      case GRADIANTO_NATURE->FlatGradiantoNatureGreenIJTheme.setup();
+                      case ARC_DARK_ORANGE->FlatArcDarkOrangeIJTheme.setup();
+                      case HIGH_CONTRAST->FlatHighContrastIJTheme.setup();
+                      case CHRISTMAS->FlatArcDarkIJTheme.setup();
+                      case HALLOWEEN->FlatDarkPurpleIJTheme.setup();
+                      case THANKSGIVING->FlatArcDarkOrangeIJTheme.setup();
+                      case INDEPENDENCE->FlatCobalt2IJTheme.setup();
+                      case VALENTINE->FlatLightFlatIJTheme.setup();
+                      case ST_PATRICKS->FlatGradiantoNatureGreenIJTheme.setup();
+                      case WINTER_FROST->FlatCyanLightIJTheme.setup();
+                      case NORTH_STAR->FlatDarculaLaf.setup();
+                  };
+                  if(!installed)FlatDarkLaf.setup();
+                  if(resolved.branded())applyBrandOverlay(resolved);
+              }
+
+              public static void refresh(Component root){
+                  if(root==null)return;
+                  if(root instanceof JComponent component)
+                      SwingUtilities.updateComponentTreeUI(component);
+                  else if(root instanceof Window window)
+                      SwingUtilities.updateComponentTreeUI(window);
+              }
+
+              public static Color uiColor(String key,Color fallback){
+                  Color value=UIManager.getColor(key);
+                  return value==null?fallback:value;
+              }
+
+              private static void applyBrandOverlay(AppTheme theme){
+                  UIManager.put("Component.accentColor",theme.accent());
+                  UIManager.put("Component.focusColor",theme.accent());
+                  UIManager.put("TabbedPane.underlineColor",theme.accent());
+                  UIManager.put("ProgressBar.foreground",theme.accent());
+                  UIManager.put("TextComponent.selectionBackground",theme.accent());
+                  UIManager.put("Table.selectionBackground",theme.accent());
+                  UIManager.put("List.selectionBackground",theme.accent());
+                  UIManager.put("Panel.background",theme.bg());
+                  UIManager.put("Label.foreground",theme.text());
+              }
+          }
+          EOF
+
+          cat > src/com/wtm/ui/Theme.java <<'EOF'
+          package com.wtm.ui;
+
+          import java.awt.*;
+
+          /** Central semantic-color facade backed by the installed FlatLaf. */
+          public final class Theme {
+              private Theme() {}
+
+              private static volatile AppTheme active=AppTheme.NORTH_STAR;
+
+              public static synchronized void setActive(String id){
+                  active=AppTheme.fromId(id);
+                  ThemeManager.install(active);
+              }
+              public static AppTheme active(){return active;}
+
+              public static Color bg(){return ThemeManager.uiColor("Panel.background",active.bg());}
+              public static Color panel(){return ThemeManager.uiColor("Panel.background",active.panel());}
+              public static Color panel2(){return ThemeManager.uiColor("TextField.background",active.panel2());}
+              public static Color border(){return ThemeManager.uiColor("Component.borderColor",active.border());}
+              public static Color text(){return ThemeManager.uiColor("Label.foreground",active.text());}
+              public static Color muted(){return ThemeManager.uiColor("Label.disabledForeground",active.muted());}
+              public static Color accent(){return ThemeManager.uiColor("Component.accentColor",active.accent());}
+
+              public static Color bg(boolean dark){return dark?AppTheme.FLATLAF_DARK.bg():AppTheme.FLATLAF_LIGHT.bg();}
+              public static Color panel(boolean dark){return dark?AppTheme.FLATLAF_DARK.panel():AppTheme.FLATLAF_LIGHT.panel();}
+              public static Color panel2(boolean dark){return dark?AppTheme.FLATLAF_DARK.panel2():AppTheme.FLATLAF_LIGHT.panel2();}
+              public static Color border(boolean dark){return dark?AppTheme.FLATLAF_DARK.border():AppTheme.FLATLAF_LIGHT.border();}
+              public static Color text(boolean dark){return dark?AppTheme.FLATLAF_DARK.text():AppTheme.FLATLAF_LIGHT.text();}
+              public static Color muted(boolean dark){return dark?AppTheme.FLATLAF_DARK.muted():AppTheme.FLATLAF_LIGHT.muted();}
+
+              public static Color good(){ return new Color(54,177,91); }
+              public static Color warn(){ return new Color(242,177,30); }
+              public static Color danger(){ return new Color(229,72,77); }
+              public static Color sun(){ return new Color(255,183,0); }
+              public static Color cloud(){ return new Color(179,215,232); }
+              public static Color rain(){ return new Color(60,151,229); }
+
+              public static String hex(Color c){
+                  return String.format("#%02x%02x%02x",c.getRed(),c.getGreen(),c.getBlue());
+              }
+          }
+          EOF
+
+          cat > src/com/wtm/ui/ThemeStyler.java <<'EOF'
+          package com.wtm.ui;
+
+          import javax.swing.*;
+          import javax.swing.border.EmptyBorder;
+          import java.awt.*;
+
+          /**
+           * Applies only North Star application-specific presentation. FlatLaf
+           * owns standard Swing controls, popups, fields, tabs, tables and lists.
+           */
+          public final class ThemeStyler {
+              private ThemeStyler(){}
+
+              public static void apply(Component component,AppTheme theme){
+                  if(component==null)return;
+                  AppTheme resolved=theme==null?Theme.active():theme;
+                  ThemeManager.refresh(component);
+                  applyApplicationPresentation(component,resolved);
+              }
+
+              private static void applyApplicationPresentation(Component component,AppTheme theme){
+                  if(component instanceof JDialog dialog && dialog.getRootPane()!=null){
+                      dialog.getRootPane().putClientProperty(
+                              "apple.awt.windowAppearance",
+                              theme.dark()?"NSAppearanceNameDarkAqua":"NSAppearanceNameAqua");
+                  }
+
+                  if(component instanceof JButton button){
+                      if(isSidebarRouteButton(button)){
+                          button.setFocusPainted(false);
+                          button.setFocusable(false);
+                          button.setOpaque(false);
+                          button.setContentAreaFilled(false);
+                          button.setBorderPainted(false);
+                          button.setBorder(new EmptyBorder(9,12,9,12));
+                      }else if(Boolean.TRUE.equals(button.getClientProperty("primaryAction"))){
+                          button.setBackground(Theme.accent());
+                          button.setForeground(readableText(Theme.accent()));
+                      }
+                  }else if(component instanceof RoundedPanel rounded){
+                      rounded.setBackground(Theme.panel());
+                      rounded.putClientProperty("outlineColor",Theme.border());
+                  }else if(component instanceof JScrollPane scroll){
+                      scroll.getVerticalScrollBar().setUnitIncrement(18);
+                      scroll.getHorizontalScrollBar().setUnitIncrement(18);
+                  }
+
+                  if(component instanceof Container container)
+                      for(Component child:container.getComponents())
+                          applyApplicationPresentation(child,theme);
+              }
+
+              private static boolean isSidebarRouteButton(JButton button){
+                  return Boolean.TRUE.equals(button.getClientProperty("northstar.sidebar.route"));
+              }
+
+              private static Color readableText(Color background){
+                  if(background==null)return Color.WHITE;
+                  double luminance=(0.2126*background.getRed())
+                          +(0.7152*background.getGreen())
+                          +(0.0722*background.getBlue());
+                  return luminance>150?new Color(20,22,24):Color.WHITE;
+              }
+          }
+          EOF
+
+          python3 - <<'PY'
+          from pathlib import Path
+
+          p=Path('src/com/wtm/ui/HolidayThemeService.java')
+          s=p.read_text().replace('return AppTheme.DARK;','return AppTheme.FLATLAF_DARK;')
+          s=s.replace('temp.themeId="DARK";','temp.themeId="FLATLAF_DARK";')
+          s=s.replace('resolved==AppTheme.DARK','resolved==AppTheme.FLATLAF_DARK')
+          p.write_text(s)
+
+          p=Path('src/com/wtm/ui/SettingsDialog.java')
+          s=p.read_text()
+          s=s.replace('"<html>"+HolidayThemeService.automaticThemeDescription(LocalDate.now())\n              + ". North Star remains the base interface outside automatic holiday windows.</html>"',
+                      '"<html>"+HolidayThemeService.automaticThemeDescription(LocalDate.now())\n              + ". Your selected FlatLaf theme remains the base interface outside automatic holiday windows.</html>"')
+          p.write_text(s)
+
+          p=Path('build.sh')
+          s=p.read_text()
+          anchor='''if [ ! -f lib/flatlaf-3.7.2.jar ] || [ ! -f lib/flatlaf-intellij-themes-3.7.2.jar ]; then\n'''
+          gate='''# Real FlatLaf owns ordinary Swing controls. North Star theme code may layer\n# branded semantics but must not reinstall custom ComboBox/TabbedPane delegates.\nif [ ! -f src/com/wtm/ui/ThemeManager.java ] || \\
+   ! grep -Fq 'FlatDarkLaf.setup()' src/com/wtm/ui/ThemeManager.java || \\
+   grep -qE 'ThemedComboBoxUI|BasicTabbedPaneUI' src/com/wtm/ui/ThemeStyler.java; then\n  echo "ERROR: canonical theme ownership is not delegated to real FlatLaf." >&2\n  exit 1\nfi\n\n'''
+          if gate not in s:
+              if anchor not in s: raise SystemExit('FlatLaf build anchor missing')
+              s=s.replace(anchor,gate+anchor,1)
+          p.write_text(s)
+          PY
+
+          git diff --check
+          rm -rf /tmp/ns-out && mkdir -p /tmp/ns-out
+          javac --release 21 -Xlint:unchecked -Werror -encoding UTF-8 -cp 'lib/*' -d /tmp/ns-out $(find src -name '*.java')
+          bash build.sh
+          git config user.name 'NorthStar Cleanup Bot'
+          git config user.email 'actions@users.noreply.github.com'
+          git add src/com/wtm/ui/AppTheme.java src/com/wtm/ui/ThemeManager.java src/com/wtm/ui/Theme.java src/com/wtm/ui/ThemeStyler.java src/com/wtm/ui/HolidayThemeService.java src/com/wtm/ui/SettingsDialog.java build.sh
+          git commit -m 'Make real FlatLaf the canonical theme engine'
+          git push origin master
