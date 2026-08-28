@@ -468,7 +468,6 @@ public final class OperationsWorkspaceFrame extends JFrame {
     public boolean registerWorkspaceExtensionRoute(
             String route,
             String label,
-            String componentName,
             String anchorRoute,
             boolean afterAnchor,
             Runnable action
@@ -480,7 +479,6 @@ public final class OperationsWorkspaceFrame extends JFrame {
         if(anchorButton==null||anchorButton.getParent()==null)return false;
 
         JButton button=createSidebarButton(label,false);
-        if(componentName!=null&&!componentName.isBlank())button.setName(componentName);
         button.addActionListener(e->action.run());
         sidebarRouteButtons.put(route,button);
 

@@ -29,7 +29,6 @@ public final class AiEnabledMain {
         workspace.registerWorkspaceExtensionRoute(
                 "NorthStar Intelligence",
                 "✦  NorthStar Intelligence",
-                "northstar.ai.sidebar",
                 "Main Showcase",
                 true,
                 ()->openFull(workspace)
@@ -67,7 +66,6 @@ public final class AiEnabledMain {
         compact.setMaximumSize(new Dimension(Integer.MAX_VALUE,height));
 
         JPanel mount=new JPanel(new BorderLayout());
-        mount.setName(COMPACT_NAME);
         mount.setOpaque(false);
         mount.setBorder(new EmptyBorder(14,0,0,0));
         mount.setAlignmentX(Component.LEFT_ALIGNMENT);

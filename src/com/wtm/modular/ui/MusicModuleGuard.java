@@ -73,8 +73,8 @@ public final class MusicModuleGuard {
     private static void injectSidebar(Window w){
         if(!(w instanceof OperationsWorkspaceFrame workspace))return;
         workspace.registerWorkspaceExtensionRoute(
-                ROUTE,ROUTE_LABEL,"northstar.music.sidebar",
-                "Main Showcase",true,()->showMusic(workspace));
+                ROUTE,ROUTE_LABEL,"Main Showcase",
+                true,()->showMusic(workspace));
     }
 
     private static void showMusic(Window w){
