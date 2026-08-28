@@ -50,12 +50,6 @@ public final class MusicModuleGuard {
 
     private MusicModuleGuard(){}
 
-    /** Retained only as a compatibility no-op for older callers. */
-    @Deprecated
-    public static void install(){
-        loadSettings();
-    }
-
     public static void loadSettings(){
         MusicService.instance().load();
     }
