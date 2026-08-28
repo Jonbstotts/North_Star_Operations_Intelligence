@@ -55,7 +55,9 @@ jobs:
           ! grep -q 'NetworkGeocodingService' src/com/wtm/app/NorthStarMainStable.java
           ! test -f src/com/wtm/modular/ui/RuntimeStabilizer.java
           ! grep -q 'RuntimeStabilizer' src/com/wtm/modular/core/ModularBootstrap.java
-          grep -q 'COMPONENT_ADDED is cosmetic only' src/com/wtm/modular/ui/WorkspaceLifecycleV3.java
+          ! grep -q 'COMPONENT_ADDED' src/com/wtm/modular/ui/WorkspaceLifecycleV3.java
+          ! grep -q 'CONTAINER_EVENT_MASK' src/com/wtm/modular/ui/WorkspaceLifecycleV3.java
+          ! grep -q 'ContainerEvent' src/com/wtm/modular/ui/WorkspaceLifecycleV3.java
           grep -q 'WINDOW_ACTIVATED' src/com/wtm/modular/ui/WorkspaceLifecycleV3.java
           ! grep -q 'if (isWorkspace(window)) activateWorkspace(window);' src/com/wtm/modular/ui/WorkspaceLifecycleV3.java
           ! grep -q 'new Timer' src/com/wtm/modular/ui/WorkspaceLifecycleV3.java
@@ -74,6 +76,10 @@ jobs:
           ! grep -q 'AWTEventListener' src/com/wtm/modular/ui/MusicModuleGuard.java
           ! grep -q 'COMPONENT_ADDED' src/com/wtm/modular/ui/MusicModuleGuard.java
           ! grep -q 'new Timer' src/com/wtm/modular/ui/MusicModuleGuard.java
+          grep -q 'styleCombo(playlists)' src/com/wtm/modular/ui/MusicModuleGuard.java
+          grep -q 'HORIZONTAL_SCROLLBAR_NEVER' src/com/wtm/modular/ui/MusicModuleGuard.java
+          grep -q 'addComponentListener' src/com/wtm/modular/ui/MusicModuleGuard.java
+          ! grep -q 'polishMusicTree' src/com/wtm/modular/ui/WorkspaceLifecycleV3.java
           grep -q 'WINDOW_OPENED' src/com/wtm/ui/foundation/UiFoundationRuntime.java
           ! grep -q 'COMPONENT_ADDED' src/com/wtm/ui/foundation/UiFoundationRuntime.java
           ! grep -q 'CONTAINER_EVENT_MASK' src/com/wtm/ui/foundation/UiFoundationRuntime.java
