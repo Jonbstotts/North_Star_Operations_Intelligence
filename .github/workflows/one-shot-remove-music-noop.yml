@@ -1,0 +1,56 @@
+name: One-shot remove Music no-op
+
+on:
+  push:
+    branches: [ master ]
+    paths:
+      - '.github/workflows/one-shot-remove-music-noop.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: master
+          fetch-depth: 0
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '21'
+      - name: Remove obsolete Music compatibility API
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          path=Path('src/com/wtm/modular/ui/MusicModuleGuard.java')
+          text=path.read_text(encoding='utf-8')
+          old='''    /** Retained only as a compatibility no-op for older callers. */\n    @Deprecated\n    public static void install(){\n        loadSettings();\n    }\n\n'''
+          if text.count(old)!=1:
+              raise SystemExit(f'Music compatibility install anchor mismatch: {text.count(old)}')
+          text=text.replace(old,'',1)
+          text=text.replace(
+              ' * WorkspaceLifecycleV3 owns activation and Save & Apply boundaries and calls the\n * explicit methods below. No global AWT listener, component-added reaction, or\n * delayed UI scheduler lives here.\n',
+              ' * Canonical workspace and Settings owners call the explicit methods below at\n * source-backed lifecycle boundaries. No global AWT listener, component-added\n * reaction, or delayed UI scheduler lives here.\n'
+          )
+          path.write_text(text,encoding='utf-8')
+          PY
+          git diff --check
+          ! grep -q '@Deprecated' src/com/wtm/modular/ui/MusicModuleGuard.java
+          ! grep -q 'compatibility no-op' src/com/wtm/modular/ui/MusicModuleGuard.java
+          ! grep -q 'public static void install()' src/com/wtm/modular/ui/MusicModuleGuard.java
+          rm -rf /tmp/northstar-music-noop
+          mkdir -p /tmp/northstar-music-noop
+          javac --release 21 -encoding UTF-8 -d /tmp/northstar-music-noop $(find src -name '*.java')
+          bash build.sh
+      - name: Commit Music API cleanup
+        run: |
+          set -euo pipefail
+          git config user.name 'NorthStar Cleanup Bot'
+          git config user.email 'actions@users.noreply.github.com'
+          git add src/com/wtm/modular/ui/MusicModuleGuard.java
+          git commit -m 'Remove obsolete Music compatibility install API'
+          git push origin HEAD:master
