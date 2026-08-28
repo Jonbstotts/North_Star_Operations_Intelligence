@@ -17,8 +17,6 @@ public final class ThemeStyler {
     private ThemeStyler(){}
 
     public static void apply(Component component,AppTheme theme){
-        UiFinalPolish.start();
-        ThemeCoreV216.start();
         if(component==null)return;
         AppTheme resolved=theme==null?Theme.active():theme;
         applyRecursive(component,resolved);
