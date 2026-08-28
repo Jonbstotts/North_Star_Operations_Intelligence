@@ -45,7 +45,8 @@ jobs:
           ! grep -q 'MusicWorkspacePolishGuard.*install' src/com/wtm/app/NorthStarMainStable.java
           ! grep -q 'StartupDashboardReadyGuard.*install' src/com/wtm/app/NorthStarMainStable.java
           ! grep -q 'MusicModuleGuard.*install' src/com/wtm/app/NorthStarMainStable.java
-          ! grep -q 'DashboardGlyphArtGuard.*install' src/com/wtm/app/NorthStarMainStable.java
+          ! grep -q 'DashboardGlyphArtGuard' src/com/wtm/app/NorthStarMainStable.java
+          ! test -f src/com/wtm/modular/ui/DashboardGlyphArtGuard.java
           ! grep -q 'TrustedEmailUiGuard.*install' src/com/wtm/app/NorthStarMainStable.java
           ! grep -q 'SidebarModulesGlyphGuard' src/com/wtm/app/NorthStarMainStable.java
           ! test -f src/com/wtm/modular/ui/SidebarModulesGlyphGuard.java
@@ -60,13 +61,10 @@ jobs:
           ! grep -q 'new Timer' src/com/wtm/modular/ui/WorkspaceLifecycleV3.java
           ! grep -q 'showDashboardRoute' src/com/wtm/modular/ui/WorkspaceLifecycleV3.java
           ! grep -q 'invokeStaticFrame' src/com/wtm/modular/ui/WorkspaceLifecycleV3.java
+          ! grep -q 'DashboardGlyphArtGuard' src/com/wtm/modular/ui/WorkspaceLifecycleV3.java
           grep -q 'AiEnabledMain.injectDashboard' src/com/wtm/modular/ui/WorkspaceLifecycleV3.java
           grep -q 'MusicModuleGuard.installWorkspace' src/com/wtm/modular/ui/WorkspaceLifecycleV3.java
-          grep -q 'DashboardGlyphArtGuard.apply' src/com/wtm/modular/ui/WorkspaceLifecycleV3.java
           grep -q 'TrustedEmailUiGuard.apply' src/com/wtm/modular/ui/WorkspaceLifecycleV3.java
-          ! grep -q 'AWTEventListener' src/com/wtm/modular/ui/DashboardGlyphArtGuard.java
-          ! grep -q 'addAWTEventListener' src/com/wtm/modular/ui/DashboardGlyphArtGuard.java
-          ! grep -q 'new Timer' src/com/wtm/modular/ui/DashboardGlyphArtGuard.java
           ! grep -q 'AWTEventListener' src/com/wtm/modular/ui/TrustedEmailUiGuard.java
           ! grep -q 'addAWTEventListener' src/com/wtm/modular/ui/TrustedEmailUiGuard.java
           ! grep -q 'COMPONENT_ADDED' src/com/wtm/modular/ui/TrustedEmailUiGuard.java
@@ -127,7 +125,6 @@ jobs:
           test -f out/com/wtm/modular/ui/MusicModuleGuard.class
           test -f out/com/wtm/modular/ui/WorkspaceLifecycleV3.class
           test -f out/com/wtm/modular/ui/TrustedEmailUiGuard.class
-          test -f out/com/wtm/modular/ui/DashboardGlyphArtGuard.class
           test -f out/com/wtm/security/LocalSecurityHardening.class
           test -f out/com/wtm/ingest/OperationalAnalytics.class
           test -f out/com/wtm/ui/IntelligenceGlassSettings.class
@@ -155,7 +152,6 @@ jobs:
             com/wtm/modular/ui/MusicModuleGuard.class \
             com/wtm/modular/ui/WorkspaceLifecycleV3.class \
             com/wtm/modular/ui/TrustedEmailUiGuard.class \
-            com/wtm/modular/ui/DashboardGlyphArtGuard.class \
             com/wtm/security/LocalSecurityHardening.class \
             com/wtm/ingest/OperationalAnalytics.class \
             com/wtm/ui/IntelligenceGlassSettings.class \
