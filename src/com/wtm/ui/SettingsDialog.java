@@ -33,6 +33,11 @@ public final class SettingsDialog extends JDialog {
     private final AppTheme originalTheme;
     private final JTabbedPane tabs=new JTabbedPane();
 
+    /** Returns this settings session configuration to trusted workspace integrations. */
+    public AppConfig workspaceConfigForExtensions(){
+        return cfg;
+    }
+
     private final JCheckBox loginRequiredOnStartup=new JCheckBox(
             "Require administrator login when the application starts");
     private final JCheckBox protectApiSettings=new JCheckBox(

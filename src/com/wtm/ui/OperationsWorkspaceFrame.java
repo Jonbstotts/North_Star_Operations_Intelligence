@@ -508,6 +508,12 @@ public final class OperationsWorkspaceFrame extends JFrame {
         return activeWorkspaceRoute==null?"":activeWorkspaceRoute;
     }
 
+
+    /** Returns the live workspace configuration to trusted source-backed integrations. */
+    public AppConfig workspaceConfigForExtensions(){
+        return config;
+    }
+
     private JComponent buildSummaryStrip(){
         JPanel strip=new JPanel(new BorderLayout(20,0));
         strip.setOpaque(false);

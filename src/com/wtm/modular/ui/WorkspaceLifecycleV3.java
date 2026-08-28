@@ -1,12 +1,14 @@
 package com.wtm.modular.ui;
 
 import com.wtm.app.AiEnabledMain;
+import com.wtm.config.AppConfig;
+import com.wtm.ui.OperationsWorkspaceFrame;
+import com.wtm.ui.SettingsDialog;
 import com.wtm.ui.Theme;
 
 import javax.swing.*;
 import java.awt.*;
 import java.awt.event.*;
-import java.lang.reflect.Field;
 import java.util.Collections;
 import java.util.IdentityHashMap;
 import java.util.List;
@@ -170,8 +172,9 @@ public final class WorkspaceLifecycleV3 {
     }
 
     private static String activeRoute(JFrame frame) {
-        Object value = fieldValue(frame, "activeWorkspaceRoute");
-        return value == null ? "" : value.toString();
+        return frame instanceof OperationsWorkspaceFrame workspace
+                ? workspace.activeWorkspaceRouteName()
+                : "";
     }
 
     private static boolean intelligenceEnabled() {
@@ -233,28 +236,18 @@ public final class WorkspaceLifecycleV3 {
         if (music != null) setMusicDashboardEnabled(music.isSelected());
     }
 
-    private static Object configObject(Window window) {
-        if (window == null) return null;
-        Object cfg = fieldValue(window, "cfg");
-        if (cfg != null) return cfg;
-        cfg = fieldValue(window, "config");
-        if (cfg != null) return cfg;
-        Object embedded = fieldValue(window, "embeddedSettingsSession");
-        return fieldValue(embedded, "cfg");
+    private static AppConfig configObject(Window window) {
+        if (window instanceof SettingsDialog settings)
+            return settings.workspaceConfigForExtensions();
+        if (window instanceof OperationsWorkspaceFrame workspace)
+            return workspace.workspaceConfigForExtensions();
+        return null;
     }
 
-    @SuppressWarnings("unchecked")
-    private static void setModuleToken(Object cfg, String token, boolean enabled) {
+    private static void setModuleToken(AppConfig cfg, String token, boolean enabled) {
         if (cfg == null) return;
-        try {
-            Field modulesField = cfg.getClass().getField("workspaceModules");
-            Object raw = modulesField.get(cfg);
-            if (!(raw instanceof List<?> list)) return;
-            List<Object> modules = (List<Object>) list;
-            modules.removeIf(value -> token.equalsIgnoreCase(String.valueOf(value)));
-            if (enabled) modules.add(token);
-        } catch (ReflectiveOperationException ignored) {
-        }
+        cfg.workspaceModules.removeIf(value -> token.equalsIgnoreCase(String.valueOf(value)));
+        if (enabled) cfg.workspaceModules.add(token);
     }
 
     private static void loadMusicSettings() {
@@ -341,19 +334,6 @@ public final class WorkspaceLifecycleV3 {
             }
             if (component instanceof Container child) removeNamed(child, name);
         }
-    }
-
-    private static Object fieldValue(Object target, String name) {
-        if (target == null) return null;
-        for (Class<?> type = target.getClass(); type != null; type = type.getSuperclass()) {
-            try {
-                Field field = type.getDeclaredField(name);
-                field.setAccessible(true);
-                return field.get(target);
-            } catch (ReflectiveOperationException ignored) {
-            }
-        }
-        return null;
     }
 
     private static String clean(String text) {
