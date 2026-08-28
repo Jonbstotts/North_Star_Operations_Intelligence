@@ -4,7 +4,8 @@ package com.wtm.media;
 public enum MediaCategory {
     ANNOUNCEMENTS("Announcements","announcements"),
     EMPLOYEE_PHOTOS("Employee Photos","employees"),
-    EMPLOYEE_SHOWCASE("Employee Showcase","showcase");
+    EMPLOYEE_SHOWCASE("Employee Showcase","showcase"),
+    STARTUP_MEDIA("Startup Media","startup");
 
     private final String display;
     private final String folder;

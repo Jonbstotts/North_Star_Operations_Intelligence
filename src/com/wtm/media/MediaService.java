@@ -77,6 +77,30 @@ public final class MediaService {
         return target.toAbsolutePath();
     }
 
+    /** Imports a startup intro video into managed application storage. */
+    public static Path importStartupVideo(Path source) throws IOException {
+        Objects.requireNonNull(source,"source");
+        if(!(AuthorizationService.allowed(Permission.GENERAL_SETTINGS)
+                ||AuthorizationService.allowed(Permission.MEDIA_LIBRARY)))
+            throw new SecurityException("The current user does not have permission to modify startup media.");
+        ensureDirectories();
+        if(!Files.isRegularFile(source)||!Files.isReadable(source))
+            throw new IOException("Startup video is unreadable.");
+        long size=Files.size(source);
+        if(size<=0||size>2_000_000_000L)
+            throw new IOException("Startup video must be between 1 byte and 2 GB.");
+        String original=source.getFileName().toString();
+        String extension=videoExtension(original);
+        if(extension==null)throw new IOException("Startup video must be an MP4 or MOV file.");
+        String base=sanitizeBase(stripExtension(original));
+        if(base.isBlank())base="northstar-intro";
+        Path target=uniqueTarget(directory(MediaCategory.STARTUP_MEDIA),base,extension);
+        Files.copy(source,target,StandardCopyOption.COPY_ATTRIBUTES);
+        SecureFiles.restrictFile(target);
+        AuditService.record("Imported Startup Media: "+target.getFileName());
+        return target.toAbsolutePath();
+    }
+
     /** Resolves a managed asset filename without exposing arbitrary paths. */
     public static Path resolve(MediaCategory category,String assetName){
         if(category==null||assetName==null||assetName.isBlank())return null;
@@ -244,6 +268,13 @@ public final class MediaService {
         String n=path.getFileName().toString().toLowerCase(Locale.ROOT);
         return n.endsWith(".png")||n.endsWith(".jpg")
                 ||n.endsWith(".jpeg")||n.endsWith(".gif");
+    }
+
+    private static String videoExtension(String filename){
+        int dot=filename.lastIndexOf('.');
+        if(dot<0)return null;
+        String ext=filename.substring(dot).toLowerCase(Locale.ROOT);
+        return Set.of(".mp4",".mov").contains(ext)?ext:null;
     }
 
     private static String extension(String filename){

@@ -1,6 +1,7 @@
 package com.wtm.ui;
 
 import javax.swing.*;
+import javax.swing.filechooser.FileNameExtensionFilter;
 import java.awt.*;
 import java.util.concurrent.atomic.AtomicBoolean;
 
@@ -43,6 +44,30 @@ public final class ThemedFileChooser {
         dialog.setLocationRelativeTo(parent);
         dialog.setVisible(true);
 
+        return approved.get()?chooser:null;
+    }
+
+    public static JFileChooser chooseVideo(Component parent){
+        StyledChooser chooser=new StyledChooser();
+        chooser.setMultiSelectionEnabled(false);
+        chooser.setDialogType(JFileChooser.OPEN_DIALOG);
+        chooser.setApproveButtonText("Choose Intro Video");
+        chooser.setFileFilter(new FileNameExtensionFilter("H.264 MP4 / QuickTime MOV","mp4","mov"));
+        AppTheme theme=ThemedDialogs.resolveTheme(parent);
+        JDialog dialog=chooser.buildDialog(parent);
+        dialog.setTitle("Choose Startup Intro Video");
+        dialog.setModal(true);
+        dialog.setDefaultCloseOperation(WindowConstants.DISPOSE_ON_CLOSE);
+        AtomicBoolean approved=new AtomicBoolean(false);
+        chooser.addActionListener(e->{
+            if(JFileChooser.APPROVE_SELECTION.equals(e.getActionCommand())){approved.set(true);dialog.dispose();}
+            else if(JFileChooser.CANCEL_SELECTION.equals(e.getActionCommand()))dialog.dispose();
+        });
+        ThemeStyler.apply(dialog,theme);
+        dialog.pack();
+        dialog.setMinimumSize(new Dimension(760,520));
+        dialog.setLocationRelativeTo(parent);
+        dialog.setVisible(true);
         return approved.get()?chooser:null;
     }
 

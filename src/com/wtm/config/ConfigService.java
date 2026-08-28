@@ -82,6 +82,27 @@ public final class ConfigService {
         }
     }
 
+    /** Reads only the startup presentation choice before the full config load. */
+    public static String peekStartupExperience(){
+        try{
+            Path file=appDataDir().resolve(FILE_NAME);
+            if(!Files.exists(file))return "STATIC_SPLASH";
+            Properties p=new Properties();
+            try(InputStream in=Files.newInputStream(file)){p.load(in);}
+            return normalizeStartupExperience(
+                    p.getProperty("startupExperience","STATIC_SPLASH"));
+        }catch(Exception ex){
+            return "STATIC_SPLASH";
+        }
+    }
+
+    private static String normalizeStartupExperience(String value){
+        String normalized=value==null?"":value.trim().toUpperCase(Locale.ROOT);
+        return Set.of("NONE","STATIC_SPLASH","INTRO_VIDEO").contains(normalized)
+                ?normalized
+                :"STATIC_SPLASH";
+    }
+
     public static AppConfig load() {
         AppConfig cfg = new AppConfig();
         try {
@@ -105,6 +126,10 @@ public final class ConfigService {
 
             cfg.showHeader = bool(p, "showHeader", cfg.showHeader);
             cfg.showTicker = bool(p, "showTicker", cfg.showTicker);
+            cfg.startupExperience=normalizeStartupExperience(
+                    p.getProperty("startupExperience",cfg.startupExperience));
+            cfg.startupVideoAsset=p.getProperty(
+                    "startupVideoAsset",cfg.startupVideoAsset).trim();
 
             cfg.workspaceModules.clear();
             String defaultModules="WEATHER,TRAFFIC_MAP,UPCOMING_EVENTS,TEAM_CELEBRATIONS,OPERATIONS_SNAPSHOT";
@@ -470,6 +495,8 @@ public final class ConfigService {
             p.setProperty("darkMode", Boolean.toString(cfg.darkMode));
             p.setProperty("showHeader", Boolean.toString(cfg.showHeader));
             p.setProperty("showTicker", Boolean.toString(cfg.showTicker));
+            p.setProperty("startupExperience",normalizeStartupExperience(cfg.startupExperience));
+            p.setProperty("startupVideoAsset",cfg.startupVideoAsset==null?"":cfg.startupVideoAsset.trim());
             p.setProperty("workspaceModules",String.join(",",cfg.workspaceModules));
             p.setProperty("workspace.intelligence.enabled",
                     Boolean.toString(cfg.workspaceIntelligenceEnabled));

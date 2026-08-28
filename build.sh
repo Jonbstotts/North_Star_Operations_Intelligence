@@ -312,11 +312,19 @@ if [ ! -f lib/flatlaf-3.7.2.jar ] || [ ! -f lib/flatlaf-intellij-themes-3.7.2.ja
   echo "ERROR: required FlatLaf 3.7.2 runtime libraries are missing from lib/." >&2
   exit 1
 fi
+if [ ! -f lib/jcodec-0.2.5.jar ] || [ ! -f lib/jcodec-javase-0.2.5.jar ]; then
+  echo "ERROR: required JCodec 0.2.5 startup-video libraries are missing from lib/." >&2
+  exit 1
+fi
+if [ ! -f src/com/wtm/ui/StartupExperienceManager.java ] || ! grep -Fq 'peekStartupExperience' src/com/wtm/config/ConfigService.java; then
+  echo "ERROR: canonical optional startup-experience ownership is missing." >&2
+  exit 1
+fi
 
 rm -rf out
 mkdir -p out
 javac --release 21 -Xlint:unchecked -Werror -encoding UTF-8 -cp 'lib/*' -d out $(find src -name '*.java')
-for dep in lib/flatlaf-3.7.2.jar lib/flatlaf-intellij-themes-3.7.2.jar; do
+for dep in lib/flatlaf-3.7.2.jar lib/flatlaf-intellij-themes-3.7.2.jar lib/jcodec-0.2.5.jar lib/jcodec-javase-0.2.5.jar; do
   (cd out && jar --extract --file "../$dep")
 done
 rm -f out/META-INF/MANIFEST.MF

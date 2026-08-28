@@ -34,6 +34,12 @@ public final class AppConfig {
     public boolean showHeader = true;
     public boolean showTicker = true;
 
+    /** NONE, STATIC_SPLASH, or INTRO_VIDEO. */
+    public String startupExperience = "STATIC_SPLASH";
+
+    /** Managed filename under MediaCategory.STARTUP_MEDIA; never an arbitrary path. */
+    public String startupVideoAsset = "";
+
 
     /** Modular cards shown on the Operations Workspace home dashboard. */
     public final List<String> workspaceModules = new ArrayList<>(List.of(
