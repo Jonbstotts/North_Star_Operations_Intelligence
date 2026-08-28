@@ -89,19 +89,16 @@ jobs:
           ! grep -q 'ModuleManagerPanel' src/com/wtm/ui/ThemeCoreV216.java
           ! grep -q 'UiFinalPolish.start' src/com/wtm/ui/ThemeStyler.java
           ! grep -q 'ThemeCoreV216.start' src/com/wtm/ui/ThemeStyler.java
-          ! grep -q 'AtomicBoolean' src/com/wtm/ui/UiFinalPolish.java
 
-      - name: Presentation polish regression
+      - name: Presentation ownership regression
         run: |
           set -euo pipefail
-          test -f src/com/wtm/ui/UiFinalPolish.java
-          ! grep -q 'java.lang.reflect' src/com/wtm/ui/UiFinalPolish.java
-          ! grep -q 'getDeclaredField' src/com/wtm/ui/UiFinalPolish.java
-          ! grep -q 'rotationTimer' src/com/wtm/ui/UiFinalPolish.java
-          ! grep -q 'mainShowcaseMediaEnabled' src/com/wtm/ui/UiFinalPolish.java
-          ! grep -q 'operationsAnnouncementsEnabled' src/com/wtm/ui/UiFinalPolish.java
-          ! grep -q 'mainShowcaseIntervalSeconds' src/com/wtm/ui/UiFinalPolish.java
-          grep -q 'presentation-only' src/com/wtm/ui/UiFinalPolish.java
+          ! grep -q 'java.lang.reflect' src/com/wtm/ui/ThemeCoreV216.java
+          ! grep -q 'getDeclaredField' src/com/wtm/ui/ThemeCoreV216.java
+          ! grep -q 'rotationTimer' src/com/wtm/ui/ThemeCoreV216.java
+          ! grep -q 'mainShowcaseMediaEnabled' src/com/wtm/ui/ThemeCoreV216.java
+          ! grep -q 'operationsAnnouncementsEnabled' src/com/wtm/ui/ThemeCoreV216.java
+          ! grep -q 'mainShowcaseIntervalSeconds' src/com/wtm/ui/ThemeCoreV216.java
 
       - name: Intelligence reconciliation regression
         run: |
