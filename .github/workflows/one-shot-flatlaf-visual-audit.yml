@@ -1,0 +1,37 @@
+name: FlatLaf visual override audit
+on:
+  push:
+    branches:
+      - master
+    paths:
+      - '.github/workflows/one-shot-flatlaf-visual-audit.yml'
+permissions:
+  contents: read
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: master
+          fetch-depth: 0
+      - name: Audit Swing overrides after FlatLaf migration
+        shell: bash
+        run: |
+          set -euo pipefail
+          echo '=== setUI occurrences ==='
+          grep -R -n --include='*.java' 'setUI(' src || true
+          echo '=== custom/basic UI delegates ==='
+          grep -R -n --include='*.java' -E 'Basic[A-Za-z]+UI|Metal[A-Za-z]+UI|Synth[A-Za-z]+UI|ComboBoxUI|TabbedPaneUI|ScrollBarUI|TableHeaderUI|ButtonUI|TextFieldUI' src || true
+          echo '=== renderer replacement occurrences ==='
+          grep -R -n --include='*.java' 'setRenderer(' src || true
+          echo '=== UIManager writes outside ThemeManager ==='
+          grep -R -n --include='*.java' 'UIManager\.put' src | grep -v 'src/com/wtm/ui/ThemeManager.java' || true
+          echo '=== broad manual border/background ownership in core theme files ==='
+          grep -R -n --include='*.java' -E 'setBackground\(|setBorder\(' src/com/wtm/ui/ThemeStyler.java src/com/wtm/ui/OperationsWorkspaceFrame.java src/com/wtm/ui/SettingsDialog.java src/com/wtm/modular/ui/MusicWorkspaceModule.java || true
+          echo '=== explicit LookAndFeel installation sites ==='
+          grep -R -n --include='*.java' -E 'setLookAndFeel|\.setup\(\)' src || true
+          echo '=== compile ==='
+          rm -rf /tmp/ns-out && mkdir -p /tmp/ns-out
+          javac --release 21 -Xlint:unchecked -Werror -encoding UTF-8 -cp 'lib/*' -d /tmp/ns-out $(find src -name '*.java')
+          echo 'FLATLAF_VISUAL_AUDIT_OK'
