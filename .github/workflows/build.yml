@@ -60,10 +60,20 @@ jobs:
           set -euo pipefail
           test -f src/com/wtm/ingest/OperationalAnalytics.java
           test -f src/com/wtm/ui/IntelligenceGlassSettings.java
+          test -f src/com/wtm/ai/NorthStarIntelligenceService.java
+          test -f src/com/wtm/ui/NorthStarIntelligencePanel.java
+          test -f src/com/wtm/ui/NorthStarIntelligenceCompactPanel.java
+          test -f src/com/wtm/app/AiEnabledMain.java
           grep -q 'VERIFIED NORTHSTAR OPERATIONAL DATA' src/com/wtm/ingest/OperationalAnalytics.java
           grep -q 'Blank LHY rows are PARTIAL' src/com/wtm/ingest/OperationalAnalytics.java
+          grep -q 'evidence-grounded' src/com/wtm/ai/NorthStarIntelligenceService.java
+          grep -q 'AI_ASSISTANT' src/com/wtm/security/Permission.java
+          grep -q 'AI_KNOWLEDGE_ADMIN' src/com/wtm/security/Permission.java
+          grep -q 'AI_EMPLOYEE_METRICS' src/com/wtm/security/Permission.java
           ! grep -q 'new Timer' src/com/wtm/ui/IntelligenceGlassSettings.java
           ! grep -q 'AWTEventListener' src/com/wtm/ui/IntelligenceGlassSettings.java
+          ! grep -q 'new Timer' src/com/wtm/app/AiEnabledMain.java
+          ! grep -q 'AWTEventListener' src/com/wtm/app/AiEnabledMain.java
 
       - name: Security regression pass
         run: |
@@ -75,6 +85,7 @@ jobs:
           grep -q 'Fail closed' src/com/wtm/ingest/TrustedSenderPolicy.java
           grep -q 'trusted sender' src/com/wtm/ingest/GmailDataPathService.java
           grep -q '127.0.0.1' src/com/wtm/modular/ui/MusicModuleGuard.java
+          grep -q '127.0.0.1' src/com/wtm/ai/NorthStarIntelligenceService.java
           if grep -R --line-number -E 'Runtime\.getRuntime\(\)\.exec|ObjectInputStream|BEGIN (RSA |EC |OPENSSH )?PRIVATE KEY' src; then
             echo 'Unsafe execution/deserialization/private-key material found in canonical source.' >&2
             exit 1
@@ -98,6 +109,10 @@ jobs:
           test -f out/com/wtm/security/LocalSecurityHardening.class
           test -f out/com/wtm/ingest/OperationalAnalytics.class
           test -f out/com/wtm/ui/IntelligenceGlassSettings.class
+          test -f out/com/wtm/ai/NorthStarIntelligenceService.class
+          test -f out/com/wtm/ui/NorthStarIntelligencePanel.class
+          test -f out/com/wtm/ui/NorthStarIntelligenceCompactPanel.class
+          test -f out/com/wtm/app/AiEnabledMain.class
           echo "REGRESSION_LOOP_1_SOURCE_OK"
 
       - name: Regression loop 2 - clean source package integrity
@@ -123,6 +138,10 @@ jobs:
             com/wtm/security/LocalSecurityHardening.class \
             com/wtm/ingest/OperationalAnalytics.class \
             com/wtm/ui/IntelligenceGlassSettings.class \
+            com/wtm/ai/NorthStarIntelligenceService.class \
+            com/wtm/ui/NorthStarIntelligencePanel.class \
+            com/wtm/ui/NorthStarIntelligenceCompactPanel.class \
+            com/wtm/app/AiEnabledMain.class \
             brand/northstar_primary_logo_exact.png; do
             jar tf NorthStar-source-validation.jar | grep -Fxq "$entry"
           done
