@@ -15,10 +15,11 @@ import java.util.Set;
  * Visible trusted-sender management for the Gmail DataPath connector.
  *
  * Security remains fail-closed: no configured trusted senders means Gmail
- * document ingestion is blocked. This class only adds/maintains the Data
- * Collection UI and never mutates workspace/sidebar structure.
+ * document ingestion is blocked. Injection runs only at explicit workspace
+ * boundaries instead of scanning every Swing component-add event.
  */
 public final class TrustedEmailUiGuard {
+    private static final String WORKSPACE_CLASS = "com.wtm.ui.OperationsWorkspaceFrame";
     private static final String INSTALLED = "northstar.gmail.trustedSenderUi";
     private static boolean installed;
 
@@ -29,15 +30,51 @@ public final class TrustedEmailUiGuard {
         installed = true;
 
         Toolkit.getDefaultToolkit().addAWTEventListener(event -> {
-            if (event instanceof ContainerEvent ce && ce.getID() == ContainerEvent.COMPONENT_ADDED) {
-                Component child = ce.getChild();
-                if (child != null) SwingUtilities.invokeLater(() -> scan(child));
+            if (event instanceof WindowEvent we
+                    && we.getID() == WindowEvent.WINDOW_OPENED
+                    && isWorkspace(we.getWindow())) {
+                SwingUtilities.invokeLater(() -> scan(we.getWindow()));
+                return;
             }
-        }, AWTEvent.CONTAINER_EVENT_MASK);
+
+            if (event instanceof ActionEvent ae
+                    && ae.getSource() instanceof AbstractButton button) {
+                String text = clean(button.getText()).toLowerCase();
+                if (!text.contains("data collection")
+                        && !text.contains("gmail")
+                        && !text.contains("datapath")) {
+                    return;
+                }
+                Window workspace = findWorkspace(
+                        SwingUtilities.getWindowAncestor(button));
+                if (workspace != null) {
+                    SwingUtilities.invokeLater(() -> scan(workspace));
+                }
+            }
+        }, AWTEvent.WINDOW_EVENT_MASK | AWTEvent.ACTION_EVENT_MASK);
 
         for (Window window : Window.getWindows()) {
-            scan(window);
+            if (isWorkspace(window) && window.isDisplayable()) scan(window);
         }
+    }
+
+    private static boolean isWorkspace(Window window) {
+        return window != null && WORKSPACE_CLASS.equals(window.getClass().getName());
+    }
+
+    private static Window findWorkspace(Window source) {
+        for (Window current = source; current != null; current = current.getOwner()) {
+            if (isWorkspace(current)) return current;
+        }
+        for (Window window : Window.getWindows()) {
+            if (isWorkspace(window) && window.isDisplayable()) return window;
+        }
+        return null;
+    }
+
+    private static String clean(String text) {
+        if (text == null) return "";
+        return text.replaceAll("^[^A-Za-z0-9]+", "").trim();
     }
 
     private static void scan(Component component) {
@@ -158,7 +195,8 @@ public final class TrustedEmailUiGuard {
                 state.setText("BLOCKED • no trusted senders configured");
                 state.setForeground(new Color(224, 170, 75));
             } else {
-                state.setText("PROTECTED • " + count + (count == 1 ? " trusted sender" : " trusted senders"));
+                state.setText("PROTECTED • " + count
+                        + (count == 1 ? " trusted sender" : " trusted senders"));
                 state.setForeground(new Color(40, 205, 150));
             }
         };
