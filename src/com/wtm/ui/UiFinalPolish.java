@@ -4,7 +4,6 @@ import javax.swing.*;
 import javax.swing.border.Border;
 import javax.swing.border.EmptyBorder;
 import java.awt.*;
-import java.util.concurrent.atomic.AtomicBoolean;
 
 /**
  * Idempotent pre-paint normalization for dynamic/legacy NorthStar surfaces.
@@ -14,16 +13,11 @@ import java.util.concurrent.atomic.AtomicBoolean;
  * change persisted/runtime feature configuration as part of a paint pass.
  */
 public final class UiFinalPolish {
-    private static final AtomicBoolean STARTED=new AtomicBoolean(false);
     private static final String EMPLOYEE_CLASS="com.wtm.ui.EmployeeOperationsPanel";
     private static final String TRUCK_CLASS="com.wtm.ui.TruckTrackingPanel";
     private static final String PLAYBACK_TITLE="Playback / Live Map";
 
     private UiFinalPolish(){}
-
-    public static void start(){
-        if(STARTED.compareAndSet(false,true))ThemeCoreV216.start();
-    }
 
     static void prepareBeforePaint(Component component){
         if(component==null)return;
