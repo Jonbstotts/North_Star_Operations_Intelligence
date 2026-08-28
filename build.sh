@@ -76,6 +76,19 @@ if grep -qE 'TruckTrackingPanel|polishTruckTracking|Playback / Live Map' src/com
   exit 1
 fi
 
+# Settings pages own their scroll layout through scrollableSettingsPage().
+# Generic paint-time padding must never inflate Appearance/Startup content.
+if grep -qE 'polishAppearanceScroll|northstar\.appearance\.bottomSafe|h\+1050|700,0' src/com/wtm/ui/UiFinalPolish.java; then
+  echo "ERROR: obsolete Appearance scroll compatibility padding returned to UiFinalPolish." >&2
+  exit 1
+fi
+if ! grep -q 'scrollableSettingsPage' src/com/wtm/ui/SettingsDialog.java || \
+   ! grep -q 'VERTICAL_SCROLLBAR_AS_NEEDED' src/com/wtm/ui/SettingsDialog.java || \
+   ! grep -q 'HORIZONTAL_SCROLLBAR_NEVER' src/com/wtm/ui/SettingsDialog.java; then
+  echo "ERROR: canonical Settings scroll ownership is missing." >&2
+  exit 1
+fi
+
 # Dynamic workspace integrations must use the canonical source-backed extension
 # API instead of reflecting into OperationsWorkspaceFrame private implementation
 # details. Keep these checks in build.sh so local release builds and CI enforce
