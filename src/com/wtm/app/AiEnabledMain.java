@@ -14,8 +14,9 @@ import java.awt.*;
  * Event-driven Intelligence integration for the canonical workspace.
  *
  * <p>The compact dashboard surface and full workspace route are mounted through
- * the explicit OperationsWorkspaceFrame extension API. No private-field
- * reflection, component discovery, or first-paint recovery path is required.</p>
+ * the explicit OperationsWorkspaceFrame extension API. The dashboardBody
+ * implementation remains private to the workspace; no private-field reflection,
+ * component discovery, or first-paint recovery path is required.</p>
  */
 public final class AiEnabledMain {
     private static final String COMPACT_NAME="northstar.ai.compact";
