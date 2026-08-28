@@ -8,9 +8,6 @@ import com.wtm.ui.Theme;
 
 import javax.swing.*;
 import java.awt.*;
-import java.util.Collections;
-import java.util.IdentityHashMap;
-import java.util.Set;
 import java.util.prefs.Preferences;
 
 /**
@@ -96,51 +93,26 @@ public final class WorkspaceLifecycleV3 {
     }
 
     private static void injectWorkspaceToggles(SettingsDialog owner) {
-        JCheckBox weather = findCheckBox(owner, "Local Weather");
-        JCheckBox operations = findCheckBox(owner, "Operations Snapshot");
-        if (weather == null || operations == null) return;
+        JCheckBox intelligence=owner.registerWorkspaceModuleToggle(
+                INTELLIGENCE_CHECK,"NorthStar Intelligence",intelligenceEnabled());
+        if(intelligence!=null)
+            setModuleToken(owner.workspaceConfigForExtensions(),
+                    INTELLIGENCE_TOKEN,intelligence.isSelected());
 
-        Container common = commonParent(weather, operations);
-        if (!(common instanceof JPanel panel)) return;
-
-        JCheckBox intelligence = findMarkedCheckBox(panel, INTELLIGENCE_CHECK);
-        if (intelligence == null) {
-            intelligence = new JCheckBox("NorthStar Intelligence");
-            intelligence.putClientProperty(INTELLIGENCE_CHECK, Boolean.TRUE);
-            intelligence.setOpaque(false);
-            intelligence.setForeground(Theme.text());
-            intelligence.setSelected(intelligenceEnabled());
-            panel.add(intelligence);
-        }
-        setModuleToken(owner.workspaceConfigForExtensions(),
-                INTELLIGENCE_TOKEN, intelligence.isSelected());
-
-        JCheckBox music = findMarkedCheckBox(panel, MUSIC_CHECK);
-        if (music == null) {
-            music = new JCheckBox("Music Compact Player");
-            music.putClientProperty(MUSIC_CHECK, Boolean.TRUE);
-            music.setOpaque(false);
-            music.setForeground(Theme.text());
-            music.setSelected(musicDashboardEnabled());
-            panel.add(music);
-        } else {
-            music.setSelected(musicDashboardEnabled());
-        }
-
-        panel.revalidate();
-        panel.repaint();
+        owner.registerWorkspaceModuleToggle(
+                MUSIC_CHECK,"Music Compact Player",musicDashboardEnabled());
     }
 
     private static void persistWorkspaceToggles(SettingsDialog owner) {
-        JCheckBox intelligence = findMarkedCheckBox(owner, INTELLIGENCE_CHECK);
-        if (intelligence != null) {
-            WORKSPACE_PREFS.putBoolean(INTELLIGENCE_PREF, intelligence.isSelected());
+        JCheckBox intelligence=owner.workspaceModuleToggle(INTELLIGENCE_CHECK);
+        if(intelligence!=null){
+            WORKSPACE_PREFS.putBoolean(INTELLIGENCE_PREF,intelligence.isSelected());
             setModuleToken(owner.workspaceConfigForExtensions(),
-                    INTELLIGENCE_TOKEN, intelligence.isSelected());
+                    INTELLIGENCE_TOKEN,intelligence.isSelected());
         }
 
-        JCheckBox music = findMarkedCheckBox(owner, MUSIC_CHECK);
-        if (music != null) setMusicDashboardEnabled(music.isSelected());
+        JCheckBox music=owner.workspaceModuleToggle(MUSIC_CHECK);
+        if(music!=null)setMusicDashboardEnabled(music.isSelected());
     }
 
     private static void setModuleToken(AppConfig cfg, String token, boolean enabled) {
@@ -173,38 +145,6 @@ public final class WorkspaceLifecycleV3 {
                 com.wtm.util.SecureFiles.restrictFile(file);
         } catch (Exception ignored) {
         }
-    }
-
-    private static JCheckBox findCheckBox(Container root, String text) {
-        for (Component component : root.getComponents()) {
-            if (component instanceof JCheckBox box
-                    && text.equalsIgnoreCase(clean(box.getText()))) return box;
-            if (component instanceof Container child) {
-                JCheckBox found = findCheckBox(child, text);
-                if (found != null) return found;
-            }
-        }
-        return null;
-    }
-
-    private static JCheckBox findMarkedCheckBox(Container root, String marker) {
-        for (Component component : root.getComponents()) {
-            if (component instanceof JCheckBox box
-                    && Boolean.TRUE.equals(box.getClientProperty(marker))) return box;
-            if (component instanceof Container child) {
-                JCheckBox found = findMarkedCheckBox(child, marker);
-                if (found != null) return found;
-            }
-        }
-        return null;
-    }
-
-    private static Container commonParent(Component a, Component b) {
-        Set<Container> ancestors = Collections.newSetFromMap(new IdentityHashMap<>());
-        for (Container p = a.getParent(); p != null; p = p.getParent()) ancestors.add(p);
-        for (Container p = b.getParent(); p != null; p = p.getParent())
-            if (ancestors.contains(p)) return p;
-        return null;
     }
 
     private static void removeMarked(Container root, String marker) {
@@ -241,7 +181,5 @@ public final class WorkspaceLifecycleV3 {
         }
     }
 
-    private static String clean(String text) {
-        return text == null ? "" : text.replaceAll("^[^A-Za-z0-9]+", "").trim();
-    }
+
 }

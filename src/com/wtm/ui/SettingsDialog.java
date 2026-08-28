@@ -39,6 +39,32 @@ public final class SettingsDialog extends JDialog {
         return cfg;
     }
 
+    /**
+     * Registers an optional dashboard-module toggle in the canonical Workspace
+     * Setup module grid. Extension owners no longer need to discover controls
+     * by visible label text or walk the Settings component tree.
+     */
+    public JCheckBox registerWorkspaceModuleToggle(String marker,String label,boolean selected){
+        if(marker==null||marker.isBlank()||label==null||label.isBlank()||workspaceModulesPanel==null)return null;
+        JCheckBox existing=workspaceModuleToggle(marker);
+        if(existing!=null)return existing;
+        JCheckBox box=new JCheckBox(label,selected);
+        box.putClientProperty(marker,Boolean.TRUE);
+        workspaceModulesPanel.add(box);
+        workspaceModulesPanel.revalidate();
+        workspaceModulesPanel.repaint();
+        return box;
+    }
+
+    /** Returns a previously registered optional Workspace Setup module toggle. */
+    public JCheckBox workspaceModuleToggle(String marker){
+        if(marker==null||workspaceModulesPanel==null)return null;
+        for(Component component:workspaceModulesPanel.getComponents())
+            if(component instanceof JCheckBox box
+                    &&Boolean.TRUE.equals(box.getClientProperty(marker)))return box;
+        return null;
+    }
+
     private final JCheckBox loginRequiredOnStartup=new JCheckBox(
             "Require administrator login when the application starts");
     private final JCheckBox protectApiSettings=new JCheckBox(
@@ -172,6 +198,7 @@ public final class SettingsDialog extends JDialog {
     private final JCheckBox workspaceOperationsSnapshot=new JCheckBox("Operations Snapshot");
     private final JCheckBox workspaceInfoStrip=
             new JCheckBox("Custom Information Blocks");
+    private JPanel workspaceModulesPanel;
     private final JComboBox<Integer> workspaceInfoBlockCount=
             new JComboBox<>(new Integer[]{2,3,4,5,6,7,8});
     private final JComboBox<String> workspaceInfoMovementMode=
@@ -1424,14 +1451,14 @@ public final class SettingsDialog extends JDialog {
               + "the Data Source field is the integration hook for future SQL/report feeds.</html>");
         addFull(p,y++,help);
 
-        JPanel modules=new JPanel(new GridLayout(0,2,10,8));
-        modules.setBorder(BorderFactory.createTitledBorder("Home dashboard modules"));
-        modules.add(workspaceWeather);
-        modules.add(workspaceTrafficMap);
-        modules.add(workspaceEvents);
-        modules.add(workspaceCelebrations);
-        modules.add(workspaceOperationsSnapshot);
-        addFull(p,y++,modules);
+        workspaceModulesPanel=new JPanel(new GridLayout(0,2,10,8));
+        workspaceModulesPanel.setBorder(BorderFactory.createTitledBorder("Home dashboard modules"));
+        workspaceModulesPanel.add(workspaceWeather);
+        workspaceModulesPanel.add(workspaceTrafficMap);
+        workspaceModulesPanel.add(workspaceEvents);
+        workspaceModulesPanel.add(workspaceCelebrations);
+        workspaceModulesPanel.add(workspaceOperationsSnapshot);
+        addFull(p,y++,workspaceModulesPanel);
 
         RoundedPanel infoStrip=new RoundedPanel(14);
         infoStrip.setLayout(new BorderLayout(12,8));
