@@ -25,19 +25,20 @@ jobs:
           from pathlib import Path
           path=Path('.github/workflows/build.yml')
           text=path.read_text(encoding='utf-8')
-          old="""          ! grep -q 'mainShowcaseIntervalSeconds' src/com/wtm/ui/UiFinalPolish.java
-          grep -q 'presentation-only' src/com/wtm/ui/UiFinalPolish.java"""
-          new="""          ! grep -q 'mainShowcaseIntervalSeconds' src/com/wtm/ui/UiFinalPolish.java
-          ! grep -q 'polishAppearanceScroll' src/com/wtm/ui/UiFinalPolish.java
-          ! grep -q 'northstar.appearance.bottomSafe' src/com/wtm/ui/UiFinalPolish.java
-          ! grep -q 'h+1050' src/com/wtm/ui/UiFinalPolish.java
-          grep -q 'scrollableSettingsPage' src/com/wtm/ui/SettingsDialog.java
-          grep -q 'VERTICAL_SCROLLBAR_AS_NEEDED' src/com/wtm/ui/SettingsDialog.java
-          grep -q 'HORIZONTAL_SCROLLBAR_NEVER' src/com/wtm/ui/SettingsDialog.java
-          grep -q 'presentation-only' src/com/wtm/ui/UiFinalPolish.java"""
-          if text.count(old)!=1:
-              raise SystemExit(f'Presentation gate anchor mismatch: {text.count(old)}')
-          path.write_text(text.replace(old,new,1),encoding='utf-8')
+          marker="          ! grep -q 'mainShowcaseIntervalSeconds' src/com/wtm/ui/UiFinalPolish.java\n"
+          addition=(
+              "          ! grep -q 'polishAppearanceScroll' src/com/wtm/ui/UiFinalPolish.java\n"
+              "          ! grep -q 'northstar.appearance.bottomSafe' src/com/wtm/ui/UiFinalPolish.java\n"
+              "          ! grep -q 'h+1050' src/com/wtm/ui/UiFinalPolish.java\n"
+              "          grep -q 'scrollableSettingsPage' src/com/wtm/ui/SettingsDialog.java\n"
+              "          grep -q 'VERTICAL_SCROLLBAR_AS_NEEDED' src/com/wtm/ui/SettingsDialog.java\n"
+              "          grep -q 'HORIZONTAL_SCROLLBAR_NEVER' src/com/wtm/ui/SettingsDialog.java\n"
+          )
+          if text.count(marker)!=1:
+              raise SystemExit(f'Presentation marker mismatch: {text.count(marker)}')
+          if 'polishAppearanceScroll' in text:
+              raise SystemExit('Appearance gate already present')
+          path.write_text(text.replace(marker,marker+addition,1),encoding='utf-8')
           PY
           git diff --check
           git diff -- .github/workflows/build.yml
