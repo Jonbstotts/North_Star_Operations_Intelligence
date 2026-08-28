@@ -2723,7 +2723,7 @@ public final class OperationsWorkspaceFrame extends JFrame {
     }
 
     /**
-     * v4 settings are first-class workspace routes. The underlying form and
+     * Settings pages are first-class workspace routes. The underlying form and
      * validation are shared with Classic Settings, but only the requested page
      * is mounted into the right-hand workspace surface.
      */

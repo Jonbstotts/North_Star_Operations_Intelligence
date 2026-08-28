@@ -35,7 +35,7 @@ public final class AppConfig {
     public boolean showTicker = true;
 
 
-    /** Modular cards shown on the v4 Operations Workspace home dashboard. */
+    /** Modular cards shown on the Operations Workspace home dashboard. */
     public final List<String> workspaceModules = new ArrayList<>(List.of(
             "WEATHER",
             "TRAFFIC_MAP",
@@ -67,12 +67,6 @@ public final class AppConfig {
      * TICKER = continuous smooth horizontal movement of the whole strip
      */
     public String workspaceInfoMovementMode = "STATIC";
-
-    /**
-     * Legacy compatibility flag. It is synchronized from movement mode so
-     * older configuration files can migrate without losing their behavior.
-     */
-    public boolean workspaceInfoAutoScroll = false;
 
     /** Page interval used only by PAGED mode. */
     public int workspaceInfoScrollSeconds = 10;
@@ -134,7 +128,7 @@ public final class AppConfig {
     public String alertProvider = "NWS";
 
     /** NWS identifies clients by User-Agent rather than a traditional API key. */
-    public String nwsUserAgent = "WeatherTrafficMonitor/1.6 (workplace-display; contact=local-admin)";
+    public String nwsUserAgent = "NorthStarOperationsIntelligence/2.1.34 (workplace-display; contact=local-admin)";
 
     /** Radar adapter. RainViewer public radar is currently installed. */
     public String radarProvider = "RAINVIEWER";

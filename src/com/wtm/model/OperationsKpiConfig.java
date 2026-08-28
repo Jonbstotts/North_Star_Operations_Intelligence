@@ -3,7 +3,7 @@ package com.wtm.model;
 /**
  * One configurable KPI card in the Operations Snapshot.
  *
- * v4 starts with locally-configurable values so the visual workspace can be
+ * NorthStar starts with locally-configurable values so the visual workspace can be
  * deployed before site SQL/report feeds are finalized. dataSourceId is kept as
  * a stable hook for future query/API-backed metric providers.
  */

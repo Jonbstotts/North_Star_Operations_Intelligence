@@ -142,10 +142,8 @@ public final class ConfigService {
                     )
             );
             /*
-             * v5.0.3 retires implicit page cycling. Existing installs move to
-             * STATIC unless they have explicitly saved one of the new movement
-             * modes. Continuous ticker is available as the recommended overflow
-             * behavior from Workspace Setup.
+             * Implicit page cycling is retired. Existing installs use STATIC
+             * unless they explicitly saved one of the supported movement modes.
              */
             cfg.workspaceInfoMovementMode=p.getProperty(
                     "workspace.infoStrip.movementMode",
@@ -155,9 +153,6 @@ public final class ConfigService {
             if(!java.util.Set.of("STATIC","PAGED","TICKER")
                     .contains(cfg.workspaceInfoMovementMode))
                 cfg.workspaceInfoMovementMode="STATIC";
-
-            cfg.workspaceInfoAutoScroll=
-                    "PAGED".equals(cfg.workspaceInfoMovementMode);
 
             cfg.workspaceInfoScrollSeconds=Math.max(
                     5,
@@ -230,6 +225,8 @@ public final class ConfigService {
             cfg.sportsProvider = p.getProperty("sportsProvider", cfg.sportsProvider).trim();
             cfg.sportsPremiumLiveScores = bool(p, "sportsPremiumLiveScores", false);
             cfg.nwsUserAgent = p.getProperty("nwsUserAgent", cfg.nwsUserAgent).trim();
+            if(cfg.nwsUserAgent.startsWith("WeatherTrafficMonitor/"))
+                cfg.nwsUserAgent="NorthStarOperationsIntelligence/2.1.34 (workplace-display; contact=local-admin)";
             cfg.weatherRefreshMinutes = integer(p, "weatherRefreshMinutes", 10);
             cfg.alertRefreshMinutes = integer(p, "alertRefreshMinutes", 2);
             cfg.radarRefreshMinutes = integer(p, "radarRefreshMinutes", 5);
@@ -462,7 +459,6 @@ public final class ConfigService {
             Properties p = new Properties();
             p.setProperty("fullscreen", Boolean.toString(cfg.fullscreen));
             p.setProperty("themeId", cfg.themeId);
-            p.setProperty("northStarPreviewV501","true");
             p.setProperty("automaticHolidayThemes",Boolean.toString(cfg.automaticHolidayThemes));
             p.setProperty("darkMode", Boolean.toString(cfg.darkMode));
             p.setProperty("showHeader", Boolean.toString(cfg.showHeader));

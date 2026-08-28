@@ -267,6 +267,18 @@ if grep -R -n --include='*.java' --exclude='ConfigService.java' -F '.northstar-o
   exit 1
 fi
 
+# Redundant workspace movement compatibility state and stale preview markers
+# must not return to canonical source.
+if grep -R -n --include='*.java' -E 'workspaceInfoAutoScroll|northStarPreviewV501' src; then
+  echo "ERROR: retired compatibility state returned." >&2
+  exit 1
+fi
+# Old product identity may remain only in ConfigService for one-time migration.
+if grep -R -n --include='*.java' --exclude='ConfigService.java' -F 'WeatherTrafficMonitor/' src; then
+  echo "ERROR: stale WeatherTrafficMonitor identity returned to active source." >&2
+  exit 1
+fi
+
 # Intelligence enablement is canonical application configuration. The old
 # java.util.prefs value is read only by ConfigService as a compatibility fallback;
 # WorkspaceLifecycleV3 must not maintain a second source of truth.

@@ -27,7 +27,7 @@ public final class HttpService {
     private static final int MAX_BINARY_BYTES=12*1024*1024;
 
     private static final String UA=
-            "WeatherTrafficMonitor/2.9 (workplace-display; contact=local-admin)";
+            "NorthStarOperationsIntelligence/2.1.34 (workplace-display; contact=local-admin)";
 
     private static final Pattern HEADER_NAME=
             Pattern.compile("[A-Za-z0-9!#$%&'*+.^_`|~-]+");

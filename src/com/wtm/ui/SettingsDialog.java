@@ -1446,7 +1446,7 @@ public final class SettingsDialog extends JDialog {
         addFull(p,y++,title);
 
         JLabel help=new JLabel(
-                "<html>The v4 workspace is modular. Disable any module that should not "
+                "<html>The Operations Workspace is modular. Disable any module that should not "
               + "appear on the home dashboard. KPI values are editable directly below; "
               + "the Data Source field is the integration hook for future SQL/report feeds.</html>");
         addFull(p,y++,help);
@@ -2281,7 +2281,7 @@ public final class SettingsDialog extends JDialog {
             cfg.tomTomApiKey=new String(tomTom.getPassword()).trim();
             cfg.nwsUserAgent=nwsUserAgent.getText().trim();
             if(cfg.nwsUserAgent.isBlank())
-                cfg.nwsUserAgent="WeatherTrafficMonitor/1.6 (workplace-display; contact=local-admin)";
+                cfg.nwsUserAgent="NorthStarOperationsIntelligence/2.1.34 (workplace-display; contact=local-admin)";
             cfg.trafficRefreshMinutes=(Integer)routeRefresh.getSelectedItem();
             cfg.weatherRefreshMinutes=(Integer)weatherRefresh.getSelectedItem();
             cfg.radarRefreshMinutes=(Integer)radarRefresh.getSelectedItem();
@@ -2460,9 +2460,6 @@ public final class SettingsDialog extends JDialog {
                 case "Continuous Ticker"->"TICKER";
                 default->"STATIC";
             };
-            cfg.workspaceInfoAutoScroll=
-                    "PAGED".equals(cfg.workspaceInfoMovementMode);
-
             Object scrollSeconds=workspaceInfoScrollSeconds.getSelectedItem();
             cfg.workspaceInfoScrollSeconds=scrollSeconds instanceof Integer seconds
                     ?Math.max(5,Math.min(60,seconds))
@@ -2599,7 +2596,7 @@ public final class SettingsDialog extends JDialog {
     }
 
     /**
-     * Detaches one authorized Settings page so the v4 Operations Workspace can
+     * Detaches one authorized Settings page so the Operations Workspace can
      * present it as an in-application route rather than displaying the entire
      * Classic Settings dialog. The SettingsDialog instance must remain alive
      * while the returned component is in use because its controls and save
@@ -2618,7 +2615,7 @@ public final class SettingsDialog extends JDialog {
         return null;
     }
 
-    /** Saves an embedded v4 settings page through the same validation path as Classic. */
+    /** Saves an embedded workspace settings page through the same validation path. */
     public void saveEmbeddedPage(){
         save();
     }
