@@ -26,16 +26,13 @@ public final class LocalSecurityHardening {
             restrictIfPresent(app.resolve("users.properties"));
             restrictIfPresent(app.resolve("auth.properties"));
             restrictIfPresent(app.resolve("audit.log"));
+            restrictIfPresent(app.resolve("music.properties"));
 
             Path gmail = app.resolve("credentials");
             SecureFiles.ensurePrivateDirectory(gmail);
             restrictIfPresent(gmail.resolve("gmail-oauth-client.json"));
             restrictIfPresent(gmail.resolve("gmail-token.properties"));
             restrictIfPresent(gmail.resolve("gmail-processed.properties"));
-
-            Path music = Paths.get(System.getProperty("user.home"), ".northstar");
-            SecureFiles.ensurePrivateDirectory(music);
-            restrictIfPresent(music.resolve("music.properties"));
         } catch (Exception ex) {
             System.err.println("NorthStar local security hardening could not complete: " + ex.getMessage());
         }
