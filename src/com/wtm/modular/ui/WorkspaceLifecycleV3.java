@@ -6,7 +6,6 @@ import com.wtm.ui.OperationsWorkspaceFrame;
 import com.wtm.ui.SettingsDialog;
 
 import javax.swing.*;
-import java.util.prefs.Preferences;
 
 /**
  * Explicit coordinator for optional workspace additions that live outside
@@ -21,11 +20,6 @@ public final class WorkspaceLifecycleV3 {
     private static final String MUSIC_MINI_MARKER = "northstar.music.mini";
     private static final String INTELLIGENCE_CHECK = "northstar.intelligence.workspace.checkbox";
     private static final String MUSIC_CHECK = "northstar.music.workspace.checkbox";
-    private static final String INTELLIGENCE_TOKEN = "NORTHSTAR_INTELLIGENCE";
-    private static final String INTELLIGENCE_PREF = "dashboard.intelligence.enabled";
-
-    private static final Preferences WORKSPACE_PREFS =
-            Preferences.userRoot().node("com/wtm/northstar/workspace");
     private static boolean bootstrapped;
 
     private WorkspaceLifecycleV3() {}
@@ -75,7 +69,7 @@ public final class WorkspaceLifecycleV3 {
     private static void syncDynamicDashboard(OperationsWorkspaceFrame workspace) {
         if (!"Dashboard".equalsIgnoreCase(workspace.activeWorkspaceRouteName())) return;
 
-        if (intelligenceEnabled()) AiEnabledMain.injectDashboard(workspace);
+        if (intelligenceEnabled(workspace)) AiEnabledMain.injectDashboard(workspace);
         else workspace.removeDashboardExtension("northstar.ai.compact");
 
         MusicWorkspaceModule.installWorkspace(workspace);
@@ -86,16 +80,16 @@ public final class WorkspaceLifecycleV3 {
         workspace.repaint();
     }
 
-    private static boolean intelligenceEnabled() {
-        return WORKSPACE_PREFS.getBoolean(INTELLIGENCE_PREF, true);
+    private static boolean intelligenceEnabled(OperationsWorkspaceFrame workspace) {
+        AppConfig cfg=workspace.workspaceConfigForExtensions();
+        return cfg==null||cfg.workspaceIntelligenceEnabled;
     }
 
     private static void injectWorkspaceToggles(SettingsDialog owner) {
+        AppConfig cfg=owner.workspaceConfigForExtensions();
         JCheckBox intelligence=owner.registerWorkspaceModuleToggle(
-                INTELLIGENCE_CHECK,"NorthStar Intelligence",intelligenceEnabled());
-        if(intelligence!=null)
-            setModuleToken(owner.workspaceConfigForExtensions(),
-                    INTELLIGENCE_TOKEN,intelligence.isSelected());
+                INTELLIGENCE_CHECK,"NorthStar Intelligence",
+                cfg==null||cfg.workspaceIntelligenceEnabled);
 
         owner.registerWorkspaceModuleToggle(
                 MUSIC_CHECK,"Music Compact Player",musicDashboardEnabled());
@@ -103,20 +97,12 @@ public final class WorkspaceLifecycleV3 {
 
     private static void persistWorkspaceToggles(SettingsDialog owner) {
         JCheckBox intelligence=owner.workspaceModuleToggle(INTELLIGENCE_CHECK);
-        if(intelligence!=null){
-            WORKSPACE_PREFS.putBoolean(INTELLIGENCE_PREF,intelligence.isSelected());
-            setModuleToken(owner.workspaceConfigForExtensions(),
-                    INTELLIGENCE_TOKEN,intelligence.isSelected());
-        }
+        AppConfig cfg=owner.workspaceConfigForExtensions();
+        if(intelligence!=null&&cfg!=null)
+            cfg.workspaceIntelligenceEnabled=intelligence.isSelected();
 
         JCheckBox music=owner.workspaceModuleToggle(MUSIC_CHECK);
         if(music!=null)setMusicDashboardEnabled(music.isSelected());
-    }
-
-    private static void setModuleToken(AppConfig cfg, String token, boolean enabled) {
-        if (cfg == null) return;
-        cfg.workspaceModules.removeIf(value -> token.equalsIgnoreCase(String.valueOf(value)));
-        if (enabled) cfg.workspaceModules.add(token);
     }
 
     private static void loadMusicSettings() {

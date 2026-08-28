@@ -116,6 +116,22 @@ public final class ConfigService {
                         "WEATHER","TRAFFIC_MAP","UPCOMING_EVENTS",
                         "TEAM_CELEBRATIONS","OPERATIONS_SNAPSHOT"));
 
+            String intelligenceSetting=p.getProperty("workspace.intelligence.enabled");
+            if(intelligenceSetting!=null){
+                cfg.workspaceIntelligenceEnabled=Boolean.parseBoolean(intelligenceSetting.trim());
+            }else if(cfg.workspaceModules.stream().anyMatch(
+                    value->"NORTHSTAR_INTELLIGENCE".equalsIgnoreCase(value))){
+                cfg.workspaceIntelligenceEnabled=true;
+            }else{
+                // One-time compatibility fallback for builds that stored this toggle
+                // only in java.util.prefs. New saves persist it in config.properties.
+                cfg.workspaceIntelligenceEnabled=java.util.prefs.Preferences.userRoot()
+                        .node("com/wtm/northstar/workspace")
+                        .getBoolean("dashboard.intelligence.enabled",true);
+            }
+            cfg.workspaceModules.removeIf(
+                    value->"NORTHSTAR_INTELLIGENCE".equalsIgnoreCase(value));
+
             cfg.workspaceInfoStripEnabled=bool(
                     p,"workspace.infoStrip.enabled",true);
             cfg.workspaceInfoBlockCount=Math.max(
@@ -452,6 +468,8 @@ public final class ConfigService {
             p.setProperty("showHeader", Boolean.toString(cfg.showHeader));
             p.setProperty("showTicker", Boolean.toString(cfg.showTicker));
             p.setProperty("workspaceModules",String.join(",",cfg.workspaceModules));
+            p.setProperty("workspace.intelligence.enabled",
+                    Boolean.toString(cfg.workspaceIntelligenceEnabled));
             p.setProperty(
                     "workspace.infoStrip.enabled",
                     Boolean.toString(cfg.workspaceInfoStripEnabled));

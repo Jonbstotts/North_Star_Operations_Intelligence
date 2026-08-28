@@ -267,6 +267,19 @@ if grep -R -n --include='*.java' --exclude='ConfigService.java' -F '.northstar-o
   exit 1
 fi
 
+# Intelligence enablement is canonical application configuration. The old
+# java.util.prefs value is read only by ConfigService as a compatibility fallback;
+# WorkspaceLifecycleV3 must not maintain a second source of truth.
+if grep -qE 'java\.util\.prefs|Preferences|WORKSPACE_PREFS|INTELLIGENCE_PREF|setModuleToken' src/com/wtm/modular/ui/WorkspaceLifecycleV3.java; then
+  echo "ERROR: Intelligence workspace enablement has duplicate Preferences ownership." >&2
+  exit 1
+fi
+if ! grep -Fq 'public boolean workspaceIntelligenceEnabled = true;' src/com/wtm/config/AppConfig.java || \
+   ! grep -Fq 'workspace.intelligence.enabled' src/com/wtm/config/ConfigService.java; then
+  echo "ERROR: source-owned Intelligence configuration is missing." >&2
+  exit 1
+fi
+
 rm -rf out
 mkdir -p out
 javac --release 21 -encoding UTF-8 -d out $(find src -name '*.java')

@@ -44,6 +44,9 @@ public final class AppConfig {
             "OPERATIONS_SNAPSHOT"
     ));
 
+    /** Source-owned toggle for the optional NorthStar Intelligence dashboard/route integration. */
+    public boolean workspaceIntelligenceEnabled = true;
+
     /**
      * Compact Information row placed between the primary workspace modules and
      * Operations Snapshot. Information Blocks is the single configuration
