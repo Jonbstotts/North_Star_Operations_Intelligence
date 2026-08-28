@@ -216,6 +216,21 @@ if grep -qE 'COMPONENT_ADDED|CONTAINER_EVENT_MASK|ContainerEvent' src/com/wtm/mo
   exit 1
 fi
 
+# Dashboard extension identity belongs to OperationsWorkspaceFrame. Optional
+# modules must not recursively scan the Swing tree to rediscover or remove
+# surfaces that the workspace itself mounted.
+for api in 'mountDashboardExtension(String id' 'removeDashboardExtension(String id)'; do
+  if ! grep -Fq "$api" src/com/wtm/ui/OperationsWorkspaceFrame.java; then
+    echo "ERROR: source-owned dashboard extension API '$api' is missing." >&2
+    exit 1
+  fi
+done
+if grep -qE 'findByName|findMarked' src/com/wtm/app/AiEnabledMain.java src/com/wtm/modular/ui/MusicModuleGuard.java || \
+   grep -qE 'findMarked|removeMarked|removeNamed' src/com/wtm/modular/ui/WorkspaceLifecycleV3.java; then
+  echo "ERROR: recursive dashboard extension component discovery returned." >&2
+  exit 1
+fi
+
 rm -rf out
 mkdir -p out
 javac --release 21 -encoding UTF-8 -d out $(find src -name '*.java')
