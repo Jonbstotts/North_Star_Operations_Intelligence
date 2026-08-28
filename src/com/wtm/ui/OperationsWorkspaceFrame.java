@@ -478,7 +478,6 @@ public final class OperationsWorkspaceFrame extends JFrame {
 
         JButton button=createSidebarButton(label,false);
         if(componentName!=null&&!componentName.isBlank())button.setName(componentName);
-        button.putClientProperty("northstar.ui.skip",Boolean.TRUE);
         button.addActionListener(e->action.run());
         sidebarRouteButtons.put(route,button);
 

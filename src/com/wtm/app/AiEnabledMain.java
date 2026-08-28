@@ -13,22 +13,14 @@ import java.awt.*;
 /**
  * Event-driven Intelligence integration for the canonical workspace.
  *
- * <p>The compact dashboard surface is mounted directly into the source-backed
- * OperationsWorkspaceFrame dashboard body. The former DashboardGridPanel
- * reflection path depended on a runtime-only class that does not exist in the
- * canonical source tree and therefore could never be a reliable first-paint
- * integration point.</p>
+ * <p>The compact dashboard surface and full workspace route are mounted through
+ * the explicit OperationsWorkspaceFrame extension API. No private-field
+ * reflection, component discovery, or first-paint recovery path is required.</p>
  */
 public final class AiEnabledMain {
     private static final String COMPACT_NAME="northstar.ai.compact";
 
     private AiEnabledMain(){}
-
-    public static void injectWorkspace(JFrame frame){
-        if(frame==null||!frame.isDisplayable()||!AuthorizationService.allowed(Permission.AI_ASSISTANT))return;
-        injectSidebar(frame);
-        injectDashboard(frame);
-    }
 
     public static void injectSidebar(JFrame frame){
         if(!(frame instanceof OperationsWorkspaceFrame workspace)
@@ -60,8 +52,8 @@ public final class AiEnabledMain {
 
     /**
      * Mounts the compact assistant before the dashboard's trailing vertical
-     * glue. This works before first paint as soon as dashboardBody exists; it
-     * deliberately does not require Component.isShowing().
+     * glue through the bounded workspace extension API. This works before first
+     * paint and deliberately does not require Component.isShowing().
      */
     public static void injectDashboard(JFrame frame){
         if(!(frame instanceof OperationsWorkspaceFrame workspace)
