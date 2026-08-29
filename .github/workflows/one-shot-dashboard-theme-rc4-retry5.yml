@@ -1,0 +1,42 @@
+name: Complete RC4 dashboard field migration
+on:
+  push:
+    branches: [master]
+    paths:
+      - '.github/workflows/one-shot-dashboard-theme-rc4-retry5.yml'
+permissions:
+  contents: write
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: master
+          fetch-depth: 0
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '21'
+      - name: Execute corrected repair script
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          lines=Path('.github/workflows/one-shot-dashboard-theme-rc4-fixes.yml').read_text().splitlines()
+          start=next(i+1 for i,l in enumerate(lines) if l.strip()=='run: |')
+          block=[]
+          for line in lines[start:]:
+              if line=='': block.append(''); continue
+              if line.startswith('          '): block.append(line[10:]); continue
+              break
+          script='\n'.join(block)+'\n'
+          script=script.replace('workspace.removeDashboardExtension(MUSIC_MINI_MARK);','workspace.removeDashboardExtension(MUSIC_MINI_MARKER);')
+          script=script.replace('workspace.removeSummaryExtension(MUSIC_MINI_MARK);','workspace.removeSummaryExtension(MUSIC_MINI_MARKER);')
+          fix="sed -i 's/grid\\.setEditMode/dashboardGrid.setEditMode/g; s/grid\\.resetLayout/dashboardGrid.resetLayout/g' src/com/wtm/ui/OperationsWorkspaceFrame.java\n"
+          script=script.replace('bash build.sh\n',fix+'bash build.sh\n',1)
+          if 'git push origin master' not in script: raise SystemExit('failed to extract full repair script')
+          Path('/tmp/rc4-repair.sh').write_text(script)
+          PY
+          bash /tmp/rc4-repair.sh
