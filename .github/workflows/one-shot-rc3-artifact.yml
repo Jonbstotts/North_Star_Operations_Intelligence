@@ -1,0 +1,53 @@
+name: Build NorthStar v2.1.34 RC3
+on:
+  push:
+    branches: [master]
+    paths:
+      - '.github/workflows/one-shot-rc3-artifact.yml'
+permissions:
+  contents: read
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: master
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '21'
+      - name: Build validated RC3 candidate
+        shell: bash
+        run: |
+          set -euo pipefail
+          bash build.sh
+          mkdir -p dist
+          cp NorthStarOperations.jar dist/NorthStar-Operations-Intelligence-v2.1.34-RC3.jar
+          sha256sum dist/NorthStar-Operations-Intelligence-v2.1.34-RC3.jar > dist/NorthStar-Operations-Intelligence-v2.1.34-RC3-SHA256SUMS.txt
+          cat > dist/RC3-TEST-NOTES.txt <<'EOF'
+          North Star Operations Intelligence v2.1.34 RC3
+
+          Manual GUI regression candidate. This is not the final v2.1.34 release.
+
+          Focus areas:
+          - Real FlatLaf theme selector and runtime theme switching
+          - Holiday theme overlays on FlatLaf bases
+          - Dashboard grid resizing and rearrangement
+          - Traffic & Routes -> Logistics Network
+          - Event/holiday glyph presentation
+          - Settings theme consistency and dynamically rebuilt controls
+          - Startup experience selector: Static Splash / Intro Video / No Startup Screen
+          - Startup intro MP4/MOV managed-media import and Skip Intro / Esc behavior
+          - Login, Settings permissions, Data Collection, Intelligence, Music, and existing dashboard routes
+
+          Known deliberate limitation:
+          - Startup intro video playback is visual-only in this candidate; audio is not yet played.
+          EOF
+      - name: Upload RC3 GUI candidate
+        uses: actions/upload-artifact@v4
+        with:
+          name: NorthStar-Operations-Intelligence-v2.1.34-RC3
+          path: dist/
+          if-no-files-found: error
+          retention-days: 14
