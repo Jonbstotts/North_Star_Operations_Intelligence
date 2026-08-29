@@ -14,11 +14,8 @@ public final class ThemeStyler {
     public static void apply(Component component,AppTheme theme){
         if(component==null)return;
         AppTheme resolved=theme==null?Theme.active():theme;
-        // A live theme change is application-wide. Install the selected real
-        // FlatLaf before refreshing this source-owned presentation boundary.
-        // Previously only the NorthStar semantic accent layer changed here,
-        // leaving the dashboard background on the old Look & Feel.
-        if(Theme.active()!=resolved)Theme.setActive(resolved.id());
+        // Theme installation is owned by explicit application/settings boundaries.
+        // Styling an individual component must never change the process-wide LAF.
         ThemeManager.refresh(component);
         applyApplicationPresentation(component,resolved);
     }

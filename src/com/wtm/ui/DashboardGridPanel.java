@@ -17,9 +17,11 @@ import java.util.Objects;
  * has no global listeners, component scans, or delayed correction.
  */
 public final class DashboardGridPanel extends JPanel {
-    private static final int COLUMNS=12;
-    private static final int GAP=10;
-    private static final int ROW_HEIGHT=92;
+    private static final int COLUMNS=24;
+    private static final int GAP=5;
+    private static final int ROW_HEIGHT=40;
+    private static final String GRID_VERSION_KEY="_gridVersion";
+    private static final String GRID_VERSION="2";
 
     private final Map<String,String> layout;
     private final Map<String,Tile> tiles=new LinkedHashMap<>();
@@ -29,8 +31,27 @@ public final class DashboardGridPanel extends JPanel {
     public DashboardGridPanel(Map<String,String> layout,Runnable persist){
         this.layout=Objects.requireNonNull(layout);
         this.persist=persist==null?()->{}:persist;
+        migrateLegacyLayout();
         setOpaque(false);
         setLayout(null);
+    }
+
+    private void migrateLegacyLayout(){
+        if(GRID_VERSION.equals(layout.get(GRID_VERSION_KEY)))return;
+        Map<String,String> migrated=new LinkedHashMap<>();
+        for(Map.Entry<String,String> entry:layout.entrySet()){
+            if(entry.getKey().startsWith("_"))continue;
+            GridSpec old=GridSpec.parse0(entry.getValue());
+            if(old==null)continue;
+            // RC3 and earlier persisted a 12-column horizontal grid. Doubling
+            // x/width retains the visual placement while the new 24-column grid
+            // provides half-column sizing precision. Vertical units are kept,
+            // but each row is intentionally much shorter so the dashboard fits.
+            if(old.x+old.w<=12)old=new GridSpec(old.x*2,old.y,old.w*2,old.h);
+            migrated.put(entry.getKey(),old.clamped().encode());
+        }
+        layout.putAll(migrated);
+        layout.put(GRID_VERSION_KEY,GRID_VERSION);
     }
 
     public void addTile(String id,String label,JComponent component,String defaultSpec){
@@ -50,6 +71,16 @@ public final class DashboardGridPanel extends JPanel {
     }
 
     public boolean editMode(){ return editMode; }
+
+    public boolean removeTile(String id){
+        Tile tile=tiles.remove(id);
+        if(tile==null)return false;
+        remove(tile);
+        updatePreferredHeight();
+        revalidate();
+        repaint();
+        return true;
+    }
 
     public void resetLayout(Map<String,String> defaults){
         if(defaults==null)return;

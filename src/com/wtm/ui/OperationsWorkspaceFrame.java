@@ -79,6 +79,10 @@ public final class OperationsWorkspaceFrame extends JFrame {
             new LinkedHashMap<>();
     private final Map<String,JComponent> dashboardExtensions=
             new LinkedHashMap<>();
+    private final Map<String,JComponent> summaryExtensions=
+            new LinkedHashMap<>();
+    private DashboardGridPanel dashboardGrid;
+    private JPanel summaryExtensionsHost;
     private JLabel dateTimeLabel;
     private JLabel topWeatherLabel;
     private JLabel topTrafficLabel;
@@ -257,20 +261,22 @@ public final class OperationsWorkspaceFrame extends JFrame {
 
     private JComponent createDashboardView(){
         dashboardExtensions.clear();
+        summaryExtensions.clear();
         dashboardBody=new JPanel();
         dashboardBody.setLayout(new BoxLayout(dashboardBody,BoxLayout.Y_AXIS));
         dashboardBody.setBackground(Theme.bg());
-        dashboardBody.setBorder(new EmptyBorder(18,18,18,18));
+        dashboardBody.setBorder(new EmptyBorder(8,10,8,10));
 
         JComponent summary=buildSummaryStrip();
         summary.setAlignmentX(Component.LEFT_ALIGNMENT);
-        summary.setMaximumSize(new Dimension(Integer.MAX_VALUE,68));
+        summary.setMaximumSize(new Dimension(Integer.MAX_VALUE,64));
+        summary.setPreferredSize(new Dimension(100,60));
 
         JComponent modules=buildModuleGrid();
         modules.setAlignmentX(Component.LEFT_ALIGNMENT);
 
         dashboardBody.add(summary);
-        dashboardBody.add(Box.createVerticalStrut(14));
+        dashboardBody.add(Box.createVerticalStrut(6));
         dashboardBody.add(modules);
         dashboardBody.add(Box.createVerticalGlue());
 
@@ -516,25 +522,48 @@ public final class OperationsWorkspaceFrame extends JFrame {
      * to scan the Swing component tree to detect or remove its own surface.
      */
     public boolean mountDashboardExtension(String id,JComponent component,int preferredIndex){
-        if(id==null||id.isBlank()||component==null||dashboardBody==null||dashboardBody.getParent()==null)return false;
+        if(id==null||id.isBlank()||component==null||dashboardGrid==null)return false;
         JComponent existing=dashboardExtensions.get(id);
-        if(existing!=null&&existing.getParent()==dashboardBody)return true;
-        int index=Math.max(0,Math.min(preferredIndex,dashboardBody.getComponentCount()));
-        dashboardBody.add(component,index);
+        if(existing!=null&&existing.getParent()!=null)return true;
+        String label="northstar.ai.compact".equalsIgnoreCase(id)
+                ?"NorthStar Intelligence"
+                :id;
+        String defaultSpec="northstar.ai.compact".equalsIgnoreCase(id)
+                ?"0,12,24,3"
+                :"0,12,24,2";
+        dashboardGrid.addTile(id,label,component,defaultSpec);
         dashboardExtensions.put(id,component);
-        dashboardBody.revalidate();
-        dashboardBody.repaint();
+        dashboardGrid.revalidate();
+        dashboardGrid.repaint();
         return true;
     }
 
     /** Removes a dashboard extension previously mounted by id. */
     public boolean removeDashboardExtension(String id){
         if(id==null||id.isBlank())return false;
-        JComponent component=dashboardExtensions.remove(id);
-        if(component==null||component.getParent()!=dashboardBody)return false;
-        dashboardBody.remove(component);
-        dashboardBody.revalidate();
-        dashboardBody.repaint();
+        dashboardExtensions.remove(id);
+        return dashboardGrid!=null&&dashboardGrid.removeTile(id);
+    }
+
+    /** Mounts a compact extension inside the summary/header strip. */
+    public boolean mountSummaryExtension(String id,JComponent component){
+        if(id==null||id.isBlank()||component==null||summaryExtensionsHost==null)return false;
+        JComponent existing=summaryExtensions.get(id);
+        if(existing!=null&&existing.getParent()==summaryExtensionsHost)return true;
+        summaryExtensionsHost.removeAll();
+        summaryExtensionsHost.add(component,BorderLayout.CENTER);
+        summaryExtensions.put(id,component);
+        summaryExtensionsHost.revalidate();
+        summaryExtensionsHost.repaint();
+        return true;
+    }
+
+    public boolean removeSummaryExtension(String id){
+        JComponent component=summaryExtensions.remove(id);
+        if(component==null||summaryExtensionsHost==null)return false;
+        summaryExtensionsHost.remove(component);
+        summaryExtensionsHost.revalidate();
+        summaryExtensionsHost.repaint();
         return true;
     }
 
@@ -567,13 +596,22 @@ public final class OperationsWorkspaceFrame extends JFrame {
         greeting.add(hello);greeting.add(Box.createVerticalStrut(3));greeting.add(dateTimeLabel);
         strip.add(greeting,BorderLayout.WEST);
 
-        JPanel quick=new JPanel(new GridLayout(1,2,16,0));
+        JPanel quick=new JPanel(new GridLayout(1,2,12,0));
         quick.setOpaque(false);
         topWeatherLabel=quickSummary("WEATHER","--°F","Loading weather...");
         topTrafficLabel=quickSummary("TRAFFIC","Checking routes...","Live traffic");
         quick.add(topWeatherLabel.getParent());
         quick.add(topTrafficLabel.getParent());
-        strip.add(quick,BorderLayout.EAST);
+
+        summaryExtensionsHost=new JPanel(new BorderLayout());
+        summaryExtensionsHost.setOpaque(false);
+        summaryExtensionsHost.setPreferredSize(new Dimension(330,54));
+
+        JPanel rightSummary=new JPanel(new FlowLayout(FlowLayout.RIGHT,12,0));
+        rightSummary.setOpaque(false);
+        rightSummary.add(summaryExtensionsHost);
+        rightSummary.add(quick);
+        strip.add(rightSummary,BorderLayout.EAST);
         return strip;
     }
 
@@ -603,60 +641,61 @@ public final class OperationsWorkspaceFrame extends JFrame {
         JPanel container=new JPanel(new BorderLayout(0,8));
         container.setOpaque(false);
 
-        DashboardGridPanel grid=new DashboardGridPanel(
+        dashboardGrid=new DashboardGridPanel(
                 config.workspaceDashboardLayout,
                 ()->ConfigService.save(config)
         );
 
         if(moduleEnabled("WEATHER")){
             weatherModule=weatherCard();
-            grid.addTile("WEATHER","Local Weather",weatherModule,"0,0,3,6");
+            dashboardGrid.addTile("WEATHER","Local Weather",weatherModule,"0,0,6,8");
         }
         if(moduleEnabled("TRAFFIC_MAP"))
-            grid.addTile("SHOWCASE","Main Showcase",mapCard(),"3,0,6,6");
+            dashboardGrid.addTile("SHOWCASE","Main Showcase",mapCard(),"6,0,12,8");
         if(moduleEnabled("UPCOMING_EVENTS")){
             eventsModule=eventsCard();
-            grid.addTile("UPCOMING_EVENTS","Upcoming Events",eventsModule,"9,0,3,3");
+            dashboardGrid.addTile("UPCOMING_EVENTS","Upcoming Events",eventsModule,"18,0,6,4");
         }
         if(moduleEnabled("TEAM_CELEBRATIONS")){
             celebrationsModule=celebrationsCard();
-            grid.addTile("TEAM_CELEBRATIONS","Team Celebrations",celebrationsModule,"9,3,3,3");
+            dashboardGrid.addTile("TEAM_CELEBRATIONS","Team Celebrations",celebrationsModule,"18,4,6,4");
         }
         if(config.workspaceInfoStripEnabled){
             infoStripModule=informationStripCard();
-            grid.addTile("INFORMATION","Information",infoStripModule,"0,6,12,1");
+            dashboardGrid.addTile("INFORMATION","Information",infoStripModule,"0,8,24,2");
         }
         if(moduleEnabled("OPERATIONS_SNAPSHOT")){
             operationsModule=operationsSnapshotCard();
-            grid.addTile("OPERATIONS_SNAPSHOT","Operations Snapshot",operationsModule,"0,7,12,2");
+            dashboardGrid.addTile("OPERATIONS_SNAPSHOT","Operations Snapshot",operationsModule,"0,10,24,2");
         }
 
         if(AuthorizationService.allowed(Permission.DASHBOARD_LAYOUT)){
             JPanel tools=new JPanel(new FlowLayout(FlowLayout.RIGHT,8,0));
             tools.setOpaque(false);
             JToggleButton edit=new JToggleButton("Customize Layout");
-            edit.setToolTipText("Drag and resize dashboard blocks on a 12-column snap grid.");
+            edit.setToolTipText("Drag and resize dashboard blocks on a precise 24-column snap grid.");
             edit.addActionListener(e->{
-                grid.setEditMode(edit.isSelected());
+                dashboardGrid.setEditMode(edit.isSelected());
                 edit.setText(edit.isSelected()?"Finish Layout":"Customize Layout");
             });
             JButton reset=new JButton("Reset Layout");
             reset.addActionListener(e->{
                 Map<String,String> defaults=new LinkedHashMap<>();
-                defaults.put("WEATHER","0,0,3,6");
-                defaults.put("SHOWCASE","3,0,6,6");
-                defaults.put("UPCOMING_EVENTS","9,0,3,3");
-                defaults.put("TEAM_CELEBRATIONS","9,3,3,3");
-                defaults.put("INFORMATION","0,6,12,1");
-                defaults.put("OPERATIONS_SNAPSHOT","0,7,12,2");
-                grid.resetLayout(defaults);
+                defaults.put("WEATHER","0,0,6,8");
+                defaults.put("SHOWCASE","6,0,12,8");
+                defaults.put("UPCOMING_EVENTS","18,0,6,4");
+                defaults.put("TEAM_CELEBRATIONS","18,4,6,4");
+                defaults.put("INFORMATION","0,8,24,2");
+                defaults.put("OPERATIONS_SNAPSHOT","0,10,24,2");
+                defaults.put("northstar.ai.compact","0,12,24,3");
+                dashboardGrid.resetLayout(defaults);
             });
             tools.add(edit);
             tools.add(reset);
             container.add(tools,BorderLayout.NORTH);
         }
 
-        container.add(grid,BorderLayout.CENTER);
+        container.add(dashboardGrid,BorderLayout.CENTER);
         return container;
     }
 

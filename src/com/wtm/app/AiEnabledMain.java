@@ -7,7 +7,6 @@ import com.wtm.ui.NorthStarIntelligencePanel;
 import com.wtm.ui.OperationsWorkspaceFrame;
 
 import javax.swing.*;
-import javax.swing.border.EmptyBorder;
 import java.awt.*;
 
 /**
@@ -61,18 +60,8 @@ public final class AiEnabledMain {
         NorthStarIntelligenceCompactPanel compact=
                 new NorthStarIntelligenceCompactPanel(()->openFull(workspace));
         compact.setAlignmentX(Component.LEFT_ALIGNMENT);
-        Dimension preferred=compact.getPreferredSize();
-        int height=Math.max(150,preferred==null?150:preferred.height);
-        compact.setMaximumSize(new Dimension(Integer.MAX_VALUE,height));
-
-        JPanel mount=new JPanel(new BorderLayout());
-        mount.setOpaque(false);
-        mount.setBorder(new EmptyBorder(14,0,0,0));
-        mount.setAlignmentX(Component.LEFT_ALIGNMENT);
-        mount.setMaximumSize(new Dimension(Integer.MAX_VALUE,height+14));
-        mount.add(compact,BorderLayout.CENTER);
-
-        workspace.mountDashboardExtension(COMPACT_NAME,mount,Integer.MAX_VALUE-1);
+        compact.setMaximumSize(new Dimension(Integer.MAX_VALUE,128));
+        workspace.mountDashboardExtension(COMPACT_NAME,compact,Integer.MAX_VALUE-1);
     }
 
 

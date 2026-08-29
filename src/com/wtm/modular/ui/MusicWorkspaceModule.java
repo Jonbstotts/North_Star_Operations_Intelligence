@@ -91,9 +91,9 @@ public final class MusicWorkspaceModule {
         if(!MusicService.instance().settings.dashboardPlayer
                 ||!(w instanceof OperationsWorkspaceFrame workspace))return;
         MiniPlayer mini=new MiniPlayer(workspace);
-        mini.setAlignmentX(Component.LEFT_ALIGNMENT);
-        mini.setMaximumSize(new Dimension(Integer.MAX_VALUE,72));
-        workspace.mountDashboardExtension(MINI_MARK,mini,2);
+        mini.setPreferredSize(new Dimension(320,52));
+        mini.setMaximumSize(new Dimension(340,54));
+        workspace.mountSummaryExtension(MINI_MARK,mini);
     }
 
     // Provider-neutral model ------------------------------------------------
@@ -227,7 +227,15 @@ document.getElementById('auth').onclick=auth;document.getElementById('sync').onc
 
     private static final class MiniPlayer extends JPanel{
         private final MusicService service=MusicService.instance();private final JLabel now=new JLabel();private final Window owner;
-        MiniPlayer(Window owner){super(new BorderLayout(10,0));this.owner=owner;setOpaque(false);setBorder(new EmptyBorder(7,10,7,10));JButton open=new JButton("Music");open.addActionListener(e->showMusic(owner));JPanel buttons=new JPanel(new FlowLayout(FlowLayout.RIGHT,5,0));buttons.setOpaque(false);for(String[] x:new String[][]{{"◀","prev"},{"▶","play"},{"❚❚","pause"},{"▶▶","next"}}){JButton b=new JButton(x[0]);b.addActionListener(e->service.command(x[1]));buttons.add(b);}now.setForeground(Theme.text());add(open,BorderLayout.WEST);add(now,BorderLayout.CENTER);add(buttons,BorderLayout.EAST);refresh();}
+        MiniPlayer(Window owner){
+            super(new BorderLayout(7,0));this.owner=owner;setOpaque(false);setBorder(new EmptyBorder(1,4,1,4));
+            JPanel left=new JPanel();left.setOpaque(false);left.setLayout(new BoxLayout(left,BoxLayout.Y_AXIS));
+            JButton open=new JButton("Music");open.setMargin(new Insets(2,8,2,8));open.addActionListener(e->showMusic(owner));
+            now.setForeground(Theme.text());now.setFont(now.getFont().deriveFont(11f));left.add(open);left.add(now);
+            JPanel buttons=new JPanel(new GridLayout(2,2,4,3));buttons.setOpaque(false);
+            for(String[] x:new String[][]{{"◀","prev"},{"▶","play"},{"❚❚","pause"},{"▶▶","next"}}){JButton b=new JButton(x[0]);b.setMargin(new Insets(1,6,1,6));b.addActionListener(e->service.command(x[1]));buttons.add(b);}
+            add(left,BorderLayout.CENTER);add(buttons,BorderLayout.EAST);refresh();
+        }
         private void refresh(){PlaybackState p=service.playback();now.setText("♫  "+p.title()+("".equals(p.artist())?"":" — "+p.artist()));}
     }
 }

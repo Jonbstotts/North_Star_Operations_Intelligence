@@ -320,6 +320,16 @@ if [ ! -f src/com/wtm/ui/StartupExperienceManager.java ] || ! grep -Fq 'peekStar
   echo "ERROR: canonical optional startup-experience ownership is missing." >&2
   exit 1
 fi
+if grep -Fq 'Theme.setActive(resolved.id())' src/com/wtm/ui/ThemeStyler.java; then
+  echo "ERROR: ThemeStyler must not install a global look-and-feel." >&2
+  exit 1
+fi
+for glyph in resources/glyphs/northstar_dashboard_row0.png resources/glyphs/northstar_dashboard_row1.png resources/glyphs/northstar_dashboard_row2.png resources/glyphs/northstar_dashboard_row3.png; do
+  if [ ! -f "$glyph" ]; then
+    echo "ERROR: required NorthStar dashboard glyph atlas row is missing: $glyph" >&2
+    exit 1
+  fi
+done
 
 rm -rf out
 mkdir -p out

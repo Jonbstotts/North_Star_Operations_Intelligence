@@ -73,7 +73,7 @@ public final class WorkspaceLifecycleV3 {
         else workspace.removeDashboardExtension("northstar.ai.compact");
 
         MusicWorkspaceModule.installWorkspace(workspace);
-        if (!musicDashboardEnabled()) workspace.removeDashboardExtension(MUSIC_MINI_MARKER);
+        if (!musicDashboardEnabled()) workspace.removeSummaryExtension(MUSIC_MINI_MARKER);
 
         workspace.getRootPane().revalidate();
         workspace.validate();

@@ -841,6 +841,10 @@ public final class SettingsDialog extends JDialog {
      */
     private void applySettingsTheme(AppTheme theme){
         if(theme==null)theme=originalTheme;
+        // Settings is an explicit application-theme boundary. Install the real
+        // FlatLaf once, then refresh/stylize controls without allowing child
+        // components to change the global look-and-feel.
+        Theme.setActive(theme.id());
         ThemeStyler.apply(this,theme);
 
         // Dashboard Block selectors are dynamic, so explicitly include their
