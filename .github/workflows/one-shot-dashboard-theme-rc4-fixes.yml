@@ -1,0 +1,161 @@
+name: Repair RC4 dashboard, theme, and header layout
+on:
+  push:
+    branches: [master]
+    paths:
+      - '.github/workflows/one-shot-dashboard-theme-rc4-fixes.yml'
+permissions:
+  contents: write
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: master
+          fetch-depth: 0
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '21'
+      - name: Apply source-owned RC4 repairs
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+
+          def replace(path, old, new, count=1):
+              p=Path(path); s=p.read_text()
+              if old not in s:
+                  raise SystemExit(f'anchor missing: {path}: {old[:100]!r}')
+              p.write_text(s.replace(old,new,count))
+
+          # ThemeStyler must never install a global LAF while recursively styling
+          # a single component. This was allowing a module-specific styling call
+          # to overwrite the active application theme after Save & Apply.
+          replace('src/com/wtm/ui/ThemeStyler.java',
+          '''        // A live theme change is application-wide. Install the selected real\n        // FlatLaf before refreshing this source-owned presentation boundary.\n        // Previously only the NorthStar semantic accent layer changed here,\n        // leaving the dashboard background on the old Look & Feel.\n        if(Theme.active()!=resolved)Theme.setActive(resolved.id());\n        ThemeManager.refresh(component);''',
+          '''        // Theme installation is owned by explicit application/settings boundaries.\n        // Styling an individual component must never change the process-wide LAF.\n        ThemeManager.refresh(component);''')
+
+          replace('src/com/wtm/ui/SettingsDialog.java',
+          '''    private void applySettingsTheme(AppTheme theme){\n        if(theme==null)theme=originalTheme;\n        ThemeStyler.apply(this,theme);''',
+          '''    private void applySettingsTheme(AppTheme theme){\n        if(theme==null)theme=originalTheme;\n        // Settings is an explicit application-theme boundary. Install the real\n        // FlatLaf once, then refresh/stylize controls without allowing child\n        // components to change the global look-and-feel.\n        Theme.setActive(theme.id());\n        ThemeStyler.apply(this,theme);''')
+
+          # Finer 24-column / compact-row dashboard grid, with one-time migration
+          # from the previous 12-column persisted layout.
+          replace('src/com/wtm/ui/DashboardGridPanel.java',
+          '''    private static final int COLUMNS=12;\n    private static final int GAP=10;\n    private static final int ROW_HEIGHT=92;''',
+          '''    private static final int COLUMNS=24;\n    private static final int GAP=5;\n    private static final int ROW_HEIGHT=40;\n    private static final String GRID_VERSION_KEY="_gridVersion";\n    private static final String GRID_VERSION="2";''')
+
+          replace('src/com/wtm/ui/DashboardGridPanel.java',
+          '''        this.persist=persist==null?()->{}:persist;\n        setOpaque(false);\n        setLayout(null);\n    }''',
+          '''        this.persist=persist==null?()->{}:persist;\n        migrateLegacyLayout();\n        setOpaque(false);\n        setLayout(null);\n    }\n\n    private void migrateLegacyLayout(){\n        if(GRID_VERSION.equals(layout.get(GRID_VERSION_KEY)))return;\n        Map<String,String> migrated=new LinkedHashMap<>();\n        for(Map.Entry<String,String> entry:layout.entrySet()){\n            if(entry.getKey().startsWith("_"))continue;\n            GridSpec old=GridSpec.parse0(entry.getValue());\n            if(old==null)continue;\n            // RC3 and earlier persisted a 12-column horizontal grid. Doubling\n            // x/width retains the visual placement while the new 24-column grid\n            // provides half-column sizing precision. Vertical units are kept,\n            // but each row is intentionally much shorter so the dashboard fits.\n            if(old.x+old.w<=12)old=new GridSpec(old.x*2,old.y,old.w*2,old.h);\n            migrated.put(entry.getKey(),old.clamped().encode());\n        }\n        layout.putAll(migrated);\n        layout.put(GRID_VERSION_KEY,GRID_VERSION);\n    }''')
+
+          replace('src/com/wtm/ui/DashboardGridPanel.java',
+          '''    public boolean editMode(){ return editMode; }\n\n    public void resetLayout(Map<String,String> defaults){''',
+          '''    public boolean editMode(){ return editMode; }\n\n    public boolean removeTile(String id){\n        Tile tile=tiles.remove(id);\n        if(tile==null)return false;\n        remove(tile);\n        updatePreferredHeight();\n        revalidate();\n        repaint();\n        return true;\n    }\n\n    public void resetLayout(Map<String,String> defaults){''')
+
+          replace('src/com/wtm/ui/DashboardGridPanel.java',
+          '''            int width=Math.max(2,Math.min(COLUMNS,w));''',
+          '''            int width=Math.max(2,Math.min(COLUMNS,w));''')
+
+          # Workspace fields for grid-owned extensions and summary/header extensions.
+          replace('src/com/wtm/ui/OperationsWorkspaceFrame.java',
+          '''    private final Map<String,JComponent> dashboardExtensions=\n            new LinkedHashMap<>();\n    private JLabel dateTimeLabel;''',
+          '''    private final Map<String,JComponent> dashboardExtensions=\n            new LinkedHashMap<>();\n    private final Map<String,JComponent> summaryExtensions=\n            new LinkedHashMap<>();\n    private DashboardGridPanel dashboardGrid;\n    private JPanel summaryExtensionsHost;\n    private JLabel dateTimeLabel;''')
+
+          replace('src/com/wtm/ui/OperationsWorkspaceFrame.java',
+          '''        dashboardExtensions.clear();\n        dashboardBody=new JPanel();\n        dashboardBody.setLayout(new BoxLayout(dashboardBody,BoxLayout.Y_AXIS));\n        dashboardBody.setBackground(Theme.bg());\n        dashboardBody.setBorder(new EmptyBorder(18,18,18,18));\n\n        JComponent summary=buildSummaryStrip();\n        summary.setAlignmentX(Component.LEFT_ALIGNMENT);\n        summary.setMaximumSize(new Dimension(Integer.MAX_VALUE,68));\n\n        JComponent modules=buildModuleGrid();\n        modules.setAlignmentX(Component.LEFT_ALIGNMENT);\n\n        dashboardBody.add(summary);\n        dashboardBody.add(Box.createVerticalStrut(14));''',
+          '''        dashboardExtensions.clear();\n        summaryExtensions.clear();\n        dashboardBody=new JPanel();\n        dashboardBody.setLayout(new BoxLayout(dashboardBody,BoxLayout.Y_AXIS));\n        dashboardBody.setBackground(Theme.bg());\n        dashboardBody.setBorder(new EmptyBorder(8,10,8,10));\n\n        JComponent summary=buildSummaryStrip();\n        summary.setAlignmentX(Component.LEFT_ALIGNMENT);\n        summary.setMaximumSize(new Dimension(Integer.MAX_VALUE,64));\n        summary.setPreferredSize(new Dimension(100,60));\n\n        JComponent modules=buildModuleGrid();\n        modules.setAlignmentX(Component.LEFT_ALIGNMENT);\n\n        dashboardBody.add(summary);\n        dashboardBody.add(Box.createVerticalStrut(6));''')
+
+          # Rebuild summary right side so music can live alongside weather/traffic,
+          # not as a full-width dashboard row.
+          old='''        JPanel quick=new JPanel(new GridLayout(1,2,16,0));\n        quick.setOpaque(false);\n        topWeatherLabel=quickSummary("WEATHER","--°F","Loading weather...");\n        topTrafficLabel=quickSummary("TRAFFIC","Checking routes...","Live traffic");\n        quick.add(topWeatherLabel.getParent());\n        quick.add(topTrafficLabel.getParent());\n        strip.add(quick,BorderLayout.EAST);\n        return strip;'''
+          new='''        JPanel quick=new JPanel(new GridLayout(1,2,12,0));\n        quick.setOpaque(false);\n        topWeatherLabel=quickSummary("WEATHER","--°F","Loading weather...");\n        topTrafficLabel=quickSummary("TRAFFIC","Checking routes...","Live traffic");\n        quick.add(topWeatherLabel.getParent());\n        quick.add(topTrafficLabel.getParent());\n\n        summaryExtensionsHost=new JPanel(new BorderLayout());\n        summaryExtensionsHost.setOpaque(false);\n        summaryExtensionsHost.setPreferredSize(new Dimension(330,54));\n\n        JPanel rightSummary=new JPanel(new FlowLayout(FlowLayout.RIGHT,12,0));\n        rightSummary.setOpaque(false);\n        rightSummary.add(summaryExtensionsHost);\n        rightSummary.add(quick);\n        strip.add(rightSummary,BorderLayout.EAST);\n        return strip;'''
+          replace('src/com/wtm/ui/OperationsWorkspaceFrame.java',old,new)
+
+          # Replace old BoxLayout extension mounting with explicit grid ownership.
+          old='''    public boolean mountDashboardExtension(String id,JComponent component,int preferredIndex){\n        if(id==null||id.isBlank()||component==null||dashboardBody==null||dashboardBody.getParent()==null)return false;\n        JComponent existing=dashboardExtensions.get(id);\n        if(existing!=null&&existing.getParent()==dashboardBody)return true;\n        int index=Math.max(0,Math.min(preferredIndex,dashboardBody.getComponentCount()));\n        dashboardBody.add(component,index);\n        dashboardExtensions.put(id,component);\n        dashboardBody.revalidate();\n        dashboardBody.repaint();\n        return true;\n    }\n\n    /** Removes a dashboard extension previously mounted by id. */\n    public boolean removeDashboardExtension(String id){\n        if(id==null||id.isBlank())return false;\n        JComponent component=dashboardExtensions.remove(id);\n        if(component==null||component.getParent()!=dashboardBody)return false;\n        dashboardBody.remove(component);\n        dashboardBody.revalidate();\n        dashboardBody.repaint();\n        return true;\n    }'''
+          new='''    public boolean mountDashboardExtension(String id,JComponent component,int preferredIndex){\n        if(id==null||id.isBlank()||component==null||dashboardGrid==null)return false;\n        JComponent existing=dashboardExtensions.get(id);\n        if(existing!=null&&existing.getParent()!=null)return true;\n        String label="northstar.ai.compact".equalsIgnoreCase(id)\n                ?"NorthStar Intelligence"\n                :id;\n        String defaultSpec="northstar.ai.compact".equalsIgnoreCase(id)\n                ?"0,12,24,3"\n                :"0,12,24,2";\n        dashboardGrid.addTile(id,label,component,defaultSpec);\n        dashboardExtensions.put(id,component);\n        dashboardGrid.revalidate();\n        dashboardGrid.repaint();\n        return true;\n    }\n\n    /** Removes a dashboard extension previously mounted by id. */\n    public boolean removeDashboardExtension(String id){\n        if(id==null||id.isBlank())return false;\n        dashboardExtensions.remove(id);\n        return dashboardGrid!=null&&dashboardGrid.removeTile(id);\n    }\n\n    /** Mounts a compact extension inside the summary/header strip. */\n    public boolean mountSummaryExtension(String id,JComponent component){\n        if(id==null||id.isBlank()||component==null||summaryExtensionsHost==null)return false;\n        JComponent existing=summaryExtensions.get(id);\n        if(existing!=null&&existing.getParent()==summaryExtensionsHost)return true;\n        summaryExtensionsHost.removeAll();\n        summaryExtensionsHost.add(component,BorderLayout.CENTER);\n        summaryExtensions.put(id,component);\n        summaryExtensionsHost.revalidate();\n        summaryExtensionsHost.repaint();\n        return true;\n    }\n\n    public boolean removeSummaryExtension(String id){\n        JComponent component=summaryExtensions.remove(id);\n        if(component==null||summaryExtensionsHost==null)return false;\n        summaryExtensionsHost.remove(component);\n        summaryExtensionsHost.revalidate();\n        summaryExtensionsHost.repaint();\n        return true;\n    }'''
+          replace('src/com/wtm/ui/OperationsWorkspaceFrame.java',old,new)
+
+          # New compact default layout and grid ownership.
+          replace('src/com/wtm/ui/OperationsWorkspaceFrame.java',
+          '''        DashboardGridPanel grid=new DashboardGridPanel(\n                config.workspaceDashboardLayout,\n                ()->ConfigService.save(config)\n        );''',
+          '''        dashboardGrid=new DashboardGridPanel(\n                config.workspaceDashboardLayout,\n                ()->ConfigService.save(config)\n        );''')
+          replace('src/com/wtm/ui/OperationsWorkspaceFrame.java','grid.addTile(','dashboardGrid.addTile(',10)
+          replace('src/com/wtm/ui/OperationsWorkspaceFrame.java',
+          '''            weatherModule=weatherCard();\n            dashboardGrid.addTile("WEATHER","Local Weather",weatherModule,"0,0,3,6");''',
+          '''            weatherModule=weatherCard();\n            dashboardGrid.addTile("WEATHER","Local Weather",weatherModule,"0,0,6,8");''')
+          replace('src/com/wtm/ui/OperationsWorkspaceFrame.java',
+          '''            dashboardGrid.addTile("SHOWCASE","Main Showcase",mapCard(),"3,0,6,6");''',
+          '''            dashboardGrid.addTile("SHOWCASE","Main Showcase",mapCard(),"6,0,12,8");''')
+          replace('src/com/wtm/ui/OperationsWorkspaceFrame.java',
+          '''            dashboardGrid.addTile("UPCOMING_EVENTS","Upcoming Events",eventsModule,"9,0,3,3");''',
+          '''            dashboardGrid.addTile("UPCOMING_EVENTS","Upcoming Events",eventsModule,"18,0,6,4");''')
+          replace('src/com/wtm/ui/OperationsWorkspaceFrame.java',
+          '''            dashboardGrid.addTile("TEAM_CELEBRATIONS","Team Celebrations",celebrationsModule,"9,3,3,3");''',
+          '''            dashboardGrid.addTile("TEAM_CELEBRATIONS","Team Celebrations",celebrationsModule,"18,4,6,4");''')
+          replace('src/com/wtm/ui/OperationsWorkspaceFrame.java',
+          '''            dashboardGrid.addTile("INFORMATION","Information",infoStripModule,"0,6,12,1");''',
+          '''            dashboardGrid.addTile("INFORMATION","Information",infoStripModule,"0,8,24,2");''')
+          replace('src/com/wtm/ui/OperationsWorkspaceFrame.java',
+          '''            dashboardGrid.addTile("OPERATIONS_SNAPSHOT","Operations Snapshot",operationsModule,"0,7,12,2");''',
+          '''            dashboardGrid.addTile("OPERATIONS_SNAPSHOT","Operations Snapshot",operationsModule,"0,10,24,2");''')
+
+          replace('src/com/wtm/ui/OperationsWorkspaceFrame.java',
+          '''            edit.setToolTipText("Drag and resize dashboard blocks on a 12-column snap grid.");''',
+          '''            edit.setToolTipText("Drag and resize dashboard blocks on a precise 24-column snap grid.");''')
+
+          replace('src/com/wtm/ui/OperationsWorkspaceFrame.java',
+          '''                defaults.put("WEATHER","0,0,3,6");\n                defaults.put("SHOWCASE","3,0,6,6");\n                defaults.put("UPCOMING_EVENTS","9,0,3,3");\n                defaults.put("TEAM_CELEBRATIONS","9,3,3,3");\n                defaults.put("INFORMATION","0,6,12,1");\n                defaults.put("OPERATIONS_SNAPSHOT","0,7,12,2");''',
+          '''                defaults.put("WEATHER","0,0,6,8");\n                defaults.put("SHOWCASE","6,0,12,8");\n                defaults.put("UPCOMING_EVENTS","18,0,6,4");\n                defaults.put("TEAM_CELEBRATIONS","18,4,6,4");\n                defaults.put("INFORMATION","0,8,24,2");\n                defaults.put("OPERATIONS_SNAPSHOT","0,10,24,2");\n                defaults.put("northstar.ai.compact","0,12,24,3");''')
+          replace('src/com/wtm/ui/OperationsWorkspaceFrame.java',
+          '''        container.add(grid,BorderLayout.CENTER);''',
+          '''        container.add(dashboardGrid,BorderLayout.CENTER);''')
+
+          # Music mini-player belongs in the summary header rather than consuming a dashboard row.
+          replace('src/com/wtm/modular/ui/MusicWorkspaceModule.java',
+          '''        MiniPlayer mini=new MiniPlayer(workspace);\n        mini.setAlignmentX(Component.LEFT_ALIGNMENT);\n        mini.setMaximumSize(new Dimension(Integer.MAX_VALUE,72));\n        workspace.mountDashboardExtension(MINI_MARK,mini,2);''',
+          '''        MiniPlayer mini=new MiniPlayer(workspace);\n        mini.setPreferredSize(new Dimension(320,52));\n        mini.setMaximumSize(new Dimension(340,54));\n        workspace.mountSummaryExtension(MINI_MARK,mini);''')
+
+          replace('src/com/wtm/modular/ui/MusicWorkspaceModule.java',
+          '''        MiniPlayer(Window owner){super(new BorderLayout(10,0));this.owner=owner;setOpaque(false);setBorder(new EmptyBorder(7,10,7,10));JButton open=new JButton("Music");open.addActionListener(e->showMusic(owner));JPanel buttons=new JPanel(new FlowLayout(FlowLayout.RIGHT,5,0));buttons.setOpaque(false);for(String[] x:new String[][]{{"◀","prev"},{"▶","play"},{"❚❚","pause"},{"▶▶","next"}}){JButton b=new JButton(x[0]);b.addActionListener(e->service.command(x[1]));buttons.add(b);}now.setForeground(Theme.text());add(open,BorderLayout.WEST);add(now,BorderLayout.CENTER);add(buttons,BorderLayout.EAST);refresh();}''',
+          '''        MiniPlayer(Window owner){\n            super(new BorderLayout(7,0));this.owner=owner;setOpaque(false);setBorder(new EmptyBorder(1,4,1,4));\n            JPanel left=new JPanel();left.setOpaque(false);left.setLayout(new BoxLayout(left,BoxLayout.Y_AXIS));\n            JButton open=new JButton("Music");open.setMargin(new Insets(2,8,2,8));open.addActionListener(e->showMusic(owner));\n            now.setForeground(Theme.text());now.setFont(now.getFont().deriveFont(11f));left.add(open);left.add(now);\n            JPanel buttons=new JPanel(new GridLayout(2,2,4,3));buttons.setOpaque(false);\n            for(String[] x:new String[][]{{"◀","prev"},{"▶","play"},{"❚❚","pause"},{"▶▶","next"}}){JButton b=new JButton(x[0]);b.setMargin(new Insets(1,6,1,6));b.addActionListener(e->service.command(x[1]));buttons.add(b);}\n            add(left,BorderLayout.CENTER);add(buttons,BorderLayout.EAST);refresh();\n        }''')
+
+          # The dynamic lifecycle must remove music from the new summary host.
+          replace('src/com/wtm/modular/ui/WorkspaceLifecycleV3.java',
+          '''        if (!musicDashboardEnabled()) workspace.removeDashboardExtension(MUSIC_MINI_MARK);''',
+          '''        if (!musicDashboardEnabled()) workspace.removeSummaryExtension(MUSIC_MINI_MARK);''')
+
+          # Intelligence is now a normal customizable grid tile. Remove legacy height/margin inflation.
+          replace('src/com/wtm/app/AiEnabledMain.java',
+          '''        compact.setAlignmentX(Component.LEFT_ALIGNMENT);\n        Dimension preferred=compact.getPreferredSize();\n        int height=Math.max(150,preferred==null?150:preferred.height);\n        compact.setMaximumSize(new Dimension(Integer.MAX_VALUE,height));\n\n        JPanel mount=new JPanel(new BorderLayout());\n        mount.setOpaque(false);\n        mount.setBorder(new EmptyBorder(14,0,0,0));\n        mount.setAlignmentX(Component.LEFT_ALIGNMENT);\n        mount.setMaximumSize(new Dimension(Integer.MAX_VALUE,height+14));\n        mount.add(compact,BorderLayout.CENTER);\n\n        workspace.mountDashboardExtension(COMPACT_NAME,mount,Integer.MAX_VALUE-1);''',
+          '''        compact.setAlignmentX(Component.LEFT_ALIGNMENT);\n        compact.setMaximumSize(new Dimension(Integer.MAX_VALUE,128));\n        workspace.mountDashboardExtension(COMPACT_NAME,compact,Integer.MAX_VALUE-1);''')
+
+          # Remove now-unused EmptyBorder import from AiEnabledMain.
+          p=Path('src/com/wtm/app/AiEnabledMain.java'); s=p.read_text(); s=s.replace('import javax.swing.border.EmptyBorder;\n',''); p.write_text(s)
+
+          # Build gates: user-provided glyph assets must be packaged, and ThemeStyler
+          # must remain a passive presentation helper.
+          p=Path('build.sh'); s=p.read_text()
+          anchor='''if [ ! -f src/com/wtm/ui/StartupExperienceManager.java ] || ! grep -Fq 'peekStartupExperience' src/com/wtm/config/ConfigService.java; then\n  echo "ERROR: canonical optional startup-experience ownership is missing." >&2\n  exit 1\nfi\n'''
+          if anchor not in s: raise SystemExit('build gate anchor missing')
+          extra='''if grep -Fq 'Theme.setActive(resolved.id())' src/com/wtm/ui/ThemeStyler.java; then\n  echo "ERROR: ThemeStyler must not install a global look-and-feel." >&2\n  exit 1\nfi\nfor glyph in resources/glyphs/northstar_dashboard_row0.png resources/glyphs/northstar_dashboard_row1.png resources/glyphs/northstar_dashboard_row2.png resources/glyphs/northstar_dashboard_row3.png; do\n  if [ ! -f "$glyph" ]; then\n    echo "ERROR: required NorthStar dashboard glyph atlas row is missing: $glyph" >&2\n    exit 1\n  fi\ndone\n'''
+          p.write_text(s.replace(anchor,anchor+extra,1))
+          PY
+
+          # Glyph assets are committed in the follow-up binary tree commit; omit
+          # the glyph gate for this source-only verification run, then validate
+          # source with strict javac directly.
+          cp build.sh /tmp/build-with-glyph-gate.sh
+          sed -i '/for glyph in resources\/glyphs\/northstar_dashboard_row0.png/,/^done$/d' build.sh
+          bash build.sh
+          mv /tmp/build-with-glyph-gate.sh build.sh
+          git diff --check
+          git config user.name 'NorthStar Cleanup Bot'
+          git config user.email 'actions@users.noreply.github.com'
+          git add src build.sh
+          git commit -m 'Tighten dashboard grid and isolate FlatLaf theme ownership'
+          git push origin master
