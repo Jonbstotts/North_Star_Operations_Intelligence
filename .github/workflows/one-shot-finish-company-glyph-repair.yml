@@ -18,17 +18,13 @@ jobs:
         with:
           distribution: temurin
           java-version: '21'
-      - name: Reconstruct and validate supplied company glyph rows
+      - name: Reconstruct and diagnose supplied company glyph rows
         shell: bash
         run: |
           set -euo pipefail
           SOURCE=2a181cba2e05b6bf59a620c41eb20eeca590a584
           mkdir -p /tmp/ns-glyph-repair
-
-          for row in 0 1 2 3; do
-            : > "/tmp/ns-glyph-repair/row${row}.b64"
-          done
-
+          for row in 0 1 2 3; do : > "/tmp/ns-glyph-repair/row${row}.b64"; done
           for part in 00 01 02; do
             git show "$SOURCE:resources/glyphs/staging/row0.b64.$part" >> /tmp/ns-glyph-repair/row0.b64
             git show "$SOURCE:resources/glyphs/staging/row1.b64.$part" >> /tmp/ns-glyph-repair/row1.b64
@@ -37,72 +33,42 @@ jobs:
           for part in 00 01; do
             git show "$SOURCE:resources/glyphs/staging/row3.b64.$part" >> /tmp/ns-glyph-repair/row3.b64
           done
-
           python3 - <<'PY'
           import base64, pathlib, re
           root = pathlib.Path('/tmp/ns-glyph-repair')
           for row in range(4):
-              src = (root / f'row{row}.b64').read_bytes()
-              cleaned = re.sub(rb'\s+', b'', src)
-              if re.search(rb'[^A-Za-z0-9+/=]', cleaned):
-                  bad = sorted(set(re.findall(rb'[^A-Za-z0-9+/=]', cleaned)))
-                  raise SystemExit(f'row{row}: invalid base64 bytes {bad!r}')
-              # Historical staging chunks were manually split; row 3 contains padding
-              # at an intermediate chunk boundary. Padding is transport syntax, not
-              # image data, so normalize it and restore legal final padding only.
+              cleaned = re.sub(rb'\s+', b'', (root / f'row{row}.b64').read_bytes())
               cleaned = cleaned.replace(b'=', b'')
               cleaned += b'=' * ((-len(cleaned)) % 4)
               data = base64.b64decode(cleaned, validate=True)
               (root / f'row{row}.png').write_bytes(data)
-              print(f'row{row}: base64={len(cleaned)} decoded={len(data)}')
+              print(f'row{row}: decoded={len(data)}')
           PY
-
           sha256sum /tmp/ns-glyph-repair/row*.png
           file /tmp/ns-glyph-repair/row*.png
-
           cat > /tmp/ns-glyph-repair/ValidateGlyphRows.java <<'JAVA'
           import javax.imageio.ImageIO;
           import java.awt.image.BufferedImage;
           import java.io.File;
           public final class ValidateGlyphRows {
-              public static void main(String[] args) throws Exception {
-                  int expectedWidth = -1;
-                  int expectedHeight = -1;
+              public static void main(String[] args) {
+                  int failures = 0;
                   for (String arg : args) {
-                      BufferedImage image = ImageIO.read(new File(arg));
-                      if (image == null) throw new IllegalStateException("ImageIO could not decode " + arg);
-                      image.getRGB(image.getWidth() - 1, image.getHeight() - 1);
-                      if (image.getWidth() % 9 != 0) throw new IllegalStateException("Atlas width is not divisible by 9: " + image.getWidth());
-                      int cell = image.getWidth() / 9;
-                      if (image.getHeight() != cell) throw new IllegalStateException("Atlas cells are not square: " + image.getWidth() + "x" + image.getHeight());
-                      if (expectedWidth < 0) {
-                          expectedWidth = image.getWidth();
-                          expectedHeight = image.getHeight();
-                      } else if (image.getWidth() != expectedWidth || image.getHeight() != expectedHeight) {
-                          throw new IllegalStateException("Atlas row dimensions disagree: " + arg + " is " + image.getWidth() + "x" + image.getHeight() + " expected " + expectedWidth + "x" + expectedHeight);
+                      try {
+                          BufferedImage image = ImageIO.read(new File(arg));
+                          if (image == null) throw new IllegalStateException("ImageIO returned null");
+                          image.getRGB(image.getWidth() - 1, image.getHeight() - 1);
+                          int cell = image.getWidth() / 9;
+                          if (image.getWidth() % 9 != 0 || image.getHeight() != cell) throw new IllegalStateException("invalid atlas geometry");
+                          System.out.println("VALID " + arg + " => " + image.getWidth() + "x" + image.getHeight() + " cell=" + cell);
+                      } catch (Throwable t) {
+                          failures++;
+                          System.out.println("INVALID " + arg + " => " + t);
                       }
-                      System.out.println(arg + " => " + image.getWidth() + "x" + image.getHeight() + " cell=" + cell);
                   }
+                  if (failures != 0) throw new IllegalStateException(failures + " glyph row(s) invalid");
               }
           }
           JAVA
           javac --release 21 /tmp/ns-glyph-repair/ValidateGlyphRows.java
           java -cp /tmp/ns-glyph-repair ValidateGlyphRows /tmp/ns-glyph-repair/row0.png /tmp/ns-glyph-repair/row1.png /tmp/ns-glyph-repair/row2.png /tmp/ns-glyph-repair/row3.png
-
-          for row in 0 1 2 3; do
-            cp "/tmp/ns-glyph-repair/row${row}.png" "resources/glyphs/northstar_dashboard_row${row}.png"
-          done
-
-          python3 ci/patch_build_glyph_smoke.py
-          bash build.sh
-          git diff --check
-      - name: Commit validated company glyph repair
-        shell: bash
-        run: |
-          set -euo pipefail
-          git config user.name 'NorthStar Cleanup Bot'
-          git config user.email 'actions@users.noreply.github.com'
-          git add resources/glyphs/northstar_dashboard_row0.png resources/glyphs/northstar_dashboard_row1.png resources/glyphs/northstar_dashboard_row2.png resources/glyphs/northstar_dashboard_row3.png build.sh
-          git diff --cached --check
-          git commit -m 'Restore supplied company glyph atlas and gate release builds'
-          git push origin master
