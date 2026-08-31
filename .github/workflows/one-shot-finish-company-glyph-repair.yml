@@ -22,23 +22,28 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          TMPBR=tmp-glyph-repair-diagnostic
-          ROW3=34ebff84841cf8387033c86c77fd2cd9abe0c4b9
+          SOURCE=2a181cba2e05b6bf59a620c41eb20eeca590a584
           mkdir -p /tmp/ns-glyph-repair
-          git fetch origin "$TMPBR:refs/remotes/origin/$TMPBR"
 
-          : > /tmp/ns-glyph-repair/row1.b64
-          for part in 0 1 2; do
-            git show "origin/$TMPBR:tmp/glyph_repair/row1.part${part}.b64" >> /tmp/ns-glyph-repair/row1.b64
+          for row in 0 1 2 3; do
+            : > "/tmp/ns-glyph-repair/row${row}.b64"
           done
-          : > /tmp/ns-glyph-repair/row3.b64
-          git show "$ROW3:resources/glyphs/staging/row3.b64.00" >> /tmp/ns-glyph-repair/row3.b64
-          git show "$ROW3:resources/glyphs/staging/row3.b64.01" >> /tmp/ns-glyph-repair/row3.b64
 
-          tr -d '\r\n ' < /tmp/ns-glyph-repair/row1.b64 | base64 -d > /tmp/ns-glyph-repair/row1.png
-          tr -d '\r\n ' < /tmp/ns-glyph-repair/row3.b64 | base64 -d > /tmp/ns-glyph-repair/row3.png
-          sha256sum /tmp/ns-glyph-repair/row1.png /tmp/ns-glyph-repair/row3.png
-          file /tmp/ns-glyph-repair/row1.png /tmp/ns-glyph-repair/row3.png
+          for part in 00 01 02; do
+            git show "$SOURCE:resources/glyphs/staging/row0.b64.$part" >> /tmp/ns-glyph-repair/row0.b64
+            git show "$SOURCE:resources/glyphs/staging/row1.b64.$part" >> /tmp/ns-glyph-repair/row1.b64
+            git show "$SOURCE:resources/glyphs/staging/row2.b64.$part" >> /tmp/ns-glyph-repair/row2.b64
+          done
+          for part in 00 01; do
+            git show "$SOURCE:resources/glyphs/staging/row3.b64.$part" >> /tmp/ns-glyph-repair/row3.b64
+          done
+
+          for row in 0 1 2 3; do
+            tr -d '\r\n ' < "/tmp/ns-glyph-repair/row${row}.b64" | base64 -d > "/tmp/ns-glyph-repair/row${row}.png"
+          done
+
+          sha256sum /tmp/ns-glyph-repair/row*.png
+          file /tmp/ns-glyph-repair/row*.png
 
           cat > /tmp/ns-glyph-repair/ValidateGlyphRows.java <<'JAVA'
           import javax.imageio.ImageIO;
@@ -46,6 +51,8 @@ jobs:
           import java.io.File;
           public final class ValidateGlyphRows {
               public static void main(String[] args) throws Exception {
+                  int expectedWidth = -1;
+                  int expectedHeight = -1;
                   for (String arg : args) {
                       BufferedImage image = ImageIO.read(new File(arg));
                       if (image == null) throw new IllegalStateException("ImageIO could not decode " + arg);
@@ -53,16 +60,24 @@ jobs:
                       if (image.getWidth() % 9 != 0) throw new IllegalStateException("Atlas width is not divisible by 9: " + image.getWidth());
                       int cell = image.getWidth() / 9;
                       if (image.getHeight() != cell) throw new IllegalStateException("Atlas cells are not square: " + image.getWidth() + "x" + image.getHeight());
+                      if (expectedWidth < 0) {
+                          expectedWidth = image.getWidth();
+                          expectedHeight = image.getHeight();
+                      } else if (image.getWidth() != expectedWidth || image.getHeight() != expectedHeight) {
+                          throw new IllegalStateException("Atlas row dimensions disagree: " + arg + " is " + image.getWidth() + "x" + image.getHeight() + " expected " + expectedWidth + "x" + expectedHeight);
+                      }
                       System.out.println(arg + " => " + image.getWidth() + "x" + image.getHeight() + " cell=" + cell);
                   }
               }
           }
           JAVA
           javac --release 21 /tmp/ns-glyph-repair/ValidateGlyphRows.java
-          java -cp /tmp/ns-glyph-repair ValidateGlyphRows /tmp/ns-glyph-repair/row1.png /tmp/ns-glyph-repair/row3.png
+          java -cp /tmp/ns-glyph-repair ValidateGlyphRows /tmp/ns-glyph-repair/row0.png /tmp/ns-glyph-repair/row1.png /tmp/ns-glyph-repair/row2.png /tmp/ns-glyph-repair/row3.png
 
-          cp /tmp/ns-glyph-repair/row1.png resources/glyphs/northstar_dashboard_row1.png
-          cp /tmp/ns-glyph-repair/row3.png resources/glyphs/northstar_dashboard_row3.png
+          for row in 0 1 2 3; do
+            cp "/tmp/ns-glyph-repair/row${row}.png" "resources/glyphs/northstar_dashboard_row${row}.png"
+          done
+
           python3 ci/patch_build_glyph_smoke.py
           bash build.sh
           git diff --check
@@ -72,7 +87,7 @@ jobs:
           set -euo pipefail
           git config user.name 'NorthStar Cleanup Bot'
           git config user.email 'actions@users.noreply.github.com'
-          git add resources/glyphs/northstar_dashboard_row1.png resources/glyphs/northstar_dashboard_row3.png build.sh
+          git add resources/glyphs/northstar_dashboard_row0.png resources/glyphs/northstar_dashboard_row1.png resources/glyphs/northstar_dashboard_row2.png resources/glyphs/northstar_dashboard_row3.png build.sh
           git diff --cached --check
-          git commit -m 'Repair supplied company glyph atlas and gate release builds'
+          git commit -m 'Restore supplied company glyph atlas and gate release builds'
           git push origin master
