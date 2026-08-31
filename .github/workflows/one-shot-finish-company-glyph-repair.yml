@@ -47,6 +47,10 @@ jobs:
               if re.search(rb'[^A-Za-z0-9+/=]', cleaned):
                   bad = sorted(set(re.findall(rb'[^A-Za-z0-9+/=]', cleaned)))
                   raise SystemExit(f'row{row}: invalid base64 bytes {bad!r}')
+              # Historical staging chunks were manually split; row 3 contains padding
+              # at an intermediate chunk boundary. Padding is transport syntax, not
+              # image data, so normalize it and restore legal final padding only.
+              cleaned = cleaned.replace(b'=', b'')
               cleaned += b'=' * ((-len(cleaned)) % 4)
               data = base64.b64decode(cleaned, validate=True)
               (root / f'row{row}.png').write_bytes(data)
