@@ -4,9 +4,14 @@ import javax.swing.Icon;
 
 public final class GlyphSmokeTest {
     private static final String[] KEYS = {
-            "labor_day", "thanksgiving", "christmas", "halloween",
-            "birthday", "work_anniversary", "employee_of_month", "promotion",
-            "safety_milestone", "special_event", "lets_celebrate"
+            "new_year", "mlk", "presidents_day", "memorial_day", "independence_day",
+            "labor_day", "columbus_day", "veterans_day", "thanksgiving",
+            "christmas", "halloween", "valentines_day", "st_patricks_day", "easter",
+            "mothers_day", "fathers_day", "juneteenth", "fall_season",
+            "birthday", "work_anniversary", "employee_of_month", "team_success", "promotion",
+            "graduation", "welcome", "congratulations", "new_hire",
+            "safety_milestone", "milestone", "project_complete", "thank_you", "holiday_season",
+            "seasonal", "weather_alert", "special_event", "lets_celebrate"
     };
 
     private GlyphSmokeTest() {}
@@ -23,6 +28,6 @@ public final class GlyphSmokeTest {
                                 + ": " + icon.getIconWidth() + "x" + icon.getIconHeight());
             }
         }
-        System.out.println("NorthStar dashboard glyph smoke test passed for " + KEYS.length + " company glyphs.");
+        System.out.println("NorthStar dashboard glyph smoke test passed for all " + KEYS.length + " company glyphs.");
     }
 }
