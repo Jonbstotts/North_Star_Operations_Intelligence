@@ -7,7 +7,7 @@ on:
 permissions:
   contents: write
 jobs:
-  diagnose:
+  repair:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -18,51 +18,61 @@ jobs:
         with:
           distribution: temurin
           java-version: '21'
-      - name: Diagnose supplied company glyph reconstruction
+      - name: Reconstruct and validate supplied company glyph rows
         shell: bash
         run: |
-          mkdir -p tmp /tmp/ns-glyph-repair
-          LOG=tmp/glyph_repair_diagnostic.log
-          : > "$LOG"
-          exec > >(tee -a "$LOG") 2>&1
-          set -x
-          HIST=2837d9a74cafd0d32031c502586d6df9aa711e0f
+          set -euo pipefail
           TMPBR=tmp-glyph-repair-diagnostic
-          git fetch origin "$TMPBR:refs/remotes/origin/$TMPBR"; echo "FETCH_RC=$?"
-          git cat-file -t "$HIST"; echo "HIST_RC=$?"
+          ROW3=34ebff84841cf8387033c86c77fd2cd9abe0c4b9
+          mkdir -p /tmp/ns-glyph-repair
+          git fetch origin "$TMPBR:refs/remotes/origin/$TMPBR"
+
           : > /tmp/ns-glyph-repair/row1.b64
           for part in 0 1 2; do
             git show "origin/$TMPBR:tmp/glyph_repair/row1.part${part}.b64" >> /tmp/ns-glyph-repair/row1.b64
-            echo "ROW1_PART_${part}_RC=$?"
           done
           : > /tmp/ns-glyph-repair/row3.b64
-          for part in 00 01; do
-            git show "$HIST:resources/glyphs/staging/row3.b64.$part" >> /tmp/ns-glyph-repair/row3.b64
-            echo "ROW3_PART_${part}_RC=$?"
-          done
-          wc -c /tmp/ns-glyph-repair/row1.b64 /tmp/ns-glyph-repair/row3.b64
+          git show "$ROW3:resources/glyphs/staging/row3.b64.00" >> /tmp/ns-glyph-repair/row3.b64
+          git show "$ROW3:resources/glyphs/staging/row3.b64.01" >> /tmp/ns-glyph-repair/row3.b64
+
           tr -d '\r\n ' < /tmp/ns-glyph-repair/row1.b64 | base64 -d > /tmp/ns-glyph-repair/row1.png
-          echo "ROW1_DECODE_RC=$?"
           tr -d '\r\n ' < /tmp/ns-glyph-repair/row3.b64 | base64 -d > /tmp/ns-glyph-repair/row3.png
-          echo "ROW3_DECODE_RC=$?"
-          ls -l /tmp/ns-glyph-repair/row1.png /tmp/ns-glyph-repair/row3.png
           sha256sum /tmp/ns-glyph-repair/row1.png /tmp/ns-glyph-repair/row3.png
           file /tmp/ns-glyph-repair/row1.png /tmp/ns-glyph-repair/row3.png
+
+          cat > /tmp/ns-glyph-repair/ValidateGlyphRows.java <<'JAVA'
+          import javax.imageio.ImageIO;
+          import java.awt.image.BufferedImage;
+          import java.io.File;
+          public final class ValidateGlyphRows {
+              public static void main(String[] args) throws Exception {
+                  for (String arg : args) {
+                      BufferedImage image = ImageIO.read(new File(arg));
+                      if (image == null) throw new IllegalStateException("ImageIO could not decode " + arg);
+                      image.getRGB(image.getWidth() - 1, image.getHeight() - 1);
+                      if (image.getWidth() % 9 != 0) throw new IllegalStateException("Atlas width is not divisible by 9: " + image.getWidth());
+                      int cell = image.getWidth() / 9;
+                      if (image.getHeight() != cell) throw new IllegalStateException("Atlas cells are not square: " + image.getWidth() + "x" + image.getHeight());
+                      System.out.println(arg + " => " + image.getWidth() + "x" + image.getHeight() + " cell=" + cell);
+                  }
+              }
+          }
+          JAVA
+          javac --release 21 /tmp/ns-glyph-repair/ValidateGlyphRows.java
+          java -cp /tmp/ns-glyph-repair ValidateGlyphRows /tmp/ns-glyph-repair/row1.png /tmp/ns-glyph-repair/row3.png
+
           cp /tmp/ns-glyph-repair/row1.png resources/glyphs/northstar_dashboard_row1.png
-          echo "ROW1_COPY_RC=$?"
           cp /tmp/ns-glyph-repair/row3.png resources/glyphs/northstar_dashboard_row3.png
-          echo "ROW3_COPY_RC=$?"
           python3 ci/patch_build_glyph_smoke.py
-          echo "PATCH_GATE_RC=$?"
           bash build.sh
-          echo "BUILD_RC=$?"
-      - name: Commit diagnostic log
-        if: always()
+          git diff --check
+      - name: Commit validated company glyph repair
         shell: bash
         run: |
-          set -e
+          set -euo pipefail
           git config user.name 'NorthStar Cleanup Bot'
           git config user.email 'actions@users.noreply.github.com'
-          git add tmp/glyph_repair_diagnostic.log
-          git commit -m 'Capture company glyph repair diagnostic' || true
+          git add resources/glyphs/northstar_dashboard_row1.png resources/glyphs/northstar_dashboard_row3.png build.sh
+          git diff --cached --check
+          git commit -m 'Repair supplied company glyph atlas and gate release builds'
           git push origin master
