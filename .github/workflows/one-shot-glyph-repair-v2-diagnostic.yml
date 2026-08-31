@@ -1,0 +1,94 @@
+name: Glyph repair v2 diagnostic
+on:
+  push:
+    branches: [tmp-glyph-repair-v2]
+    paths:
+      - '.github/workflows/one-shot-glyph-repair-v2-diagnostic.yml'
+permissions:
+  contents: write
+jobs:
+  diagnose:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: tmp-glyph-repair-v2
+          fetch-depth: 0
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '21'
+      - name: Diagnose company glyph reconstruction
+        continue-on-error: true
+        shell: bash
+        run: |
+          set -o pipefail
+          mkdir -p tmp/glyph_repair_v2 /tmp/ns-glyph-repair
+          {
+            set -x
+            HIST=2837d9a74cafd0d32031c502586d6df9aa711e0f
+            TMPBR=tmp-glyph-repair-diagnostic
+            git fetch origin "$TMPBR:refs/remotes/origin/$TMPBR"
+            git cat-file -t "$HIST"
+
+            : > /tmp/ns-glyph-repair/row1.b64
+            for part in 0 1 2; do
+              git show "origin/$TMPBR:tmp/glyph_repair/row1.part${part}.b64" >> /tmp/ns-glyph-repair/row1.b64
+            done
+            : > /tmp/ns-glyph-repair/row3.b64
+            for part in 00 01; do
+              git show "$HIST:resources/glyphs/staging/row3.b64.$part" >> /tmp/ns-glyph-repair/row3.b64
+            done
+
+            echo '=== Base64 sizes ==='
+            wc -c /tmp/ns-glyph-repair/row1.b64 /tmp/ns-glyph-repair/row3.b64
+            echo '=== Base64 decode ==='
+            tr -d '\r\n ' < /tmp/ns-glyph-repair/row1.b64 | base64 -d > /tmp/ns-glyph-repair/row1.png
+            echo "row1 decode rc=$?"
+            tr -d '\r\n ' < /tmp/ns-glyph-repair/row3.b64 | base64 -d > /tmp/ns-glyph-repair/row3.png
+            echo "row3 decode rc=$?"
+
+            echo '=== File identification ==='
+            ls -l /tmp/ns-glyph-repair/row1.png /tmp/ns-glyph-repair/row3.png
+            sha256sum /tmp/ns-glyph-repair/row1.png /tmp/ns-glyph-repair/row3.png
+            file /tmp/ns-glyph-repair/row1.png /tmp/ns-glyph-repair/row3.png
+
+            cat > /tmp/ns-glyph-repair/ValidateGlyphRows.java <<'JAVA'
+          import javax.imageio.ImageIO;
+          import java.awt.image.BufferedImage;
+          import java.io.File;
+          public final class ValidateGlyphRows {
+              public static void main(String[] args) throws Exception {
+                  for (String arg : args) {
+                      BufferedImage image = ImageIO.read(new File(arg));
+                      if (image == null) throw new IllegalStateException("ImageIO could not decode " + arg);
+                      System.out.println(arg + " => " + image.getWidth() + "x" + image.getHeight());
+                      if (image.getWidth() % 9 != 0) throw new IllegalStateException("Atlas width is not divisible by 9: " + image.getWidth());
+                      int cell = image.getWidth() / 9;
+                      if (image.getHeight() != cell) throw new IllegalStateException("Atlas cells are not square: " + image.getWidth() + "x" + image.getHeight() + " expected height=" + cell);
+                      System.out.println("cell=" + cell);
+                  }
+              }
+          }
+          JAVA
+            javac --release 21 /tmp/ns-glyph-repair/ValidateGlyphRows.java
+            java -cp /tmp/ns-glyph-repair ValidateGlyphRows /tmp/ns-glyph-repair/row1.png /tmp/ns-glyph-repair/row3.png
+            echo "validator rc=$?"
+
+            cp /tmp/ns-glyph-repair/row1.png resources/glyphs/northstar_dashboard_row1.png
+            cp /tmp/ns-glyph-repair/row3.png resources/glyphs/northstar_dashboard_row3.png
+            python3 ci/patch_build_glyph_smoke.py
+            echo "patch smoke gate rc=$?"
+            bash build.sh
+            echo "build rc=$?"
+          } > tmp/glyph_repair_v2/diagnostic.log 2>&1
+      - name: Commit diagnostic log
+        if: always()
+        shell: bash
+        run: |
+          set -e
+          git config user.name 'NorthStar Cleanup Bot'
+          git config user.email 'actions@users.noreply.github.com'
+          git add tmp/glyph_repair_v2/diagnostic.log
+          git commit -m 'Capture glyph repair v2 diagnostic' || true
+          git push origin HEAD:tmp-glyph-repair-v2
