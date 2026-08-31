@@ -43,7 +43,7 @@ public final class NorthStarDashboardGlyphs {
         int cell = atlasCellSize(row);
         if (cell <= 0) return null;
         int x = p.x * cell;
-        if (x < 0 || x + cell > row.getWidth() || cell > row.getHeight()) return null;
+        if (x < 0 || x + cell > row.getWidth()) return null;
 
         BufferedImage sprite = row.getSubimage(x, 0, cell, cell);
         BufferedImage oneX = scale(sprite, logicalSize, logicalSize);
@@ -55,9 +55,10 @@ public final class NorthStarDashboardGlyphs {
 
     private static int atlasCellSize(BufferedImage row) {
         if (row == null || row.getWidth() <= 0 || row.getHeight() <= 0) return 0;
+        if (row.getWidth() % GLYPHS_PER_ROW != 0) return 0;
         int widthCell = row.getWidth() / GLYPHS_PER_ROW;
-        if (widthCell <= 0) return 0;
-        return Math.min(widthCell, row.getHeight());
+        if (widthCell <= 0 || row.getHeight() != widthCell) return 0;
+        return widthCell;
     }
 
     private static BufferedImage loadRow(int rowIndex) {
@@ -71,6 +72,10 @@ public final class NorthStarDashboardGlyphs {
             try (InputStream in = NorthStarDashboardGlyphs.class.getResourceAsStream(resource)) {
                 if (in == null) return null;
                 cached = ImageIO.read(in);
+                if (cached == null || atlasCellSize(cached) <= 0) {
+                    System.err.println("NorthStar dashboard glyph row has invalid atlas geometry: " + resource);
+                    return null;
+                }
                 ROWS[rowIndex] = cached;
                 return cached;
             } catch (Exception ex) {
