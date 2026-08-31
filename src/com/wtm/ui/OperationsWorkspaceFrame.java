@@ -250,8 +250,29 @@ public final class OperationsWorkspaceFrame extends JFrame {
         JPanel chrome=new JPanel(new BorderLayout());
         chrome.setOpaque(false);
         chrome.add(bar,BorderLayout.NORTH);
-        chrome.add(new HeaderTicker(config.tickerText),BorderLayout.SOUTH);
+        chrome.add(buildHeaderTickerStrip(),BorderLayout.SOUTH);
         return chrome;
+    }
+
+    private JComponent buildHeaderTickerStrip(){
+        JPanel strip=new JPanel(new BorderLayout(14,0));
+        strip.setOpaque(true);
+        strip.setBackground(Theme.panel2());
+        strip.setBorder(BorderFactory.createMatteBorder(0,0,1,0,Theme.border()));
+        strip.setPreferredSize(new Dimension(100,24));
+
+        if(config.showHeader && config.headerText!=null && !config.headerText.isBlank()){
+            JLabel headerTitle=new JLabel(config.headerText.trim());
+            headerTitle.setForeground(Theme.text());
+            headerTitle.setFont(new Font(Font.SANS_SERIF,Font.BOLD,11));
+            headerTitle.setBorder(new EmptyBorder(0,12,0,2));
+            strip.add(headerTitle,BorderLayout.WEST);
+        }
+
+        HeaderTicker ticker=new HeaderTicker(config.tickerText);
+        ticker.setBorder(new EmptyBorder(0,10,0,12));
+        strip.add(ticker,BorderLayout.CENTER);
+        return strip;
     }
 
     private void toggleDashboardLayoutFromGear(){
@@ -3119,19 +3140,16 @@ public final class OperationsWorkspaceFrame extends JFrame {
         private int offset=0;
 
         private HeaderTicker(String text){
-            message="  "+text.trim()+"  •  ";
-            setOpaque(true);
-            setBackground(Theme.panel2());
+            message=text.trim();
+            setOpaque(false);
             setForeground(Theme.text());
             setFont(new Font(Font.SANS_SERIF,Font.BOLD,11));
-            setBorder(BorderFactory.createMatteBorder(
-                    0,0,1,0,Theme.border()));
-            setPreferredSize(new Dimension(100,24));
 
             timer=new javax.swing.Timer(35,e->{
                 FontMetrics metrics=getFontMetrics(getFont());
-                int cycle=Math.max(1,metrics.stringWidth(message)+80);
-                offset=(offset+1)%cycle;
+                int messageWidth=Math.max(1,metrics.stringWidth(message));
+                int travel=Math.max(1,getWidth()+messageWidth+240);
+                offset=(offset+1)%travel;
                 repaint();
             });
             timer.setCoalesce(true);
@@ -3157,10 +3175,9 @@ public final class OperationsWorkspaceFrame extends JFrame {
                 g2.setFont(getFont());
                 g2.setColor(getForeground());
                 FontMetrics metrics=g2.getFontMetrics();
-                int cycle=Math.max(1,metrics.stringWidth(message)+80);
                 int baseline=(getHeight()+metrics.getAscent()-metrics.getDescent())/2;
-                for(int x=-offset;x<getWidth();x+=cycle)
-                    g2.drawString(message,x,baseline);
+                int x=getWidth()+80-offset;
+                g2.drawString(message,x,baseline);
             }finally{
                 g2.dispose();
             }
