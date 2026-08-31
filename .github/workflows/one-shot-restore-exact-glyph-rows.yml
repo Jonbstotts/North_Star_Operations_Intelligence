@@ -24,21 +24,24 @@ jobs:
           set -euo pipefail
           mkdir -p /tmp/ns-exact-glyphs
 
-          # Row 1 is the previously validated 648x72 recovery made from the
-          # original supplied NorthStar artwork.
           git fetch origin tmp-glyph-repair-diagnostic:refs/remotes/origin/tmp-glyph-repair-diagnostic
           for part in 0 1 2; do
             git show "origin/tmp-glyph-repair-diagnostic:tmp/glyph_repair/row1.part${part}.b64" >> /tmp/ns-exact-glyphs/row1.b64
           done
           tr -d '\r\n ' < /tmp/ns-exact-glyphs/row1.b64 | base64 -d > /tmp/ns-exact-glyphs/row1.png
 
-          # Row 3 is cropped directly from the original 1536x1024 PNG supplied
-          # in chat on 2026-08-31, with nine source badges preserved in order.
+          echo '=== row3 staged text chunks ==='
+          wc -c tmp/glyph_source_restore/row3.part*.b64
+          sha256sum tmp/glyph_source_restore/row3.part*.b64
           cat tmp/glyph_source_restore/row3.part00.b64 \
               tmp/glyph_source_restore/row3.part01.b64 \
               tmp/glyph_source_restore/row3.part02.b64 \
               tmp/glyph_source_restore/row3.part03.b64 \
-              | tr -d '\r\n ' | base64 -d > /tmp/ns-exact-glyphs/row3.png
+              | tr -d '\r\n ' > /tmp/ns-exact-glyphs/row3.clean.b64
+          wc -c /tmp/ns-exact-glyphs/row3.clean.b64
+          base64 -d /tmp/ns-exact-glyphs/row3.clean.b64 > /tmp/ns-exact-glyphs/row3.png
+          echo '=== reconstructed PNG hashes ==='
+          sha256sum /tmp/ns-exact-glyphs/row1.png /tmp/ns-exact-glyphs/row3.png
 
           echo '111ad93079fb333e6d081c04f1d5c6190694a71494ebafa60ed7e150a40b0647  /tmp/ns-exact-glyphs/row1.png' | sha256sum -c -
           echo 'de8556a2eddbba94888c3de722127bf9b2bbfeb69a46ad9cf70367e32af11962  /tmp/ns-exact-glyphs/row3.png' | sha256sum -c -
