@@ -1,0 +1,49 @@
+name: Repair dashboard layout persistence
+on:
+  push:
+    branches: [master]
+    paths:
+      - '.github/workflows/one-shot-fix-dashboard-layout-persistence.yml'
+permissions:
+  contents: write
+jobs:
+  repair:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: master
+          fetch-depth: 0
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '21'
+      - name: Restore clean ConfigService and apply minimal persistence fix
+        shell: bash
+        run: |
+          set -euo pipefail
+          git show 04af785ea64423e9f09f6ae6783f1cdaf2110fcc:src/com/wtm/config/ConfigService.java > /tmp/ConfigService.java
+          python3 - <<'PY'
+          from pathlib import Path
+          path=Path('/tmp/ConfigService.java')
+          text=path.read_text()
+          old='''            for(String id:new java.util.ArrayList<>(cfg.workspaceDashboardLayout.keySet())){\n                String saved=p.getProperty("workspace.layout."+id);\n                if(saved!=null&&!saved.isBlank())cfg.workspaceDashboardLayout.put(id,saved.trim());\n            }\n'''
+          new='''            /*\n             * Reload every persisted dashboard-layout entry, including private\n             * metadata such as _gridVersion and future/dynamic tile IDs.\n             * Dropping _gridVersion caused an already-migrated 24-column layout\n             * to be treated as legacy again after each application restart.\n             */\n            final String layoutPrefix="workspace.layout.";\n            for(String propertyName:p.stringPropertyNames()){\n                if(!propertyName.startsWith(layoutPrefix))continue;\n                String id=propertyName.substring(layoutPrefix.length()).trim();\n                String saved=p.getProperty(propertyName);\n                if(id.isBlank()||saved==null||saved.isBlank())continue;\n                cfg.workspaceDashboardLayout.put(id,saved.trim());\n            }\n'''
+          if old not in text:
+              raise SystemExit('expected layout-load block not found in clean baseline')
+          path.write_text(text.replace(old,new,1))
+          PY
+          cp /tmp/ConfigService.java src/com/wtm/config/ConfigService.java
+          git diff --check
+          bash build.sh
+      - name: Commit minimal repair and remove one-shot workflow
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name 'NorthStar Cleanup Bot'
+          git config user.email 'actions@users.noreply.github.com'
+          git add src/com/wtm/config/ConfigService.java
+          git rm .github/workflows/one-shot-fix-dashboard-layout-persistence.yml
+          git diff --cached --check
+          git commit -m 'Fix dashboard layout persistence across restarts'
+          git push origin master
