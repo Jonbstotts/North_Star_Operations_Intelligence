@@ -1,0 +1,72 @@
+name: Reconstruct dashboard glyphs diagnostic
+on:
+  push:
+    branches: [tmp-glyph-repair-diagnostic]
+    paths:
+      - '.github/workflows/one-shot-reconstruct-glyphs-diagnostic.yml'
+permissions:
+  contents: write
+jobs:
+  repair:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: tmp-glyph-repair-diagnostic
+          fetch-depth: 0
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '21'
+      - name: Reconstruct historical company glyph rows
+        shell: bash
+        run: |
+          set -euo pipefail
+          HIST=2837d9a74cafd0d32031c502586d6df9aa711e0f
+          mkdir -p /tmp/ns-glyph-repair
+          for part in 00 01 02; do
+            git show "$HIST:resources/glyphs/staging/row1.b64.$part" >> /tmp/ns-glyph-repair/row1.b64
+          done
+          for part in 00 01; do
+            git show "$HIST:resources/glyphs/staging/row3.b64.$part" >> /tmp/ns-glyph-repair/row3.b64
+          done
+          tr -d '\r\n ' < /tmp/ns-glyph-repair/row1.b64 | base64 -d > /tmp/ns-glyph-repair/row1.png
+          tr -d '\r\n ' < /tmp/ns-glyph-repair/row3.b64 | base64 -d > /tmp/ns-glyph-repair/row3.png
+          sha256sum /tmp/ns-glyph-repair/row1.png /tmp/ns-glyph-repair/row3.png
+          file /tmp/ns-glyph-repair/row1.png /tmp/ns-glyph-repair/row3.png
+          cat > /tmp/ns-glyph-repair/ValidateGlyphRows.java <<'JAVA'
+          import javax.imageio.ImageIO;
+          import java.awt.image.BufferedImage;
+          import java.io.File;
+          public final class ValidateGlyphRows {
+              public static void main(String[] args) throws Exception {
+                  for (String arg : args) {
+                      BufferedImage image = ImageIO.read(new File(arg));
+                      if (image == null) throw new IllegalStateException("ImageIO could not decode " + arg);
+                      if (image.getWidth() % 9 != 0) throw new IllegalStateException("Atlas width is not divisible by 9: " + image.getWidth());
+                      int cell = image.getWidth() / 9;
+                      if (image.getHeight() != cell) throw new IllegalStateException("Atlas cells are not square: " + image.getWidth() + "x" + image.getHeight());
+                      System.out.println(arg + " => " + image.getWidth() + "x" + image.getHeight() + " cell=" + cell);
+                  }
+              }
+          }
+          JAVA
+          javac --release 21 /tmp/ns-glyph-repair/ValidateGlyphRows.java
+          java -cp /tmp/ns-glyph-repair ValidateGlyphRows /tmp/ns-glyph-repair/row1.png /tmp/ns-glyph-repair/row3.png
+          cp /tmp/ns-glyph-repair/row1.png resources/glyphs/northstar_dashboard_row1.png
+          cp /tmp/ns-glyph-repair/row3.png resources/glyphs/northstar_dashboard_row3.png
+          bash build.sh
+          rm -rf /tmp/ns-glyph-smoke
+          mkdir -p /tmp/ns-glyph-smoke
+          javac --release 21 -Xlint:unchecked -Werror -encoding UTF-8 -cp 'out:lib/*' -d /tmp/ns-glyph-smoke ci/GlyphSmokeTest.java
+          java -Djava.awt.headless=true -cp '/tmp/ns-glyph-smoke:out:lib/*' GlyphSmokeTest
+          git diff --check
+      - name: Commit validated reconstructed rows to diagnostic branch
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name 'NorthStar Cleanup Bot'
+          git config user.email 'actions@users.noreply.github.com'
+          git add resources/glyphs/northstar_dashboard_row1.png resources/glyphs/northstar_dashboard_row3.png
+          git commit -m 'Repair dashboard glyph atlas rows from source staging'
+          git push origin HEAD:tmp-glyph-repair-diagnostic
