@@ -18,35 +18,19 @@ jobs:
         with:
           distribution: temurin
           java-version: '21'
-      - name: Reconstruct and diagnose supplied company glyph rows
+      - name: Validate candidate company glyph rows from repair branch
         shell: bash
         run: |
           set -euo pipefail
-          SOURCE=2a181cba2e05b6bf59a620c41eb20eeca590a584
-          mkdir -p /tmp/ns-glyph-repair
-          for row in 0 1 2 3; do : > "/tmp/ns-glyph-repair/row${row}.b64"; done
-          for part in 00 01 02; do
-            git show "$SOURCE:resources/glyphs/staging/row0.b64.$part" >> /tmp/ns-glyph-repair/row0.b64
-            git show "$SOURCE:resources/glyphs/staging/row1.b64.$part" >> /tmp/ns-glyph-repair/row1.b64
-            git show "$SOURCE:resources/glyphs/staging/row2.b64.$part" >> /tmp/ns-glyph-repair/row2.b64
+          CANDIDATE=tmp-glyph-repair-v2
+          mkdir -p /tmp/ns-glyph-candidates
+          git fetch origin "$CANDIDATE:refs/remotes/origin/$CANDIDATE"
+          for row in 0 1 2 3; do
+            git show "origin/$CANDIDATE:resources/glyphs/northstar_dashboard_row${row}.png" > "/tmp/ns-glyph-candidates/row${row}.png"
           done
-          for part in 00 01; do
-            git show "$SOURCE:resources/glyphs/staging/row3.b64.$part" >> /tmp/ns-glyph-repair/row3.b64
-          done
-          python3 - <<'PY'
-          import base64, pathlib, re
-          root = pathlib.Path('/tmp/ns-glyph-repair')
-          for row in range(4):
-              cleaned = re.sub(rb'\s+', b'', (root / f'row{row}.b64').read_bytes())
-              cleaned = cleaned.replace(b'=', b'')
-              cleaned += b'=' * ((-len(cleaned)) % 4)
-              data = base64.b64decode(cleaned, validate=True)
-              (root / f'row{row}.png').write_bytes(data)
-              print(f'row{row}: decoded={len(data)}')
-          PY
-          sha256sum /tmp/ns-glyph-repair/row*.png
-          file /tmp/ns-glyph-repair/row*.png
-          cat > /tmp/ns-glyph-repair/ValidateGlyphRows.java <<'JAVA'
+          sha256sum /tmp/ns-glyph-candidates/row*.png
+          file /tmp/ns-glyph-candidates/row*.png
+          cat > /tmp/ns-glyph-candidates/ValidateGlyphRows.java <<'JAVA'
           import javax.imageio.ImageIO;
           import java.awt.image.BufferedImage;
           import java.io.File;
@@ -70,5 +54,5 @@ jobs:
               }
           }
           JAVA
-          javac --release 21 /tmp/ns-glyph-repair/ValidateGlyphRows.java
-          java -cp /tmp/ns-glyph-repair ValidateGlyphRows /tmp/ns-glyph-repair/row0.png /tmp/ns-glyph-repair/row1.png /tmp/ns-glyph-repair/row2.png /tmp/ns-glyph-repair/row3.png
+          javac --release 21 /tmp/ns-glyph-candidates/ValidateGlyphRows.java
+          java -cp /tmp/ns-glyph-candidates ValidateGlyphRows /tmp/ns-glyph-candidates/row0.png /tmp/ns-glyph-candidates/row1.png /tmp/ns-glyph-candidates/row2.png /tmp/ns-glyph-candidates/row3.png
