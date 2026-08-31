@@ -1141,10 +1141,12 @@ public final class OperationsWorkspaceFrame extends JFrame {
     private Icon eventTagIcon(OperationEvent event,int size){
         Icon supplied=NorthStarDashboardGlyphs.icon(eventDashboardGlyphKey(event),size);
         if(supplied!=null)return supplied;
-        String assetKey=eventGlyphAssetKey(event);
-        Icon approved=WorkspaceGlyphs.icon(assetKey,size,Theme.text());
-        if(approved!=null)return approved;
+        return NorthStarDashboardGlyphs.icon("special_event",size);
+    }
 
+    /* Legacy vector event glyph painting is retained below only for historical
+     * source compatibility; dashboard Events no longer route through it. */
+    private Icon legacyEventTagIcon(OperationEvent event,int size){
         BufferedImage image=new BufferedImage(
                 size,size,BufferedImage.TYPE_INT_ARGB);
         Graphics2D g=image.createGraphics();
@@ -1563,15 +1565,19 @@ public final class OperationsWorkspaceFrame extends JFrame {
                         :"birthday";
         Icon supplied=NorthStarDashboardGlyphs.icon(dashboardKey,size);
         if(supplied!=null)return supplied;
-        String assetKey=type.contains("anniversary")
-                ?"confetti"
-                :type.contains("employee of the month")
-                    ?"toast"
-                    :"birthday";
-        Icon approved=WorkspaceGlyphs.icon(assetKey,size,Theme.text());
-        if(approved!=null)return approved;
+        return NorthStarDashboardGlyphs.icon("lets_celebrate",size);
+    }
 
+    private Icon legacyCelebrationTagIcon(
+            UpcomingCelebration item,
+            int size
+    ){
+        String type=item==null||item.type()==null
+                ?""
+                :item.type().toLowerCase(Locale.ROOT);
         /*
+         * Legacy vector recognition artwork remains isolated here for source
+         * history only; Team Celebrations no longer invokes it.
          * Birthday currently uses the built-in gift glyph. Paint it as vector
          * geometry at display time instead of rasterizing it into a 40px image;
          * this keeps the recognition tile crisp on Retina/HiDPI screens.
