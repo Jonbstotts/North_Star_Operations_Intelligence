@@ -1,0 +1,85 @@
+name: Restore dashboard gear editing and top ticker
+on:
+  push:
+    branches: [master]
+    paths:
+      - '.github/workflows/one-shot-dashboard-gear-ticker.yml'
+permissions:
+  contents: write
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: master
+          fetch-depth: 0
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '21'
+      - name: Patch dashboard controls and ticker
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          import re
+
+          path=Path('src/com/wtm/ui/OperationsWorkspaceFrame.java')
+          s=path.read_text()
+
+          old='''    private JLabel alertBadge;\n\n    private JPanel weatherModule;'''
+          new='''    private JLabel alertBadge;\n    private JButton dashboardLayoutGear;\n    private boolean dashboardLayoutEditing=false;\n\n    private JPanel weatherModule;'''
+          if old not in s:
+              raise SystemExit('field insertion anchor not found')
+          s=s.replace(old,new,1)
+
+          old='''        JButton settings=navUtilityButton("⚙");\n        settings.setToolTipText("Settings");\n        settings.addActionListener(e->openWorkspaceSettingsPage(\n                "General",\n                "General",\n                Permission.GENERAL_SETTINGS\n        ));\n        right.add(settings);'''
+          new='''        dashboardLayoutGear=navUtilityButton("⚙");\n        dashboardLayoutGear.setToolTipText("Customize dashboard layout");\n        dashboardLayoutGear.setVisible(\n                AuthorizationService.allowed(Permission.DASHBOARD_LAYOUT));\n        dashboardLayoutGear.addActionListener(e->toggleDashboardLayoutFromGear());\n        right.add(dashboardLayoutGear);'''
+          if old not in s:
+              raise SystemExit('top-right settings button block not found')
+          s=s.replace(old,new,1)
+
+          old='''        bar.add(right,BorderLayout.EAST);\n        return bar;\n    }\n\n    private JComponent buildWorkspace(){'''
+          new='''        bar.add(right,BorderLayout.EAST);\n\n        if(!config.showTicker||config.tickerText==null||config.tickerText.isBlank())\n            return bar;\n\n        JPanel chrome=new JPanel(new BorderLayout());\n        chrome.setOpaque(false);\n        chrome.add(bar,BorderLayout.NORTH);\n        chrome.add(new HeaderTicker(config.tickerText),BorderLayout.SOUTH);\n        return chrome;\n    }\n\n    private void toggleDashboardLayoutFromGear(){\n        if(!AuthorizationService.allowed(Permission.DASHBOARD_LAYOUT))return;\n\n        if(!"Dashboard".equalsIgnoreCase(activeWorkspaceRoute))\n            showDashboardRoute();\n\n        if(dashboardGrid==null)return;\n        dashboardLayoutEditing=!dashboardLayoutEditing;\n        dashboardGrid.setEditMode(dashboardLayoutEditing);\n        if(!dashboardLayoutEditing)ConfigService.save(config);\n        updateDashboardLayoutGearState();\n    }\n\n    private void finishDashboardLayoutEditing(){\n        if(!dashboardLayoutEditing)return;\n        if(dashboardGrid!=null)dashboardGrid.setEditMode(false);\n        dashboardLayoutEditing=false;\n        ConfigService.save(config);\n        updateDashboardLayoutGearState();\n    }\n\n    private void updateDashboardLayoutGearState(){\n        if(dashboardLayoutGear==null)return;\n        dashboardLayoutGear.setToolTipText(\n                dashboardLayoutEditing\n                        ?"Save dashboard layout"\n                        :"Customize dashboard layout");\n        dashboardLayoutGear.setBorder(BorderFactory.createLineBorder(\n                dashboardLayoutEditing?Theme.accent():Theme.border(),\n                dashboardLayoutEditing?2:1,\n                true\n        ));\n        dashboardLayoutGear.repaint();\n    }\n\n    private JComponent buildWorkspace(){'''
+          if old not in s:
+              raise SystemExit('buildTopBar return anchor not found')
+          s=s.replace(old,new,1)
+
+          pattern=re.compile(r'''\n        if\(AuthorizationService\.allowed\(Permission\.DASHBOARD_LAYOUT\)\)\{\n            JPanel tools=new JPanel\(new FlowLayout\(FlowLayout\.RIGHT,8,0\)\);.*?\n            container\.add\(tools,BorderLayout\.NORTH\);\n        \}\n''',re.S)
+          s,count=pattern.subn('\n',s,count=1)
+          if count!=1:
+              raise SystemExit(f'dashboard button strip removal count={count}')
+
+          old='''    private void releaseDashboardModules(){\n        stopInformationRotation();'''
+          new='''    private void releaseDashboardModules(){\n        finishDashboardLayoutEditing();\n        stopInformationRotation();'''
+          if old not in s:
+              raise SystemExit('releaseDashboardModules anchor not found')
+          s=s.replace(old,new,1)
+
+          marker='''    private static final class RoundedSidebarButton extends JButton {'''
+          ticker='''    private static final class HeaderTicker extends JPanel {\n        private final String message;\n        private final javax.swing.Timer timer;\n        private int offset=0;\n\n        private HeaderTicker(String text){\n            message="  "+text.trim()+"  •  ";\n            setOpaque(true);\n            setBackground(Theme.panel2());\n            setForeground(Theme.text());\n            setFont(new Font(Font.SANS_SERIF,Font.BOLD,11));\n            setBorder(BorderFactory.createMatteBorder(\n                    0,0,1,0,Theme.border()));\n            setPreferredSize(new Dimension(100,24));\n\n            timer=new javax.swing.Timer(35,e->{\n                FontMetrics metrics=getFontMetrics(getFont());\n                int cycle=Math.max(1,metrics.stringWidth(message)+80);\n                offset=(offset+1)%cycle;\n                repaint();\n            });\n            timer.setCoalesce(true);\n        }\n\n        @Override public void addNotify(){\n            super.addNotify();\n            timer.start();\n        }\n\n        @Override public void removeNotify(){\n            timer.stop();\n            super.removeNotify();\n        }\n\n        @Override protected void paintComponent(Graphics g){\n            super.paintComponent(g);\n            Graphics2D g2=(Graphics2D)g.create();\n            try{\n                g2.setRenderingHint(\n                        RenderingHints.KEY_TEXT_ANTIALIASING,\n                        RenderingHints.VALUE_TEXT_ANTIALIAS_ON);\n                g2.setFont(getFont());\n                g2.setColor(getForeground());\n                FontMetrics metrics=g2.getFontMetrics();\n                int cycle=Math.max(1,metrics.stringWidth(message)+80);\n                int baseline=(getHeight()+metrics.getAscent()-metrics.getDescent())/2;\n                for(int x=-offset;x<getWidth();x+=cycle)\n                    g2.drawString(message,x,baseline);\n            }finally{\n                g2.dispose();\n            }\n        }\n    }\n\n'''
+          if marker not in s:
+              raise SystemExit('ticker class insertion anchor not found')
+          s=s.replace(marker,ticker+marker,1)
+          path.write_text(s)
+
+          build=Path('build.sh')
+          b=build.read_text()
+          gate='''# Dashboard layout editing is owned by the top-right dashboard gear; the old\n# in-content Customize/Reset button strip must not return. The configured\n# scrolling ticker is rendered by the source-owned HeaderTicker.\nif grep -Fq 'new JToggleButton("Customize Layout")' src/com/wtm/ui/OperationsWorkspaceFrame.java || \\\n   grep -Fq 'new JButton("Reset Layout")' src/com/wtm/ui/OperationsWorkspaceFrame.java || \\\n   ! grep -Fq 'toggleDashboardLayoutFromGear' src/com/wtm/ui/OperationsWorkspaceFrame.java || \\\n   ! grep -Fq 'class HeaderTicker' src/com/wtm/ui/OperationsWorkspaceFrame.java; then\n  echo "ERROR: dashboard gear/ticker ownership regression detected." >&2\n  exit 1\nfi\n\n'''
+          anchor='# Real FlatLaf owns ordinary Swing controls.'
+          if gate not in b:
+              if anchor not in b:
+                  raise SystemExit('build gate insertion anchor not found')
+              b=b.replace(anchor,gate+anchor,1)
+              build.write_text(b)
+          PY
+
+          git diff --check
+          bash build.sh
+          git config user.name 'NorthStar Cleanup Bot'
+          git config user.email 'actions@users.noreply.github.com'
+          git add src/com/wtm/ui/OperationsWorkspaceFrame.java build.sh
+          git commit -m 'Move dashboard layout editing to header gear and restore ticker'
+          git push origin master
