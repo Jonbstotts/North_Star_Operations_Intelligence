@@ -52,6 +52,11 @@ public final class DashboardGridPanel extends JPanel {
         }
         layout.putAll(migrated);
         layout.put(GRID_VERSION_KEY,GRID_VERSION);
+
+        // Persist the migration marker immediately. Otherwise an installation
+        // that launches and closes without moving a tile can re-enter the legacy
+        // migration path on its next start.
+        persist.run();
     }
 
     public void addTile(String id,String label,JComponent component,String defaultSpec){
