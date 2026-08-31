@@ -18,41 +18,57 @@ jobs:
         with:
           distribution: temurin
           java-version: '21'
-      - name: Validate candidate company glyph rows from repair branch
+      - name: Audit active glyph routing and install permanent smoke gate
         shell: bash
         run: |
           set -euo pipefail
-          CANDIDATE=tmp-glyph-repair-v2
-          mkdir -p /tmp/ns-glyph-candidates
-          git fetch origin "$CANDIDATE:refs/remotes/origin/$CANDIDATE"
-          for row in 0 1 2 3; do
-            git show "origin/$CANDIDATE:resources/glyphs/northstar_dashboard_row${row}.png" > "/tmp/ns-glyph-candidates/row${row}.png"
-          done
-          sha256sum /tmp/ns-glyph-candidates/row*.png
-          file /tmp/ns-glyph-candidates/row*.png
-          cat > /tmp/ns-glyph-candidates/ValidateGlyphRows.java <<'JAVA'
-          import javax.imageio.ImageIO;
-          import java.awt.image.BufferedImage;
-          import java.io.File;
-          public final class ValidateGlyphRows {
-              public static void main(String[] args) {
-                  int failures = 0;
-                  for (String arg : args) {
-                      try {
-                          BufferedImage image = ImageIO.read(new File(arg));
-                          if (image == null) throw new IllegalStateException("ImageIO returned null");
-                          image.getRGB(image.getWidth() - 1, image.getHeight() - 1);
-                          int cell = image.getWidth() / 9;
-                          if (image.getWidth() % 9 != 0 || image.getHeight() != cell) throw new IllegalStateException("invalid atlas geometry");
-                          System.out.println("VALID " + arg + " => " + image.getWidth() + "x" + image.getHeight() + " cell=" + cell);
-                      } catch (Throwable t) {
-                          failures++;
-                          System.out.println("INVALID " + arg + " => " + t);
-                      }
-                  }
-                  if (failures != 0) throw new IllegalStateException(failures + " glyph row(s) invalid");
-              }
-          }
-          JAVA
-          javac --release 21 /tmp/ns-glyph-candidates/ValidateGlyphRows.java
-          java -cp /tmp/ns-glyph-candidates ValidateGlyphRows /tmp/ns-glyph-candidates/row0.png /tmp/ns-glyph-candidates/row1.png /tmp/ns-glyph-candidates/row2.png /tmp/ns-glyph-candidates/row3.png
+          echo '=== Active WorkspaceGlyphs references ==='
+          grep -R -n --include='*.java' 'WorkspaceGlyphs' src || true
+          echo '=== Active NorthStarDashboardGlyphs references ==='
+          grep -R -n --include='*.java' 'NorthStarDashboardGlyphs' src || true
+
+          # Events and Team Celebrations must never fall back to the old generic
+          # WorkspaceGlyphs artwork. Keep this as a release invariant.
+          if grep -q 'WorkspaceGlyphs' src/com/wtm/ui/OperationsWorkspaceFrame.java; then
+            echo 'ERROR: OperationsWorkspaceFrame still references WorkspaceGlyphs.' >&2
+            exit 1
+          fi
+          grep -Fq 'NorthStarDashboardGlyphs.icon(eventDashboardGlyphKey(event),size)' src/com/wtm/ui/OperationsWorkspaceFrame.java
+          grep -Fq 'NorthStarDashboardGlyphs.icon(dashboardKey,size)' src/com/wtm/ui/OperationsWorkspaceFrame.java
+
+          # Make the existing company-glyph smoke test part of every canonical
+          # local/CI build rather than relying on a temporary repair workflow.
+          if ! grep -q 'GlyphSmokeTest' build.sh; then
+            python3 ci/patch_build_glyph_smoke.py
+          fi
+
+          # Add a source-routing guard to the canonical build if absent.
+          python3 - <<'PY'
+          from pathlib import Path
+          p=Path('build.sh')
+          s=p.read_text(encoding='utf-8')
+          marker='# Company dashboard glyph routing is source-owned.'
+          if marker not in s:
+              anchor='for glyph in resources/glyphs/northstar_dashboard_row0.png resources/glyphs/northstar_dashboard_row1.png resources/glyphs/northstar_dashboard_row2.png resources/glyphs/northstar_dashboard_row3.png; do\n'
+              guard='''# Company dashboard glyph routing is source-owned. Upcoming Events and Team\n# Celebrations must not regress to the retired generic WorkspaceGlyphs artwork.\nif grep -q 'WorkspaceGlyphs' src/com/wtm/ui/OperationsWorkspaceFrame.java || \\\n   ! grep -Fq 'NorthStarDashboardGlyphs.icon(eventDashboardGlyphKey(event),size)' src/com/wtm/ui/OperationsWorkspaceFrame.java || \\\n   ! grep -Fq 'NorthStarDashboardGlyphs.icon(dashboardKey,size)' src/com/wtm/ui/OperationsWorkspaceFrame.java; then\n  echo "ERROR: dashboard Events/Celebrations company glyph routing regression detected." >&2\n  exit 1\nfi\n\n'''
+              if anchor not in s:
+                  raise SystemExit('build routing insertion anchor not found')
+              s=s.replace(anchor,guard+anchor,1)
+              p.write_text(s,encoding='utf-8')
+          PY
+
+          git diff --check
+      - name: Commit permanent glyph release guards
+        shell: bash
+        run: |
+          set -euo pipefail
+          if git diff --quiet -- build.sh; then
+            echo 'No build guard changes required.'
+            exit 0
+          fi
+          git config user.name 'NorthStar Cleanup Bot'
+          git config user.email 'actions@users.noreply.github.com'
+          git add build.sh
+          git diff --cached --check
+          git commit -m 'Gate releases on company glyph routing and rendering'
+          git push origin master
