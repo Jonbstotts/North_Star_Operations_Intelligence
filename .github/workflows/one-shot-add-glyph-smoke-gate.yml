@@ -1,0 +1,32 @@
+name: Add dashboard glyph smoke build gate
+on:
+  push:
+    branches: [master]
+    paths:
+      - '.github/workflows/one-shot-add-glyph-smoke-gate.yml'
+permissions:
+  contents: write
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: master
+          fetch-depth: 0
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '21'
+      - name: Add glyph smoke build gate
+        run: python3 ci/patch_build_glyph_smoke.py
+      - name: Validate full build
+        run: bash build.sh
+      - name: Commit build gate
+        run: |
+          git config user.name 'NorthStar Cleanup Bot'
+          git config user.email 'actions@users.noreply.github.com'
+          git add build.sh
+          git diff --cached --check
+          git commit -m 'Gate builds on company dashboard glyph rendering'
+          git push origin master
