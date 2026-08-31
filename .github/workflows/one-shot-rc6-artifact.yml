@@ -1,0 +1,39 @@
+name: Build NorthStar v2.1.34 GUI RC6
+on:
+  push:
+    branches: [master]
+    paths:
+      - '.github/workflows/one-shot-rc6-artifact.yml'
+permissions:
+  contents: read
+jobs:
+  build-rc6:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: master
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '21'
+      - name: Build and verify RC6
+        shell: bash
+        run: |
+          set -euo pipefail
+          bash build.sh
+          cp NorthStarOperations.jar NorthStar-Operations-Intelligence-v2.1.34-GUI-RC6.jar
+          sha256sum NorthStar-Operations-Intelligence-v2.1.34-GUI-RC6.jar > NorthStar-Operations-Intelligence-v2.1.34-GUI-RC6-SHA256SUMS.txt
+          jar tf NorthStar-Operations-Intelligence-v2.1.34-GUI-RC6.jar | grep -Fxq 'com/wtm/ui/OperationsWorkspaceFrame$HeaderTicker.class'
+          grep -Fq 'buildHeaderTickerStrip()' src/com/wtm/ui/OperationsWorkspaceFrame.java
+          grep -Fq 'config.headerText.trim()' src/com/wtm/ui/OperationsWorkspaceFrame.java
+          ! grep -Fq 'for(int x=-offset;x<getWidth();x+=cycle)' src/com/wtm/ui/OperationsWorkspaceFrame.java
+          jar tf NorthStar-Operations-Intelligence-v2.1.34-GUI-RC6.jar | grep -Fxq 'brand/northstar_primary_logo_exact.png'
+          unzip -t NorthStar-Operations-Intelligence-v2.1.34-GUI-RC6.jar >/dev/null
+      - uses: actions/upload-artifact@v4
+        with:
+          name: NorthStar-v2.1.34-GUI-RC6
+          path: |
+            NorthStar-Operations-Intelligence-v2.1.34-GUI-RC6.jar
+            NorthStar-Operations-Intelligence-v2.1.34-GUI-RC6-SHA256SUMS.txt
+          if-no-files-found: error
