@@ -1,0 +1,65 @@
++ HIST=2837d9a74cafd0d32031c502586d6df9aa711e0f
++ TMPBR=tmp-glyph-repair-diagnostic
++ git fetch origin tmp-glyph-repair-diagnostic:refs/remotes/origin/tmp-glyph-repair-diagnostic
++ git cat-file -t 2837d9a74cafd0d32031c502586d6df9aa711e0f
+commit
++ :
++ for part in 0 1 2
++ git show origin/tmp-glyph-repair-diagnostic:tmp/glyph_repair/row1.part0.b64
++ for part in 0 1 2
++ git show origin/tmp-glyph-repair-diagnostic:tmp/glyph_repair/row1.part1.b64
++ for part in 0 1 2
++ git show origin/tmp-glyph-repair-diagnostic:tmp/glyph_repair/row1.part2.b64
++ :
++ for part in 00 01
++ git show 2837d9a74cafd0d32031c502586d6df9aa711e0f:resources/glyphs/staging/row3.b64.00
++ for part in 00 01
++ git show 2837d9a74cafd0d32031c502586d6df9aa711e0f:resources/glyphs/staging/row3.b64.01
++ echo '=== Base64 sizes ==='
+=== Base64 sizes ===
++ wc -c /tmp/ns-glyph-repair/row1.b64 /tmp/ns-glyph-repair/row3.b64
+35592 /tmp/ns-glyph-repair/row1.b64
+12972 /tmp/ns-glyph-repair/row3.b64
+48564 total
++ echo '=== Base64 decode ==='
+=== Base64 decode ===
++ tr -d '\r\n '
++ base64 -d
++ echo 'row1 decode rc=0'
+row1 decode rc=0
++ tr -d '\r\n '
++ base64 -d
++ echo 'row3 decode rc=0'
+row3 decode rc=0
++ echo '=== File identification ==='
+=== File identification ===
++ ls -l /tmp/ns-glyph-repair/row1.png /tmp/ns-glyph-repair/row3.png
+-rw-r--r-- 1 runner runner 26693 Aug 31 15:57 /tmp/ns-glyph-repair/row1.png
+-rw-r--r-- 1 runner runner  9729 Aug 31 15:57 /tmp/ns-glyph-repair/row3.png
++ sha256sum /tmp/ns-glyph-repair/row1.png /tmp/ns-glyph-repair/row3.png
+111ad93079fb333e6d081c04f1d5c6190694a71494ebafa60ed7e150a40b0647  /tmp/ns-glyph-repair/row1.png
+61ce7ff7ff3222edcfece4e30ad75dd843fdf3400e21b0337d664d0af8e875b9  /tmp/ns-glyph-repair/row3.png
++ file /tmp/ns-glyph-repair/row1.png /tmp/ns-glyph-repair/row3.png
+/tmp/ns-glyph-repair/row1.png: PNG image data, 648 x 72, 8-bit colormap, non-interlaced
+/tmp/ns-glyph-repair/row3.png: PNG image data, 864 x 96, 8-bit/color RGBA, non-interlaced
++ cat
++ javac --release 21 /tmp/ns-glyph-repair/ValidateGlyphRows.java
++ java -cp /tmp/ns-glyph-repair ValidateGlyphRows /tmp/ns-glyph-repair/row1.png /tmp/ns-glyph-repair/row3.png
+/tmp/ns-glyph-repair/row1.png => 648x72
+cell=72
+Exception in thread "main" javax.imageio.IIOException: Error reading PNG image data
+	at java.desktop/com.sun.imageio.plugins.png.PNGImageReader.readImage(PNGImageReader.java:1528)
+	at java.desktop/com.sun.imageio.plugins.png.PNGImageReader.read(PNGImageReader.java:1845)
+	at java.desktop/javax.imageio.ImageIO.read(ImageIO.java:1466)
+	at java.desktop/javax.imageio.ImageIO.read(ImageIO.java:1315)
+	at ValidateGlyphRows.main(ValidateGlyphRows.java:7)
+Caused by: java.util.zip.ZipException: invalid code lengths set
+	at java.base/java.util.zip.InflaterInputStream.read(InflaterInputStream.java:181)
+	at java.base/java.io.BufferedInputStream.fill(BufferedInputStream.java:291)
+	at java.base/java.io.BufferedInputStream.implRead(BufferedInputStream.java:325)
+	at java.base/java.io.BufferedInputStream.read(BufferedInputStream.java:312)
+	at java.base/java.io.FilterInputStream.read(FilterInputStream.java:71)
+	at java.desktop/com.sun.imageio.plugins.png.PNGImageReader.decodePass(PNGImageReader.java:1236)
+	at java.desktop/com.sun.imageio.plugins.png.PNGImageReader.decodeImage(PNGImageReader.java:1379)
+	at java.desktop/com.sun.imageio.plugins.png.PNGImageReader.readImage(PNGImageReader.java:1519)
+	... 4 more
