@@ -11,14 +11,16 @@ import java.util.List;
 import java.util.concurrent.ConcurrentHashMap;
 
 /**
- * High-resolution dashboard glyph atlas supplied for NorthStar.
+ * Dashboard glyph atlas supplied for NorthStar.
  *
- * The source art is stored as four 9-glyph rows at 96 px per glyph. Icons are
- * returned as multi-resolution images so 40/48 px dashboard tiles remain crisp
- * on Retina/HiDPI displays without shipping dozens of tiny raster files.
+ * The source art is stored as four rows of nine company-style glyphs. The
+ * renderer derives the cell size from the packaged row instead of assuming a
+ * fixed source resolution, so both the current 72 px atlas and future higher
+ * resolution replacements render correctly. Icons are exposed as
+ * multi-resolution images for crisp Swing/HiDPI rendering.
  */
 public final class NorthStarDashboardGlyphs {
-    private static final int CELL = 96;
+    private static final int GLYPHS_PER_ROW = 9;
     private static final Map<String, Point> INDEX = buildIndex();
     private static final BufferedImage[] ROWS = new BufferedImage[4];
     private static final Map<String, Icon> CACHE = new ConcurrentHashMap<>();
@@ -37,15 +39,25 @@ public final class NorthStarDashboardGlyphs {
     private static Icon buildIcon(Point p, int logicalSize) {
         BufferedImage row = loadRow(p.y);
         if (row == null) return null;
-        int x = p.x * CELL;
-        if (x < 0 || x + CELL > row.getWidth() || CELL > row.getHeight()) return null;
 
-        BufferedImage sprite = row.getSubimage(x, 0, CELL, CELL);
+        int cell = atlasCellSize(row);
+        if (cell <= 0) return null;
+        int x = p.x * cell;
+        if (x < 0 || x + cell > row.getWidth() || cell > row.getHeight()) return null;
+
+        BufferedImage sprite = row.getSubimage(x, 0, cell, cell);
         BufferedImage oneX = scale(sprite, logicalSize, logicalSize);
-        int hi = Math.min(CELL, logicalSize * 2);
+        int hi = Math.max(logicalSize, Math.min(cell, logicalSize * 2));
         BufferedImage twoX = scale(sprite, hi, hi);
         Image multi = new BaseMultiResolutionImage(oneX, twoX);
         return new ImageIcon(multi);
+    }
+
+    private static int atlasCellSize(BufferedImage row) {
+        if (row == null || row.getWidth() <= 0 || row.getHeight() <= 0) return 0;
+        int widthCell = row.getWidth() / GLYPHS_PER_ROW;
+        if (widthCell <= 0) return 0;
+        return Math.min(widthCell, row.getHeight());
     }
 
     private static BufferedImage loadRow(int rowIndex) {
