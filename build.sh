@@ -298,6 +298,17 @@ if ! grep -Fq 'public boolean workspaceIntelligenceEnabled = true;' src/com/wtm/
   exit 1
 fi
 
+# Dashboard layout editing is owned by the top-right dashboard gear; the old
+# in-content Customize/Reset button strip must not return. The configured
+# scrolling ticker is rendered by the source-owned HeaderTicker.
+if grep -Fq 'new JToggleButton("Customize Layout")' src/com/wtm/ui/OperationsWorkspaceFrame.java || \
+   grep -Fq 'new JButton("Reset Layout")' src/com/wtm/ui/OperationsWorkspaceFrame.java || \
+   ! grep -Fq 'toggleDashboardLayoutFromGear' src/com/wtm/ui/OperationsWorkspaceFrame.java || \
+   ! grep -Fq 'class HeaderTicker' src/com/wtm/ui/OperationsWorkspaceFrame.java; then
+  echo "ERROR: dashboard gear/ticker ownership regression detected." >&2
+  exit 1
+fi
+
 # Real FlatLaf owns ordinary Swing controls. North Star may layer branded semantics,
 # but custom ComboBox/TabbedPane look-and-feel delegates must not return.
 if [ ! -f src/com/wtm/ui/ThemeManager.java ] || \

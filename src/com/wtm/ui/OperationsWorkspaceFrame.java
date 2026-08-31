@@ -87,6 +87,8 @@ public final class OperationsWorkspaceFrame extends JFrame {
     private JLabel topWeatherLabel;
     private JLabel topTrafficLabel;
     private JLabel alertBadge;
+    private JButton dashboardLayoutGear;
+    private boolean dashboardLayoutEditing=false;
 
     private JPanel weatherModule;
     private JPanel eventsModule;
@@ -233,17 +235,58 @@ public final class OperationsWorkspaceFrame extends JFrame {
         identity.add(name);identity.add(role);
         right.add(identity);
 
-        JButton settings=navUtilityButton("⚙");
-        settings.setToolTipText("Settings");
-        settings.addActionListener(e->openWorkspaceSettingsPage(
-                "General",
-                "General",
-                Permission.GENERAL_SETTINGS
-        ));
-        right.add(settings);
+        dashboardLayoutGear=navUtilityButton("⚙");
+        dashboardLayoutGear.setToolTipText("Customize dashboard layout");
+        dashboardLayoutGear.setVisible(
+                AuthorizationService.allowed(Permission.DASHBOARD_LAYOUT));
+        dashboardLayoutGear.addActionListener(e->toggleDashboardLayoutFromGear());
+        right.add(dashboardLayoutGear);
 
         bar.add(right,BorderLayout.EAST);
-        return bar;
+
+        if(!config.showTicker||config.tickerText==null||config.tickerText.isBlank())
+            return bar;
+
+        JPanel chrome=new JPanel(new BorderLayout());
+        chrome.setOpaque(false);
+        chrome.add(bar,BorderLayout.NORTH);
+        chrome.add(new HeaderTicker(config.tickerText),BorderLayout.SOUTH);
+        return chrome;
+    }
+
+    private void toggleDashboardLayoutFromGear(){
+        if(!AuthorizationService.allowed(Permission.DASHBOARD_LAYOUT))return;
+
+        if(!"Dashboard".equalsIgnoreCase(activeWorkspaceRoute))
+            showDashboardRoute();
+
+        if(dashboardGrid==null)return;
+        dashboardLayoutEditing=!dashboardLayoutEditing;
+        dashboardGrid.setEditMode(dashboardLayoutEditing);
+        if(!dashboardLayoutEditing)ConfigService.save(config);
+        updateDashboardLayoutGearState();
+    }
+
+    private void finishDashboardLayoutEditing(){
+        if(!dashboardLayoutEditing)return;
+        if(dashboardGrid!=null)dashboardGrid.setEditMode(false);
+        dashboardLayoutEditing=false;
+        ConfigService.save(config);
+        updateDashboardLayoutGearState();
+    }
+
+    private void updateDashboardLayoutGearState(){
+        if(dashboardLayoutGear==null)return;
+        dashboardLayoutGear.setToolTipText(
+                dashboardLayoutEditing
+                        ?"Save dashboard layout"
+                        :"Customize dashboard layout");
+        dashboardLayoutGear.setBorder(BorderFactory.createLineBorder(
+                dashboardLayoutEditing?Theme.accent():Theme.border(),
+                dashboardLayoutEditing?2:1,
+                true
+        ));
+        dashboardLayoutGear.repaint();
     }
 
     private JComponent buildWorkspace(){
@@ -669,31 +712,6 @@ public final class OperationsWorkspaceFrame extends JFrame {
             dashboardGrid.addTile("OPERATIONS_SNAPSHOT","Operations Snapshot",operationsModule,"0,10,24,2");
         }
 
-        if(AuthorizationService.allowed(Permission.DASHBOARD_LAYOUT)){
-            JPanel tools=new JPanel(new FlowLayout(FlowLayout.RIGHT,8,0));
-            tools.setOpaque(false);
-            JToggleButton edit=new JToggleButton("Customize Layout");
-            edit.setToolTipText("Drag and resize dashboard blocks on a precise 24-column snap grid.");
-            edit.addActionListener(e->{
-                dashboardGrid.setEditMode(edit.isSelected());
-                edit.setText(edit.isSelected()?"Finish Layout":"Customize Layout");
-            });
-            JButton reset=new JButton("Reset Layout");
-            reset.addActionListener(e->{
-                Map<String,String> defaults=new LinkedHashMap<>();
-                defaults.put("WEATHER","0,0,6,8");
-                defaults.put("SHOWCASE","6,0,12,8");
-                defaults.put("UPCOMING_EVENTS","18,0,6,4");
-                defaults.put("TEAM_CELEBRATIONS","18,4,6,4");
-                defaults.put("INFORMATION","0,8,24,2");
-                defaults.put("OPERATIONS_SNAPSHOT","0,10,24,2");
-                defaults.put("northstar.ai.compact","0,12,24,3");
-                dashboardGrid.resetLayout(defaults);
-            });
-            tools.add(edit);
-            tools.add(reset);
-            container.add(tools,BorderLayout.NORTH);
-        }
 
         container.add(dashboardGrid,BorderLayout.CENTER);
         return container;
@@ -2935,6 +2953,7 @@ public final class OperationsWorkspaceFrame extends JFrame {
     }
 
     private void releaseDashboardModules(){
+        finishDashboardLayoutEditing();
         stopInformationRotation();
 
         if(mainShowcase!=null){
@@ -3092,6 +3111,60 @@ public final class OperationsWorkspaceFrame extends JFrame {
         if(map!=null)map.shutdown();
         if(clockTimer!=null)clockTimer.stop();
         super.dispose();
+    }
+
+    private static final class HeaderTicker extends JPanel {
+        private final String message;
+        private final javax.swing.Timer timer;
+        private int offset=0;
+
+        private HeaderTicker(String text){
+            message="  "+text.trim()+"  •  ";
+            setOpaque(true);
+            setBackground(Theme.panel2());
+            setForeground(Theme.text());
+            setFont(new Font(Font.SANS_SERIF,Font.BOLD,11));
+            setBorder(BorderFactory.createMatteBorder(
+                    0,0,1,0,Theme.border()));
+            setPreferredSize(new Dimension(100,24));
+
+            timer=new javax.swing.Timer(35,e->{
+                FontMetrics metrics=getFontMetrics(getFont());
+                int cycle=Math.max(1,metrics.stringWidth(message)+80);
+                offset=(offset+1)%cycle;
+                repaint();
+            });
+            timer.setCoalesce(true);
+        }
+
+        @Override public void addNotify(){
+            super.addNotify();
+            timer.start();
+        }
+
+        @Override public void removeNotify(){
+            timer.stop();
+            super.removeNotify();
+        }
+
+        @Override protected void paintComponent(Graphics g){
+            super.paintComponent(g);
+            Graphics2D g2=(Graphics2D)g.create();
+            try{
+                g2.setRenderingHint(
+                        RenderingHints.KEY_TEXT_ANTIALIASING,
+                        RenderingHints.VALUE_TEXT_ANTIALIAS_ON);
+                g2.setFont(getFont());
+                g2.setColor(getForeground());
+                FontMetrics metrics=g2.getFontMetrics();
+                int cycle=Math.max(1,metrics.stringWidth(message)+80);
+                int baseline=(getHeight()+metrics.getAscent()-metrics.getDescent())/2;
+                for(int x=-offset;x<getWidth();x+=cycle)
+                    g2.drawString(message,x,baseline);
+            }finally{
+                g2.dispose();
+            }
+        }
     }
 
     private static final class RoundedSidebarButton extends JButton {
