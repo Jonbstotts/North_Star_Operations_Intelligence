@@ -335,6 +335,15 @@ if grep -Fq 'Theme.setActive(resolved.id())' src/com/wtm/ui/ThemeStyler.java; th
   echo "ERROR: ThemeStyler must not install a global look-and-feel." >&2
   exit 1
 fi
+# Company dashboard glyph routing is source-owned. Upcoming Events and Team
+# Celebrations must not regress to the retired generic WorkspaceGlyphs artwork.
+if grep -q 'WorkspaceGlyphs' src/com/wtm/ui/OperationsWorkspaceFrame.java || \
+   ! grep -Fq 'NorthStarDashboardGlyphs.icon(eventDashboardGlyphKey(event),size)' src/com/wtm/ui/OperationsWorkspaceFrame.java || \
+   ! grep -Fq 'NorthStarDashboardGlyphs.icon(dashboardKey,size)' src/com/wtm/ui/OperationsWorkspaceFrame.java; then
+  echo "ERROR: dashboard Events/Celebrations company glyph routing regression detected." >&2
+  exit 1
+fi
+
 for glyph in resources/glyphs/northstar_dashboard_row0.png resources/glyphs/northstar_dashboard_row1.png resources/glyphs/northstar_dashboard_row2.png resources/glyphs/northstar_dashboard_row3.png; do
   if [ ! -f "$glyph" ]; then
     echo "ERROR: required NorthStar dashboard glyph atlas row is missing: $glyph" >&2
@@ -366,6 +375,13 @@ mkdir -p /tmp/ns-theme-smoke
 javac --release 21 -Xlint:unchecked -Werror -encoding UTF-8 -cp 'out:lib/*' -d /tmp/ns-theme-smoke ci/ThemeSmokeTest.java
 java -Djava.awt.headless=true -cp '/tmp/ns-theme-smoke:out:lib/*' ThemeSmokeTest
 
+# Verify that the packaged NorthStar company glyph atlas can actually be sliced
+# and rendered. This catches mismatches between atlas cell dimensions and the
+# dashboard renderer before a GUI candidate is published.
+rm -rf /tmp/ns-glyph-smoke
+mkdir -p /tmp/ns-glyph-smoke
+javac --release 21 -Xlint:unchecked -Werror -encoding UTF-8 -cp 'out:lib/*' -d /tmp/ns-glyph-smoke ci/GlyphSmokeTest.java
+java -Djava.awt.headless=true -cp '/tmp/ns-glyph-smoke:out:lib/*' GlyphSmokeTest
 
 # Runtime branding is mandatory. NorthStarBrand loads these classpath resources
 # during application startup, so a release JAR without them is not launchable.
