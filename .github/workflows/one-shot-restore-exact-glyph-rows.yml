@@ -1,3 +1,4 @@
+# Corrected source chunk retry
 name: Restore exact NorthStar glyph rows
 on:
   push:
