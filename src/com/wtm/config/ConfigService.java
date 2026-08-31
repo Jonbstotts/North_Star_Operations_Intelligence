@@ -159,9 +159,24 @@ public final class ConfigService {
             cfg.workspaceModules.removeIf(
                     value->"NORTHSTAR_INTELLIGENCE".equalsIgnoreCase(value));
 
-            for(String id:new java.util.ArrayList<>(cfg.workspaceDashboardLayout.keySet())){
-                String saved=p.getProperty("workspace.layout."+id);
-                if(saved!=null&&!saved.isBlank())cfg.workspaceDashboardLayout.put(id,saved.trim());
+            /*
+             * Load every persisted dashboard-layout entry, including private
+             * metadata such as _gridVersion and any future/dynamic tile IDs.
+             *
+             * The previous implementation only reloaded IDs present in the
+             * AppConfig default map. That silently dropped _gridVersion on
+             * every launch, so DashboardGridPanel treated an already-migrated
+             * 24-column layout as legacy again and transformed it repeatedly.
+             * The visible result was a customized dashboard snapping back or
+             * shifting after the application restarted.
+             */
+            final String layoutPrefix="workspace.layout.";
+            for(String propertyName:p.stringPropertyNames()){
+                if(!propertyName.startsWith(layoutPrefix))continue;
+                String id=propertyName.substring(layoutPrefix.length()).trim();
+                String saved=p.getProperty(propertyName);
+                if(id.isBlank()||saved==null||saved.isBlank())continue;
+                cfg.workspaceDashboardLayout.put(id,saved.trim());
             }
 
             cfg.workspaceInfoStripEnabled=bool(
@@ -246,9 +261,6 @@ public final class ConfigService {
             cfg.showAlertsOnMap = bool(p, "showAlertsOnMap", cfg.showAlertsOnMap);
             cfg.headerText = p.getProperty("headerText", cfg.headerText);
             cfg.tickerText = p.getProperty("tickerText", cfg.tickerText);
-            // Provider selection is ordinary site configuration; API secrets are
-            // loaded from credentials.properties below. Keep the legacy TomTom
-            // property only as a one-time migration path from releases <=1.5.1.
             String legacyTomTomKey = p.getProperty("tomTomApiKey", "").trim();
             cfg.weatherProvider = p.getProperty("weatherProvider", cfg.weatherProvider).trim();
             cfg.alertProvider = p.getProperty("alertProvider", cfg.alertProvider).trim();
@@ -263,9 +275,6 @@ public final class ConfigService {
             cfg.alertRefreshMinutes = integer(p, "alertRefreshMinutes", 2);
             cfg.radarRefreshMinutes = integer(p, "radarRefreshMinutes", 5);
             cfg.trafficRefreshMinutes = integer(p, "trafficRefreshMinutes", 5);
-            // Upcoming schedules do not need live-score polling frequency.
-            // Existing installations using the old 2/5/10-minute score cadence
-            // migrate to a conservative 30-minute schedule refresh.
             int savedSportsRefresh=integer(p,"sportsRefreshMinutes",30);
             cfg.sportsRefreshMinutes=savedSportsRefresh<15?30:savedSportsRefresh;
 
@@ -363,31 +372,32 @@ public final class ConfigService {
             for (int i = 0; i < sc; i++) {
                 SportsConfig fallback = i < defaultsForSports.sports.size()
                         ? defaultsForSports.sports.get(i)
-                        : new SportsConfig("Sports " + (i + 1), "American Football", "", "", "", true);
-                String prefix="sports."+i;
+                        : new SportsConfig("Team " + (i + 1), "American Football", "", "", "", true);
+                String prefix = "sports." + i;
                 cfg.sports.add(new SportsConfig(
-                        p.getProperty(prefix+".name", fallback.name()),
-                        p.getProperty(prefix+".sport", fallback.sport()),
-                        p.getProperty(prefix+".leagueId", fallback.leagueId()),
-                        p.getProperty(prefix+".teamId", fallback.teamId()),
-                        p.getProperty(prefix+".teamName", fallback.teamName()),
-                        bool(p, prefix+".showLogos", fallback.showLogos())
+                        p.getProperty(prefix + ".name", fallback.name()),
+                        p.getProperty(prefix + ".sport", fallback.sport()),
+                        p.getProperty(prefix + ".leagueId", fallback.leagueId()),
+                        p.getProperty(prefix + ".teamId", fallback.teamId()),
+                        p.getProperty(prefix + ".teamName", fallback.teamName()),
+                        bool(p, prefix + ".showLogos", fallback.showLogos())
                 ));
             }
 
             cfg.celebrations.clear();
+            int cc=safeCount(p,"celebrations.count",0,500);
             boolean legacyPhotoConfigurationFound=false;
             boolean everyLegacyPhotoMigrated=true;
-            int cc=safeCount(p,"celebrations.count",0,500);
             for(int i=0;i<cc;i++){
                 String prefix="celebration."+i;
-                String hire=p.getProperty(prefix+".hireDate","").trim();
                 LocalDate hireDate=null;
-                if(!hire.isBlank()){
-                    try{hireDate=LocalDate.parse(hire);}catch(Exception ignored){}
-                }
+                try{
+                    String raw=p.getProperty(prefix+".hireDate","").trim();
+                    if(!raw.isBlank())hireDate=LocalDate.parse(raw);
+                }catch(Exception ignored){}
+
                 String photoAsset=p.getProperty(prefix+".photoAsset","").trim();
-                String legacyPhoto=p.getProperty(prefix+".photoPath","").trim();
+                String legacyPhoto=p.getProperty(prefix+".photo","").trim();
                 if(photoAsset.isBlank()&&!legacyPhoto.isBlank()){
                     legacyPhotoConfigurationFound=true;
                     photoAsset=migrateLegacyEmployeePhoto(legacyPhoto);
@@ -395,7 +405,7 @@ public final class ConfigService {
                 }
 
                 cfg.celebrations.add(new CelebrationConfig(
-                        p.getProperty(prefix+".name","Team Member"),
+                        p.getProperty(prefix+".name","Employee"),
                         integer(p,prefix+".birthdayMonth",0),
                         integer(p,prefix+".birthdayDay",0),
                         hireDate,
@@ -410,40 +420,30 @@ public final class ConfigService {
             }
 
             cfg.operationEvents.clear();
-            int operationCount=safeCount(p,"operations.count",0,500);
-            for(int i=0;i<operationCount;i++){
+            int ec=safeCount(p,"operations.count",0,1000);
+            for(int i=0;i<ec;i++){
                 String prefix="operation."+i;
-
-                LocalDate start=null;
-                LocalDate end=null;
-                LocalTime startTime=null;
-                LocalTime endTime=null;
-
-                try{start=LocalDate.parse(p.getProperty(prefix+".startDate",""));}
+                LocalDate start=null,end=null;
+                try{start=LocalDate.parse(p.getProperty(prefix+".startDate","").trim());}
                 catch(Exception ignored){}
-                try{end=LocalDate.parse(p.getProperty(prefix+".endDate",""));}
+                try{end=LocalDate.parse(p.getProperty(prefix+".endDate","").trim());}
                 catch(Exception ignored){}
-
-                if(start!=null && end==null)end=start;
-
+                LocalTime startTime=null,endTime=null;
                 try{
                     String value=p.getProperty(prefix+".startTime","").trim();
                     if(!value.isBlank())startTime=LocalTime.parse(value);
                 }catch(Exception ignored){}
-
                 try{
                     String value=p.getProperty(prefix+".endTime","").trim();
                     if(!value.isBlank())endTime=LocalTime.parse(value);
                 }catch(Exception ignored){}
-
                 if(start!=null && end!=null){
                     try{
                         cfg.operationEvents.add(new OperationEvent(
                                 p.getProperty(prefix+".name","Operations Event"),
                                 start,
                                 end,
-                                OperationType.from(
-                                        p.getProperty(prefix+".type","MODIFIED_HOURS")),
+                                OperationType.from(p.getProperty(prefix+".type","MODIFIED_HOURS")),
                                 startTime,
                                 endTime,
                                 Math.max(0,integer(p,prefix+".leadDays",0)),
@@ -462,18 +462,11 @@ public final class ConfigService {
                     &&!legacyTomTomKey.isBlank()){
                 cfg.tomTomApiKey=legacyTomTomKey;
                 ApiCredentialService.saveFrom(cfg);
-
-                /*
-                 * Re-save immediately so the legacy plaintext key is removed
-                 * from config.properties instead of waiting for the next manual
-                 * Settings save.
-                 */
                 save(cfg);
             }
 
             if((legacyPhotoConfigurationFound&&everyLegacyPhotoMigrated)
                     ||(legacyAnnouncementConfigurationFound&&legacyAnnouncementsMigrated)){
-                // Rewrite once so obsolete absolute-path media properties disappear.
                 save(cfg);
             }
         } catch (Exception ex) {
@@ -502,27 +495,12 @@ public final class ConfigService {
                     Boolean.toString(cfg.workspaceIntelligenceEnabled));
             for(java.util.Map.Entry<String,String> entry:cfg.workspaceDashboardLayout.entrySet())
                 p.setProperty("workspace.layout."+entry.getKey(),entry.getValue());
-            p.setProperty(
-                    "workspace.infoStrip.enabled",
-                    Boolean.toString(cfg.workspaceInfoStripEnabled));
-            p.setProperty(
-                    "workspace.infoStrip.count",
-                    Integer.toString(cfg.workspaceInfoBlockCount));
-            p.setProperty(
-                    "workspace.infoStrip.movementMode",
-                    cfg.workspaceInfoMovementMode);
-            p.setProperty(
-                    "workspace.infoStrip.autoScroll",
-                    Boolean.toString(
-                            "PAGED".equalsIgnoreCase(
-                                    cfg.workspaceInfoMovementMode)));
-            p.setProperty(
-                    "workspace.infoStrip.scrollSeconds",
-                    Integer.toString(cfg.workspaceInfoScrollSeconds));
-            p.setProperty(
-                    "workspace.infoStrip.tickerPixelsPerSecond",
-                    Integer.toString(
-                            cfg.workspaceInfoTickerPixelsPerSecond));
+            p.setProperty("workspace.infoStrip.enabled",Boolean.toString(cfg.workspaceInfoStripEnabled));
+            p.setProperty("workspace.infoStrip.count",Integer.toString(cfg.workspaceInfoBlockCount));
+            p.setProperty("workspace.infoStrip.movementMode",cfg.workspaceInfoMovementMode);
+            p.setProperty("workspace.infoStrip.autoScroll",Boolean.toString("PAGED".equalsIgnoreCase(cfg.workspaceInfoMovementMode)));
+            p.setProperty("workspace.infoStrip.scrollSeconds",Integer.toString(cfg.workspaceInfoScrollSeconds));
+            p.setProperty("workspace.infoStrip.tickerPixelsPerSecond",Integer.toString(cfg.workspaceInfoTickerPixelsPerSecond));
             p.setProperty("workspace.kpis.count",Integer.toString(cfg.operationsKpis.size()));
             for(int i=0;i<cfg.operationsKpis.size();i++){
                 OperationsKpiConfig kpi=cfg.operationsKpis.get(i);
@@ -536,12 +514,8 @@ public final class ConfigService {
                 p.setProperty(prefix+"enabled",Boolean.toString(kpi.enabled()));
                 p.setProperty(prefix+"dataSource",kpi.dataSourceId()==null?"MANUAL":kpi.dataSourceId());
             }
-            p.setProperty(
-                    "loginRequiredOnStartup",
-                    Boolean.toString(cfg.loginRequiredOnStartup));
-            p.setProperty(
-                    "protectApiSettings",
-                    Boolean.toString(cfg.protectApiSettings));
+            p.setProperty("loginRequiredOnStartup",Boolean.toString(cfg.loginRequiredOnStartup));
+            p.setProperty("protectApiSettings",Boolean.toString(cfg.protectApiSettings));
             p.setProperty("showRadar", Boolean.toString(cfg.showRadar));
             p.setProperty("showTraffic", Boolean.toString(cfg.showTraffic));
             p.setProperty("showAlertsOnMap", Boolean.toString(cfg.showAlertsOnMap));
@@ -555,26 +529,11 @@ public final class ConfigService {
             p.setProperty("overlayIntensity", cfg.overlayIntensity);
             p.setProperty("overlayPerformanceMode", cfg.overlayPerformanceMode);
             p.setProperty("celebrationsEnabled", Boolean.toString(cfg.celebrationsEnabled));
-            p.setProperty(
-                    "operationsAnnouncementsEnabled",
-                    Boolean.toString(cfg.operationsAnnouncementsEnabled));
-            p.setProperty(
-                    "operationsDefaultLeadDays",
-                    Integer.toString(cfg.operationsDefaultLeadDays));
-            p.setProperty(
-                    "normalOperatingStart",
-                    cfg.normalOperatingStart.toString());
-            p.setProperty(
-                    "normalOperatingEnd",
-                    cfg.normalOperatingEnd.toString());
-            p.setProperty(
-                    "normalOperatingDays",
-                    cfg.normalOperatingDays.stream()
-                            .map(Enum::name)
-                            .sorted()
-                            .reduce((a,b)->a+","+b)
-                            .orElse(""));
-
+            p.setProperty("operationsAnnouncementsEnabled",Boolean.toString(cfg.operationsAnnouncementsEnabled));
+            p.setProperty("operationsDefaultLeadDays",Integer.toString(cfg.operationsDefaultLeadDays));
+            p.setProperty("normalOperatingStart",cfg.normalOperatingStart.toString());
+            p.setProperty("normalOperatingEnd",cfg.normalOperatingEnd.toString());
+            p.setProperty("normalOperatingDays",cfg.normalOperatingDays.stream().map(Enum::name).sorted().reduce((a,b)->a+","+b).orElse(""));
             p.setProperty("headerText", cfg.headerText);
             p.setProperty("tickerText", cfg.tickerText);
             p.setProperty("weatherProvider", cfg.weatherProvider);
@@ -602,17 +561,14 @@ public final class ConfigService {
             p.setProperty("visibleWidgetCount", Integer.toString(cfg.visibleWidgetCount));
             p.setProperty("mapWidthPercent", Integer.toString(cfg.mapWidthPercent));
             writeLocation(p, "primary", cfg.primary);
-
             p.setProperty("monitored.count", Integer.toString(cfg.monitored.size()));
             for (int i = 0; i < cfg.monitored.size(); i++) writeLocation(p, "monitored." + i, cfg.monitored.get(i));
-
             p.setProperty("routes.count", Integer.toString(cfg.routes.size()));
             for (int i = 0; i < cfg.routes.size(); i++) {
                 RouteConfig r = cfg.routes.get(i);
                 p.setProperty("route." + i + ".name", r.name());
                 writeLocation(p, "route." + i + ".destination", r.destination());
             }
-
             p.setProperty("sports.count", Integer.toString(cfg.sports.size()));
             for (int i = 0; i < cfg.sports.size(); i++) {
                 SportsConfig sport = cfg.sports.get(i);
@@ -624,7 +580,6 @@ public final class ConfigService {
                 p.setProperty(prefix+".teamName", sport.teamName());
                 p.setProperty(prefix+".showLogos", Boolean.toString(sport.showLogos()));
             }
-
             p.setProperty("celebrations.count",Integer.toString(cfg.celebrations.size()));
             for(int i=0;i<cfg.celebrations.size();i++){
                 CelebrationConfig c=cfg.celebrations.get(i);
@@ -641,51 +596,32 @@ public final class ConfigService {
                 p.setProperty(prefix+".celebrationEffect",Boolean.toString(c.celebrationEffect()));
                 p.setProperty(prefix+".enabled",Boolean.toString(c.enabled()));
             }
-
-            p.setProperty(
-                    "operations.count",
-                    Integer.toString(cfg.operationEvents.size()));
-
+            p.setProperty("operations.count",Integer.toString(cfg.operationEvents.size()));
             for(int i=0;i<cfg.operationEvents.size();i++){
                 OperationEvent event=cfg.operationEvents.get(i);
                 String prefix="operation."+i;
-
                 p.setProperty(prefix+".name",event.name()==null?"":event.name());
                 p.setProperty(prefix+".startDate",event.startDate().toString());
                 p.setProperty(prefix+".endDate",event.endDate().toString());
                 p.setProperty(prefix+".type",event.type().name());
-                p.setProperty(
-                        prefix+".startTime",
-                        event.startTime()==null?"":event.startTime().toString());
-                p.setProperty(
-                        prefix+".endTime",
-                        event.endTime()==null?"":event.endTime().toString());
+                p.setProperty(prefix+".startTime",event.startTime()==null?"":event.startTime().toString());
+                p.setProperty(prefix+".endTime",event.endTime()==null?"":event.endTime().toString());
                 p.setProperty(prefix+".leadDays",Integer.toString(event.leadDays()));
                 p.setProperty(prefix+".enabled",Boolean.toString(event.enabled()));
             }
-
             p.setProperty("widgets.count", Integer.toString(cfg.widgetTypes.size()));
             for (int i = 0; i < cfg.widgetTypes.size(); i++) p.setProperty("widget." + i, cfg.widgetTypes.get(i));
-
-            /*
-             * Write configuration atomically so a power interruption cannot
-             * leave a truncated properties file on a 24/7 Raspberry Pi.
-             * The file also receives owner-only POSIX permissions where
-             * supported because it can contain employee names and local paths.
-             */
             SecureFiles.storePropertiesAtomic(
                     appDataDir().resolve(FILE_NAME),
                     p,
                     "North Star Operations configuration"
             );
-
             ApiCredentialService.saveFrom(cfg);
         } catch (IOException ex) {
             throw new RuntimeException("Unable to save configuration", ex);
         }
     }
 
-    /** Migrates the pre-Media-Library announcement folder once. */
     private static boolean migrateLegacyAnnouncementDirectory(String legacyValue){
         final Path sourceDirectory;
         try{sourceDirectory=Path.of(legacyValue);}
@@ -704,7 +640,6 @@ public final class ConfigService {
                     if(OrientedImageLoader.load(source)==null)continue;
                     Path directory=MediaService.directory(MediaCategory.ANNOUNCEMENTS);
                     SecureFiles.ensurePrivateDirectory(directory);
-
                     Path target=directory.resolve(source.getFileName());
                     if(Files.exists(target))continue;
                     Files.copy(source,target,StandardCopyOption.COPY_ATTRIBUTES);
@@ -720,84 +655,72 @@ public final class ConfigService {
         }
     }
 
-    /**
-     * One-time migration from pre-v3.1.2 absolute employee-photo paths into
-     * the managed Employee Photos library. New configuration stores only the
-     * managed filename, making employee records portable between machines.
-     */
     private static String migrateLegacyEmployeePhoto(String legacyValue){
         if(legacyValue==null||legacyValue.isBlank())return "";
-
-        // If an older config already happens to contain a managed filename,
-        // preserve it without copying again.
         Path managed=MediaService.resolve(
                 MediaCategory.EMPLOYEE_PHOTOS,
                 Path.of(legacyValue).getFileName().toString()
         );
         if(managed!=null)return managed.getFileName().toString();
-
         final Path source;
         try{ source=Path.of(legacyValue); }
         catch(Exception ex){ return ""; }
-
         if(!Files.isRegularFile(source)||!Files.isReadable(source))return "";
-
         try{
             if(OrientedImageLoader.load(source)==null)return "";
-
             Path directory=MediaService.directory(MediaCategory.EMPLOYEE_PHOTOS);
             SecureFiles.ensurePrivateDirectory(directory);
-
             String original=source.getFileName().toString();
             int dot=original.lastIndexOf('.');
             String extension=dot>=0?original.substring(dot).toLowerCase(Locale.ROOT):".jpg";
-            if(!Set.of(".png",".jpg",".jpeg",".gif").contains(extension))
-                extension=".jpg";
-
+            if(!Set.of(".png",".jpg",".jpeg",".gif").contains(extension))extension=".jpg";
             String base=(dot>0?original.substring(0,dot):original)
                     .toLowerCase(Locale.ROOT)
                     .replaceAll("[^a-z0-9._-]+","-")
                     .replaceAll("^-+|-+$","");
-            if(base.isBlank())base="employee-photo";
-
+            if(base.isBlank())base="employee";
             Path target=directory.resolve(base+extension);
             int suffix=2;
             while(Files.exists(target)){
                 target=directory.resolve(base+"-"+suffix+extension);
                 suffix++;
             }
-
             Files.copy(source,target,StandardCopyOption.COPY_ATTRIBUTES);
             SecureFiles.restrictFile(target);
             return target.getFileName().toString();
         }catch(Exception ex){
-            System.err.println("Legacy employee photo could not be migrated.");
             return "";
         }
     }
 
-    private static int safeCount(
-            Properties properties,
-            String key,
-            int defaultValue,
-            int maximum
-    ){
-        int value=integer(properties,key,defaultValue);
-        return Math.max(0,Math.min(maximum,value));
+    private static boolean bool(Properties p, String key, boolean fallback) {
+        return Boolean.parseBoolean(p.getProperty(key, Boolean.toString(fallback)));
     }
 
-    private static boolean bool(Properties p, String k, boolean d) { return Boolean.parseBoolean(p.getProperty(k, Boolean.toString(d))); }
-    private static int integer(Properties p, String k, int d) { try { return Integer.parseInt(p.getProperty(k, Integer.toString(d))); } catch (Exception e) { return d; } }
-    private static Location readLocation(Properties p, String prefix, Location d) {
-        String name = p.getProperty(prefix + ".name", d.name());
-        double lat = number(p.getProperty(prefix + ".lat"), d.latitude());
-        double lon = number(p.getProperty(prefix + ".lon"), d.longitude());
+    private static int integer(Properties p, String key, int fallback) {
+        try { return Integer.parseInt(p.getProperty(key, Integer.toString(fallback)).trim()); }
+        catch (Exception e) { return fallback; }
+    }
+
+    private static int safeCount(Properties p,String key,int fallback,int max){
+        return Math.max(0,Math.min(max,integer(p,key,fallback)));
+    }
+
+    private static Location readLocation(Properties p, String prefix, Location fallback) {
+        String name = p.getProperty(prefix + ".name", fallback.name());
+        double lat = dbl(p, prefix + ".lat", fallback.lat());
+        double lon = dbl(p, prefix + ".lon", fallback.lon());
         return new Location(name, lat, lon);
     }
+
     private static void writeLocation(Properties p, String prefix, Location l) {
         p.setProperty(prefix + ".name", l.name());
-        p.setProperty(prefix + ".lat", Double.toString(l.latitude()));
-        p.setProperty(prefix + ".lon", Double.toString(l.longitude()));
+        p.setProperty(prefix + ".lat", Double.toString(l.lat()));
+        p.setProperty(prefix + ".lon", Double.toString(l.lon()));
     }
-    private static double number(String v, double d) { try { return v == null ? d : Double.parseDouble(v); } catch (Exception e) { return d; } }
+
+    private static double dbl(Properties p,String key,double fallback) {
+        try { return Double.parseDouble(p.getProperty(key,Double.toString(fallback)).trim()); }
+        catch(Exception e) { return fallback; }
+    }
 }
