@@ -27,6 +27,7 @@ jobs:
         run: |
           set -euo pipefail
           git diff --quiet e6a14125f7a680178944021ace33b96e6bc766c1 -- src
+          python3 ci/fix_kpi_patch_script.py
           python3 ci/one_shot_restore_kpi_ticker_grid_settings.py
           git diff --check
           grep -q 'workspaceKpiMovementMode' src/com/wtm/config/AppConfig.java
@@ -42,6 +43,7 @@ jobs:
           set -euo pipefail
           rm .github/workflows/one-shot-restore-kpi-ticker-grid-settings.yml
           rm ci/one_shot_restore_kpi_ticker_grid_settings.py
+          rm ci/fix_kpi_patch_script.py
           git config user.name 'NorthStar Cleanup Bot'
           git config user.email 'actions@users.noreply.github.com'
           git add src/com/wtm/config/AppConfig.java
@@ -50,6 +52,7 @@ jobs:
           git add src/com/wtm/ui/OperationsWorkspaceFrame.java
           git add .github/workflows/one-shot-restore-kpi-ticker-grid-settings.yml
           git add ci/one_shot_restore_kpi_ticker_grid_settings.py
+          git add ci/fix_kpi_patch_script.py
           git diff --cached --check
           git commit -m 'Restore Operations Snapshot movement controls'
           git push origin HEAD:master
