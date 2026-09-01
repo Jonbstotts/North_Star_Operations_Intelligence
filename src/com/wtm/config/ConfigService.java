@@ -160,18 +160,23 @@ public final class ConfigService {
                     value->"NORTHSTAR_INTELLIGENCE".equalsIgnoreCase(value));
 
             /*
-             * Reload every persisted dashboard-layout entry, including private
-             * metadata such as _gridVersion and future/dynamic tile IDs.
-             * Dropping _gridVersion caused an already-migrated 24-column layout
-             * to be treated as legacy again after each application restart.
+             * A persisted layout replaces the current defaults as one map.
+             * This preserves metadata/dynamic tile IDs and, critically, keeps an
+             * unversioned persisted map distinguishable from a fresh versioned
+             * default so DashboardGridPanel can migrate it exactly once.
              */
             final String layoutPrefix="workspace.layout.";
+            Map<String,String> savedLayout=new LinkedHashMap<>();
             for(String propertyName:p.stringPropertyNames()){
                 if(!propertyName.startsWith(layoutPrefix))continue;
                 String id=propertyName.substring(layoutPrefix.length()).trim();
                 String saved=p.getProperty(propertyName);
                 if(id.isBlank()||saved==null||saved.isBlank())continue;
-                cfg.workspaceDashboardLayout.put(id,saved.trim());
+                savedLayout.put(id,saved.trim());
+            }
+            if(!savedLayout.isEmpty()){
+                cfg.workspaceDashboardLayout.clear();
+                cfg.workspaceDashboardLayout.putAll(savedLayout);
             }
 
             cfg.workspaceInfoStripEnabled=bool(
@@ -366,7 +371,6 @@ public final class ConfigService {
                         DayOfWeek.THURSDAY,DayOfWeek.FRIDAY));
             }
             cfg.visibleWidgetCount = Math.max(6, Math.min(12, integer(p, "visibleWidgetCount", cfg.visibleWidgetCount)));
-            cfg.mapWidthPercent = Math.max(55, Math.min(75, integer(p, "mapWidthPercent", cfg.mapWidthPercent)));
             String legacyMediaDirectory=p.getProperty("mediaDirectory","").trim();
             boolean legacyAnnouncementConfigurationFound=!legacyMediaDirectory.isBlank();
             boolean legacyAnnouncementsMigrated=legacyMediaDirectory.isBlank()
@@ -644,7 +648,6 @@ public final class ConfigService {
             p.setProperty("callInEmailNotifications",Boolean.toString(cfg.callInEmailNotifications));
             p.setProperty("callInEmailFrom",cfg.callInEmailFrom);
             p.setProperty("visibleWidgetCount", Integer.toString(cfg.visibleWidgetCount));
-            p.setProperty("mapWidthPercent", Integer.toString(cfg.mapWidthPercent));
             writeLocation(p, "primary", cfg.primary);
 
             p.setProperty("monitored.count", Integer.toString(cfg.monitored.size()));

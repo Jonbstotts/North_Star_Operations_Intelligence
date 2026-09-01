@@ -53,14 +53,15 @@ public final class AppConfig {
     /** Source-owned toggle for the optional NorthStar Intelligence dashboard/route integration. */
     public boolean workspaceIntelligenceEnabled = true;
 
-    /** Persisted 12-column dashboard tile geometry: x,y,width,height. */
+    /** Persisted 24-column dashboard tile geometry: x,y,width,height. */
     public final Map<String,String> workspaceDashboardLayout=new LinkedHashMap<>(Map.of(
-            "WEATHER","0,0,3,6",
-            "SHOWCASE","3,0,6,6",
-            "UPCOMING_EVENTS","9,0,3,3",
-            "TEAM_CELEBRATIONS","9,3,3,3",
-            "INFORMATION","0,6,12,1",
-            "OPERATIONS_SNAPSHOT","0,7,12,2"
+            "_gridVersion","2",
+            "WEATHER","0,0,6,6",
+            "SHOWCASE","6,0,12,6",
+            "UPCOMING_EVENTS","18,0,6,3",
+            "TEAM_CELEBRATIONS","18,3,6,3",
+            "INFORMATION","0,6,24,1",
+            "OPERATIONS_SNAPSHOT","0,7,24,2"
     ));
 
     /**
@@ -71,11 +72,6 @@ public final class AppConfig {
     public boolean workspaceInfoStripEnabled = true;
     public int workspaceInfoBlockCount = 4;
 
-    /**
-     * When more information choices are configured than fit in the compact
-     * strip, automatically page through them without increasing dashboard
-     * height. The interval is deliberately slow enough for warehouse viewing.
-     */
     /**
      * Information movement behavior:
      * STATIC = fixed first page
@@ -276,12 +272,6 @@ public final class AppConfig {
     /** Number of visible information cards beside the map. Supported range: 6–12. */
     public int visibleWidgetCount = 10;
 
-    /**
-     * Legacy compatibility value from the pre-grid dashboard. The current
-     * dashboard uses workspaceDashboardLayout geometry instead.
-     */
-    @Deprecated
-    public int mapWidthPercent = 63;
 
     public Location primary = new Location("Vance", 33.1743, -87.2336);
 

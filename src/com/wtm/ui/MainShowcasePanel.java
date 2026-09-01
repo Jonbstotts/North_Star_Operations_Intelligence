@@ -34,7 +34,7 @@ public final class MainShowcasePanel extends RoundedPanel {
     private final TileMapPanel map;
 
     private AppConfig config;
-    private boolean automaticSevereWeatherActive;
+    private boolean severeWeatherActive;
     private final List<String> cardIds=new ArrayList<>();
     private int currentIndex=0;
     private Timer rotationTimer;
@@ -90,8 +90,8 @@ public final class MainShowcasePanel extends RoundedPanel {
         this.celebrationListener=listener==null?active->{}:listener;
     }
 
-    public void setAutomaticSevereWeatherActive(boolean active){
-        automaticSevereWeatherActive=active;
+    public void setSevereWeatherActive(boolean active){
+        severeWeatherActive=active;
         if(active && config.severeWeatherMapPriority) showMap();
         updateRotationState();
     }
@@ -202,7 +202,7 @@ public final class MainShowcasePanel extends RoundedPanel {
     private void updateRotationState(){
         if(rotationTimer!=null) rotationTimer.stop();
 
-        boolean severeLock=automaticSevereWeatherActive && config.severeWeatherMapPriority;
+        boolean severeLock=severeWeatherActive && config.severeWeatherMapPriority;
         boolean rotate=cardIds.size()>1 && !severeLock;
 
         if(!rotate){
@@ -216,7 +216,7 @@ public final class MainShowcasePanel extends RoundedPanel {
     }
 
     private void advance(){
-        if(automaticSevereWeatherActive && config.severeWeatherMapPriority){
+        if(severeWeatherActive && config.severeWeatherMapPriority){
             showMap();
             return;
         }

@@ -298,6 +298,27 @@ if ! grep -Fq 'public boolean workspaceIntelligenceEnabled = true;' src/com/wtm/
   exit 1
 fi
 
+
+# Dashboard layout and alert behavior have one canonical owner. Obsolete ratio
+# state and duplicated severe-weather semantics must not return.
+if grep -R -q --include='*.java' -E 'mapWidthPercent|FixedRatioLayout' src; then
+  echo "ERROR: retired pre-grid map/information ratio state returned." >&2
+  exit 1
+fi
+if [ ! -f src/com/wtm/alerts/WeatherAlertPolicy.java ] || \
+   [ ! -f src/com/wtm/alerts/SevereWeatherRefreshPolicy.java ]; then
+  echo "ERROR: canonical weather-alert policy/refresh ownership is missing." >&2
+  exit 1
+fi
+if grep -qE 'tornado emergency|severe thunderstorm warning|flash flood warning' src/com/wtm/ui/OperationsWorkspaceFrame.java; then
+  echo "ERROR: weather-alert domain semantics escaped WeatherAlertPolicy into UI code." >&2
+  exit 1
+fi
+if grep -q 'setAutomaticSevereWeatherActive' src/com/wtm/ui/OperationsWorkspaceFrame.java src/com/wtm/ui/MainShowcasePanel.java; then
+  echo "ERROR: automatic-only severe presentation contract returned." >&2
+  exit 1
+fi
+
 # Dashboard layout editing is owned by the top-right dashboard gear; the old
 # in-content Customize/Reset button strip must not return. The configured
 # scrolling ticker is rendered by the source-owned HeaderTicker.
@@ -382,6 +403,18 @@ rm -rf /tmp/ns-glyph-smoke
 mkdir -p /tmp/ns-glyph-smoke
 javac --release 21 -Xlint:unchecked -Werror -encoding UTF-8 -cp 'out:lib/*' -d /tmp/ns-glyph-smoke ci/GlyphSmokeTest.java
 java -Djava.awt.headless=true -cp '/tmp/ns-glyph-smoke:out:lib/*' GlyphSmokeTest
+
+# Recent dashboard/configuration repairs are protected by headless regression
+# tests so persistence, migration, and weather policy cannot silently diverge.
+rm -rf /tmp/ns-foundation-smoke
+mkdir -p /tmp/ns-foundation-smoke
+javac --release 21 -Xlint:unchecked -Werror -encoding UTF-8 -cp 'out:lib/*' -d /tmp/ns-foundation-smoke \
+  ci/WeatherAlertPolicySmokeTest.java \
+  ci/DashboardGridMigrationSmokeTest.java \
+  ci/ConfigRoundTripSmokeTest.java
+java -Djava.awt.headless=true -cp '/tmp/ns-foundation-smoke:out:lib/*' WeatherAlertPolicySmokeTest
+java -Djava.awt.headless=true -cp '/tmp/ns-foundation-smoke:out:lib/*' DashboardGridMigrationSmokeTest
+java -Djava.awt.headless=true -cp '/tmp/ns-foundation-smoke:out:lib/*' ConfigRoundTripSmokeTest
 
 # Runtime branding is mandatory. NorthStarBrand loads these classpath resources
 # during application startup, so a release JAR without them is not launchable.

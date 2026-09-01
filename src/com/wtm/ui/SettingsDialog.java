@@ -1711,11 +1711,9 @@ public final class SettingsDialog extends JDialog {
         outer.add(controls,BorderLayout.NORTH);
 
         /*
-         * v1.0.8: The unified Workspace Setup embeds this panel in a larger
-         * GridBag page. Without an explicit selector viewport height,
-         * BorderLayout.CENTER collapses to essentially one combo-box row.
-         * Reserve enough vertical space for all configured Information Block
-         * selectors while retaining an internal scrollbar on smaller screens.
+         * Workspace Setup embeds this panel in a larger GridBag page. Reserve a
+         * selector viewport so BorderLayout.CENTER cannot collapse to one row,
+         * while retaining an internal scrollbar on smaller screens.
          */
         JScrollPane scroll=new JScrollPane(
                 widgetRows,

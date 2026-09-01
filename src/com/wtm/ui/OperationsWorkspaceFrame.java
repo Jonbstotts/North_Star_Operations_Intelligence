@@ -1,6 +1,8 @@
 package com.wtm.ui;
 
 import com.wtm.alerts.NwsAlertService;
+import com.wtm.alerts.SevereWeatherRefreshPolicy;
+import com.wtm.alerts.WeatherAlertPolicy;
 import com.wtm.config.AppConfig;
 import com.wtm.config.ConfigService;
 import com.wtm.map.TileMapPanel;
@@ -50,6 +52,13 @@ public final class OperationsWorkspaceFrame extends JFrame {
     private final TheSportsDbService sportsService=new TheSportsDbService(http);
 
     private ScheduledExecutorService refreshExecutor;
+    private ScheduledFuture<?> weatherRefreshFuture;
+    private ScheduledFuture<?> alertRefreshFuture;
+    private ScheduledFuture<?> radarRefreshFuture;
+    private ScheduledFuture<?> trafficRefreshFuture;
+    private ScheduledFuture<?> sportsRefreshFuture;
+    private volatile boolean rapidRefreshScheduled=false;
+    private volatile boolean automaticSevereWeatherLatched=false;
     private TileMapPanel map;
     private MainShowcasePanel mainShowcase;
     private OverlayEffectsPanel overlayEffects;
@@ -93,7 +102,8 @@ public final class OperationsWorkspaceFrame extends JFrame {
     private JLabel dateTimeLabel;
     private JLabel topWeatherLabel;
     private JLabel topTrafficLabel;
-    private JLabel alertBadge;
+    private JButton alertBadge;
+    private HeaderTicker headerTicker;
     private JButton dashboardLayoutGear;
     private boolean dashboardLayoutEditing=false;
 
@@ -168,7 +178,7 @@ public final class OperationsWorkspaceFrame extends JFrame {
                     config.overlayPerformanceMode
             );
             overlayEffects.setSevereSuppressed(
-                    hasSevereAutomaticPriority()
+                    severeWeatherPriorityActive()
             );
         }
 
@@ -185,24 +195,15 @@ public final class OperationsWorkspaceFrame extends JFrame {
         repaint();
     }
 
-    private boolean hasSevereAutomaticPriority(){
-        return config.severeWeatherMapPriority
-                &&alerts!=null
-                &&alerts.stream().anyMatch(alert->
-                        alert.severity()!=null
-                        &&(
-                            alert.severity().equalsIgnoreCase("Extreme")
-                            ||alert.severity().equalsIgnoreCase("Severe")
-                        )
-                );
+    private boolean severeWeatherPriorityActive(){
+        return config.severeWeatherMapPriority&&severeWeatherActive();
     }
 
     private JComponent buildTopBar(){
         JPanel bar=new JPanel(new BorderLayout(18,0));
         bar.setBackground(Theme.panel());
         bar.setBorder(BorderFactory.createCompoundBorder(
-                BorderFactory.createMatteBorder(
-                        0,0,1,0,Theme.border()),
+                BorderFactory.createMatteBorder(0,0,1,0,Theme.border()),
                 new EmptyBorder(10,16,10,16)
         ));
         bar.setPreferredSize(new Dimension(100,62));
@@ -219,9 +220,16 @@ public final class OperationsWorkspaceFrame extends JFrame {
         JPanel right=new JPanel(new FlowLayout(FlowLayout.RIGHT,12,0));
         right.setOpaque(false);
 
-        alertBadge=new JLabel("●  0 alerts");
+        alertBadge=new JButton("●  0 alerts");
         alertBadge.setForeground(Theme.muted());
         alertBadge.setFont(new Font(Font.SANS_SERIF,Font.PLAIN,12));
+        alertBadge.setFocusPainted(false);
+        alertBadge.setContentAreaFilled(false);
+        alertBadge.setOpaque(false);
+        alertBadge.setBorder(new EmptyBorder(5,8,5,8));
+        alertBadge.setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
+        alertBadge.setToolTipText("Show active weather alerts");
+        alertBadge.addActionListener(e->showWeatherAlertMenu(alertBadge));
         right.add(alertBadge);
 
         JSeparator divider=new JSeparator(SwingConstants.VERTICAL);
@@ -251,9 +259,7 @@ public final class OperationsWorkspaceFrame extends JFrame {
         right.add(dashboardLayoutGear);
 
         bar.add(right,BorderLayout.EAST);
-
-        if(!config.showTicker||config.tickerText==null||config.tickerText.isBlank())
-            return bar;
+        if(!config.showTicker)return bar;
 
         JPanel chrome=new JPanel(new BorderLayout());
         chrome.setOpaque(false);
@@ -269,7 +275,7 @@ public final class OperationsWorkspaceFrame extends JFrame {
         strip.setBorder(BorderFactory.createMatteBorder(0,0,1,0,Theme.border()));
         strip.setPreferredSize(new Dimension(100,24));
 
-        if(config.showHeader && config.headerText!=null && !config.headerText.isBlank()){
+        if(config.showHeader&&config.headerText!=null&&!config.headerText.isBlank()){
             JLabel headerTitle=new JLabel(config.headerText.trim());
             headerTitle.setForeground(Theme.text());
             headerTitle.setFont(new Font(Font.SANS_SERIF,Font.BOLD,11));
@@ -277,10 +283,178 @@ public final class OperationsWorkspaceFrame extends JFrame {
             strip.add(headerTitle,BorderLayout.WEST);
         }
 
-        HeaderTicker ticker=new HeaderTicker(config.tickerText);
-        ticker.setBorder(new EmptyBorder(0,10,0,12));
-        strip.add(ticker,BorderLayout.CENTER);
+        headerTicker=new HeaderTicker();
+        headerTicker.setBorder(new EmptyBorder(0,10,0,12));
+        headerTicker.setEntries(headerTickerEntries());
+        strip.add(headerTicker,BorderLayout.CENTER);
         return strip;
+    }
+
+    private void showWeatherAlertMenu(Component invoker){
+        JPanel content=new JPanel();
+        content.setBackground(Theme.panel());
+        content.setBorder(new EmptyBorder(4,4,4,4));
+        content.setLayout(new BoxLayout(content,BoxLayout.Y_AXIS));
+
+        if(config.liveSevereWeatherMode){
+            content.add(weatherAlertPopupRow(
+                    "SEVERE WEATHER TEST MODE",
+                    "Manual Live Severe Weather Mode is active. Rapid monitoring and severe-weather presentation are being tested.",
+                    Theme.danger()
+            ));
+        }
+
+        List<WeatherAlert> ordered=alerts==null
+                ?List.of()
+                :alerts.stream()
+                        .filter(Objects::nonNull)
+                        .sorted(Comparator.comparingInt(WeatherAlertPolicy::priority).reversed())
+                        .toList();
+
+        if(ordered.isEmpty()&&!config.liveSevereWeatherMode){
+            JLabel none=new JLabel("No active weather alerts");
+            none.setForeground(Theme.muted());
+            none.setBorder(new EmptyBorder(14,14,14,14));
+            content.add(none);
+        }else{
+            for(WeatherAlert alert:ordered){
+                if(content.getComponentCount()>0)
+                    content.add(new JSeparator());
+                content.add(weatherAlertPopupRow(
+                        WeatherAlertPolicy.shortEventName(alert),
+                        weatherAlertPopupDetails(alert),
+                        weatherAlertColor(alert)
+                ));
+            }
+        }
+
+        JScrollPane scroll=new JScrollPane(
+                content,
+                ScrollPaneConstants.VERTICAL_SCROLLBAR_AS_NEEDED,
+                ScrollPaneConstants.HORIZONTAL_SCROLLBAR_NEVER
+        );
+        scroll.setBorder(null);
+        scroll.getViewport().setBackground(Theme.panel());
+        scroll.getVerticalScrollBar().setUnitIncrement(16);
+        int height=Math.min(430,Math.max(70,content.getPreferredSize().height+6));
+        scroll.setPreferredSize(new Dimension(520,height));
+
+        JPopupMenu popup=new JPopupMenu();
+        popup.setBorder(BorderFactory.createLineBorder(Theme.border(),1));
+        popup.setLayout(new BorderLayout());
+        popup.add(scroll,BorderLayout.CENTER);
+        popup.show(invoker,0,invoker.getHeight()+4);
+    }
+
+    private JPanel weatherAlertPopupRow(String title,String details,Color color){
+        JPanel row=new JPanel();
+        row.setBackground(Theme.panel());
+        row.setBorder(new EmptyBorder(10,12,10,12));
+        row.setLayout(new BoxLayout(row,BoxLayout.Y_AXIS));
+
+        JLabel heading=new JLabel(title);
+        heading.setForeground(color);
+        heading.setFont(new Font(Font.SANS_SERIF,Font.BOLD,12));
+        heading.setAlignmentX(Component.LEFT_ALIGNMENT);
+
+        JTextArea description=new JTextArea(details);
+        description.setEditable(false);
+        description.setFocusable(false);
+        description.setLineWrap(true);
+        description.setWrapStyleWord(true);
+        description.setOpaque(false);
+        description.setForeground(color);
+        description.setFont(new Font(Font.SANS_SERIF,Font.PLAIN,10));
+        description.setRows(Math.min(7,Math.max(2,details.length()/72+1)));
+        description.setColumns(54);
+        description.setAlignmentX(Component.LEFT_ALIGNMENT);
+
+        row.add(heading);
+        row.add(Box.createVerticalStrut(4));
+        row.add(description);
+        return row;
+    }
+
+    private String weatherAlertPopupDetails(WeatherAlert alert){
+        List<String> lines=new ArrayList<>();
+        if(alert.headline()!=null&&!alert.headline().isBlank())
+            lines.add(alert.headline().trim());
+
+        String severity=safe(alert.severity()).trim();
+        String urgency=safe(alert.urgency()).trim();
+        if(!severity.isBlank()||!urgency.isBlank())
+            lines.add(String.join(" • ",
+                    java.util.stream.Stream.of(severity,urgency)
+                            .filter(value->!value.isBlank())
+                            .toList()));
+
+        if(alert.expires()!=null)
+            lines.add("Expires "+DateTimeFormatter.ofPattern("MMM d, h:mm a")
+                    .withZone(ZoneId.systemDefault())
+                    .format(alert.expires()));
+
+        if(alert.instruction()!=null&&!alert.instruction().isBlank())
+            lines.add(alert.instruction().trim());
+
+        if(lines.isEmpty())
+            return WeatherAlertPolicy.briefText(alert,180);
+        return String.join("\n",lines);
+    }
+
+    private List<TickerEntry> headerTickerEntries(){
+        List<TickerEntry> entries=new ArrayList<>();
+        if(config.liveSevereWeatherMode)
+            entries.add(new TickerEntry(
+                    "⚠ SEVERE WEATHER TEST MODE • Rapid weather, alert, and radar monitoring active",
+                    Theme.danger()
+            ));
+
+        if(alerts!=null){
+            alerts.stream()
+                    .filter(Objects::nonNull)
+                    .sorted(Comparator.comparingInt(WeatherAlertPolicy::priority).reversed())
+                    .forEach(alert->entries.add(new TickerEntry(
+                            weatherAlertTickerText(alert),
+                            weatherAlertColor(alert)
+                    )));
+        }
+
+        if(config.tickerText!=null&&!config.tickerText.isBlank())
+            entries.add(new TickerEntry(config.tickerText.trim(),Theme.text()));
+        if(entries.isEmpty())
+            entries.add(new TickerEntry(
+                    "North Star operations monitoring active",
+                    Theme.text()
+            ));
+        return entries;
+    }
+
+    private String weatherAlertTickerText(WeatherAlert alert){
+        WeatherAlertPolicy.Level level=WeatherAlertPolicy.level(alert);
+        String prefix=(level==WeatherAlertPolicy.Level.WARNING
+                ||level==WeatherAlertPolicy.Level.CRITICAL)
+                ?"⚠ SEVERE WEATHER • "
+                :"⚠ WEATHER ALERT • ";
+        return prefix+WeatherAlertPolicy.briefText(alert,150);
+    }
+
+    private Color weatherAlertColor(WeatherAlert alert){
+        return weatherAlertColor(WeatherAlertPolicy.level(alert));
+    }
+
+    private Color weatherAlertColor(WeatherAlertPolicy.Level level){
+        if(level==WeatherAlertPolicy.Level.CRITICAL
+                ||level==WeatherAlertPolicy.Level.WARNING)
+            return Theme.danger();
+        if(level==WeatherAlertPolicy.Level.WATCH
+                ||level==WeatherAlertPolicy.Level.ADVISORY)
+            return Theme.warn();
+        return Theme.muted();
+    }
+
+    private void refreshHeaderTicker(){
+        if(headerTicker!=null)
+            headerTicker.setEntries(headerTickerEntries());
     }
 
     private void toggleDashboardLayoutFromGear(){
@@ -414,10 +588,8 @@ public final class OperationsWorkspaceFrame extends JFrame {
             side.add(sideDataCollectionButton());
 
         /*
-         * v1.0.7: Information Blocks and the former Operations Workspace page
-         * are one Settings page now. The sidebar must route to the exact tab
-         * title created by SettingsDialog; otherwise detachTabForWorkspace()
-         * returns null and incorrectly reports the page as unavailable.
+         * Information Blocks and Operations Snapshot configuration share the
+         * Workspace Setup page, so the sidebar routes to that source-owned tab.
          */
         addPermittedSidePage(
                 side,"⚙  Workspace Setup","Workspace Setup",
@@ -965,8 +1137,8 @@ public final class OperationsWorkspaceFrame extends JFrame {
          * weather map priority without maintaining a second slideshow engine.
          */
         mainShowcase=new MainShowcasePanel(config,map);
-        mainShowcase.setAutomaticSevereWeatherActive(
-                automaticSevereWeatherActive());
+        mainShowcase.setSevereWeatherActive(
+                severeWeatherActive());
         mainShowcase.setCelebrationListener(active->{
             if(active&&overlayEffects!=null)
                 overlayEffects.celebrate();
@@ -2386,13 +2558,10 @@ public final class OperationsWorkspaceFrame extends JFrame {
         if(type!=null&&type.startsWith("ROUTE_"))
             return routeInfoColor(type);
 
-        if("ALERTS".equals(type)&&!alerts.isEmpty()){
-            WeatherAlert alert=primaryWeatherAlert();
-            return alert!=null&&weatherAlertPriority(alert)>=875
-                    ?Theme.danger()
-                    :Theme.warn();
+        if("ALERTS".equals(type)){
+            WeatherAlert primary=primaryWeatherAlert();
+            return primary==null?Theme.muted():weatherAlertColor(primary);
         }
-
         return Theme.muted();
     }
 
@@ -2414,77 +2583,15 @@ public final class OperationsWorkspaceFrame extends JFrame {
      * using whichever alert happens to appear first in the provider response.
      */
     private WeatherAlert primaryWeatherAlert(){
-        if(alerts==null||alerts.isEmpty())return null;
-
-        return alerts.stream()
-                .max(Comparator
-                        .comparingInt(this::weatherAlertPriority)
-                        .thenComparing(
-                                WeatherAlert::expires,
-                                Comparator.nullsLast(
-                                        Comparator.naturalOrder()
-                                )
-                        ))
-                .orElse(alerts.get(0));
+        return WeatherAlertPolicy.primary(alerts).orElse(null);
     }
 
     private int weatherAlertPriority(WeatherAlert alert){
-        if(alert==null)return 0;
-
-        String event=(safe(alert.event())+" "
-                +safe(alert.headline()))
-                .toLowerCase(Locale.ROOT);
-        String severity=safe(alert.severity()).toLowerCase(Locale.ROOT);
-        String urgency=safe(alert.urgency()).toLowerCase(Locale.ROOT);
-
-        int rank=0;
-
-        if(event.contains("tornado emergency"))rank=1000;
-        else if(event.contains("tornado warning"))rank=950;
-        else if(event.contains("extreme wind warning"))rank=925;
-        else if(event.contains("severe thunderstorm warning"))rank=900;
-        else if(event.contains("flash flood warning"))rank=875;
-        else if(event.contains("tornado watch"))rank=825;
-        else if(event.contains("severe thunderstorm watch"))rank=800;
-        else if(event.contains("heat warning")
-                ||event.contains("excessive heat warning"))rank=775;
-        else if(event.contains("heat advisory"))rank=725;
-        else if(event.contains("flood warning"))rank=700;
-        else if(event.contains("winter storm warning"))rank=675;
-        else if(event.contains("wind advisory"))rank=625;
-        else if(event.contains("dense fog advisory"))rank=575;
-        else if(event.contains("advisory"))rank=525;
-        else if(event.contains("watch"))rank=500;
-        else if(event.contains("warning"))rank=650;
-        else rank=400;
-
-        if("extreme".equals(severity))rank+=90;
-        else if("severe".equals(severity))rank+=60;
-        else if("moderate".equals(severity))rank+=30;
-
-        if("immediate".equals(urgency))rank+=30;
-        else if("expected".equals(urgency))rank+=15;
-
-        return rank;
+        return WeatherAlertPolicy.priority(alert);
     }
 
     private static String shortAlertName(String event){
-        String value=safe(event).trim();
-        if(value.isBlank())return "Weather Alert";
-
-        String lower=value.toLowerCase(Locale.ROOT);
-        if(lower.contains("severe thunderstorm warning"))
-            return "Severe T-Storm Warning";
-        if(lower.contains("severe thunderstorm watch"))
-            return "Severe T-Storm Watch";
-        if(lower.contains("excessive heat warning"))
-            return "Excessive Heat Warning";
-        if(lower.contains("tornado emergency"))
-            return "Tornado Emergency";
-
-        return value.length()>28
-                ?value.substring(0,27)+"…"
-                :value;
+        return WeatherAlertPolicy.shortEventName(event);
     }
 
     private Color routeInfoColor(String type){
@@ -2758,30 +2865,90 @@ public final class OperationsWorkspaceFrame extends JFrame {
 
     private void startRefreshers(){
         stopRefreshers();
-        refreshExecutor=Executors.newScheduledThreadPool(4,r->{
-            Thread t=new Thread(r,"northstar-workspace-refresh");t.setDaemon(true);return t;});
+        refreshExecutor=Executors.newScheduledThreadPool(5,r->{
+            Thread t=new Thread(r,"northstar-workspace-refresh");
+            t.setDaemon(true);
+            return t;
+        });
+
+        reconcileAutomaticSevereWeatherState();
+        rapidRefreshScheduled=severeWeatherActive();
+
         refreshExecutor.execute(this::refreshWeather);
         refreshExecutor.execute(this::refreshAlerts);
         refreshExecutor.execute(this::refreshRadar);
         refreshExecutor.execute(this::refreshTraffic);
         refreshExecutor.execute(this::refreshSports);
-        refreshExecutor.scheduleAtFixedRate(this::refreshWeather,
-                Math.max(1,config.weatherRefreshMinutes),Math.max(1,config.weatherRefreshMinutes),TimeUnit.MINUTES);
-        refreshExecutor.scheduleAtFixedRate(this::refreshAlerts,
-                Math.max(1,config.alertRefreshMinutes),Math.max(1,config.alertRefreshMinutes),TimeUnit.MINUTES);
-        refreshExecutor.scheduleAtFixedRate(this::refreshRadar,
-                Math.max(1,config.radarRefreshMinutes),Math.max(1,config.radarRefreshMinutes),TimeUnit.MINUTES);
-        refreshExecutor.scheduleAtFixedRate(this::refreshTraffic,
-                Math.max(1,config.trafficRefreshMinutes),Math.max(1,config.trafficRefreshMinutes),TimeUnit.MINUTES);
-        refreshExecutor.scheduleAtFixedRate(this::refreshSports,
-                Math.max(1,config.sportsRefreshMinutes),Math.max(1,config.sportsRefreshMinutes),TimeUnit.MINUTES);
+
+        scheduleWeatherMonitoring(rapidRefreshScheduled);
+        trafficRefreshFuture=refreshExecutor.scheduleWithFixedDelay(
+                this::refreshTraffic,
+                Math.max(1,config.trafficRefreshMinutes),
+                Math.max(1,config.trafficRefreshMinutes),
+                TimeUnit.MINUTES
+        );
+        sportsRefreshFuture=refreshExecutor.scheduleWithFixedDelay(
+                this::refreshSports,
+                Math.max(1,config.sportsRefreshMinutes),
+                Math.max(1,config.sportsRefreshMinutes),
+                TimeUnit.MINUTES
+        );
     }
 
-    private void stopRefreshers(){
+    private synchronized void scheduleWeatherMonitoring(boolean rapid){
+        if(refreshExecutor==null||refreshExecutor.isShutdown())return;
+        cancelFuture(weatherRefreshFuture);
+        cancelFuture(alertRefreshFuture);
+        cancelFuture(radarRefreshFuture);
+
+        SevereWeatherRefreshPolicy.Cadence cadence=
+                SevereWeatherRefreshPolicy.cadence(
+                        rapid,
+                        config.weatherRefreshMinutes,
+                        config.alertRefreshMinutes,
+                        config.radarRefreshMinutes
+                );
+
+        weatherRefreshFuture=refreshExecutor.scheduleWithFixedDelay(
+                this::refreshWeather,
+                cadence.weatherMinutes(),cadence.weatherMinutes(),TimeUnit.MINUTES);
+        alertRefreshFuture=refreshExecutor.scheduleWithFixedDelay(
+                this::refreshAlerts,
+                cadence.alertMinutes(),cadence.alertMinutes(),TimeUnit.MINUTES);
+        radarRefreshFuture=refreshExecutor.scheduleWithFixedDelay(
+                this::refreshRadar,
+                cadence.radarMinutes(),cadence.radarMinutes(),TimeUnit.MINUTES);
+    }
+
+    private synchronized void rescheduleWeatherMonitoringIfNeeded(){
+        boolean rapid=severeWeatherActive();
+        if(rapid==rapidRefreshScheduled)return;
+        rapidRefreshScheduled=rapid;
+        scheduleWeatherMonitoring(rapid);
+    }
+
+    private static void cancelFuture(ScheduledFuture<?> future){
+        if(future!=null)future.cancel(false);
+    }
+
+
+
+    private synchronized void stopRefreshers(){
+        cancelFuture(weatherRefreshFuture);
+        cancelFuture(alertRefreshFuture);
+        cancelFuture(radarRefreshFuture);
+        cancelFuture(trafficRefreshFuture);
+        cancelFuture(sportsRefreshFuture);
+        weatherRefreshFuture=null;
+        alertRefreshFuture=null;
+        radarRefreshFuture=null;
+        trafficRefreshFuture=null;
+        sportsRefreshFuture=null;
         if(refreshExecutor!=null){
             refreshExecutor.shutdownNow();
             refreshExecutor=null;
         }
+        rapidRefreshScheduled=false;
         stopInformationMovement();
         stopOperationsMovement();
     }
@@ -2800,44 +2967,37 @@ public final class OperationsWorkspaceFrame extends JFrame {
     private void refreshAlerts(){
         try{
             alerts=List.copyOf(alertService.fetch(config.primary,config));
+            reconcileAutomaticSevereWeatherState();
+            rescheduleWeatherMonitoringIfNeeded();
             SwingUtilities.invokeLater(()->{
                 refreshTopSummaries();
                 if(map!=null)map.setAlerts(alerts);
                 if(mainShowcase!=null)
-                    mainShowcase.setAutomaticSevereWeatherActive(
-                            automaticSevereWeatherActive());
+                    mainShowcase.setSevereWeatherActive(severeWeatherActive());
                 if(overlayEffects!=null)
                     overlayEffects.setSevereSuppressed(
-                            hasSevereAutomaticPriority());
+                            severeWeatherPriorityActive());
                 if(operationsModule!=null)renderOperations(operationsModule);
                 if(infoStripModule!=null)renderInformationStrip(infoStripModule);
             });
         }catch(Exception ignored){}
     }
 
-    private boolean automaticSevereWeatherActive(){
-        if(!config.automaticSevereWeatherMode
-                ||alerts==null
-                ||alerts.isEmpty())
-            return false;
+    private boolean severeWeatherActive(){
+        return config.liveSevereWeatherMode||automaticSevereWeatherLatched;
+    }
 
-        for(WeatherAlert alert:alerts){
-            String event=alert.event()==null
-                    ?""
-                    :alert.event().trim().toLowerCase(Locale.ROOT);
-
-            if(event.contains("tornado warning")
-                    ||event.contains("tornado watch")
-                    ||event.contains("tornado emergency")
-                    ||event.contains("severe thunderstorm warning")
-                    ||event.contains("severe thunderstorm watch")
-                    ||event.contains("flash flood warning")
-                    ||event.contains("extreme wind warning")
-                    ||"extreme".equalsIgnoreCase(alert.severity()))
-                return true;
+    private void reconcileAutomaticSevereWeatherState(){
+        if(!config.automaticSevereWeatherMode){
+            automaticSevereWeatherLatched=false;
+            return;
         }
 
-        return false;
+        if(WeatherAlertPolicy.hasAutomaticSevereAlert(alerts)){
+            automaticSevereWeatherLatched=true;
+        }else if(config.autoDisableSevereWeatherMode){
+            automaticSevereWeatherLatched=false;
+        }
     }
 
     private void refreshRadar(){
@@ -2928,19 +3088,42 @@ public final class OperationsWorkspaceFrame extends JFrame {
     private void refreshTopSummaries(){
         if(topWeatherLabel!=null){
             JLabel detail=(JLabel)topWeatherLabel.getClientProperty("detailLabel");
-            if(weather==null){topWeatherLabel.setText("--°F");if(detail!=null)detail.setText("Loading weather...");}
-            else{topWeatherLabel.setText(Math.round(weather.temperatureF())+"°F");if(detail!=null)detail.setText(weather.condition()+" • feels "+Math.round(weather.apparentTemperatureF())+"°");}
+            if(weather==null){
+                topWeatherLabel.setText("--°F");
+                if(detail!=null)detail.setText("Loading weather...");
+            }else{
+                topWeatherLabel.setText(Math.round(weather.temperatureF())+"°F");
+                if(detail!=null)
+                    detail.setText(weather.condition()+" • feels "
+                            +Math.round(weather.apparentTemperatureF())+"°");
+            }
         }
+
         if(topTrafficLabel!=null){
             JLabel detail=(JLabel)topTrafficLabel.getClientProperty("detailLabel");
-            int worst=routeStatuses.values().stream().mapToInt(RouteStatus::delayMinutes).max().orElse(0);
+            int worst=routeStatuses.values().stream()
+                    .mapToInt(RouteStatus::delayMinutes).max().orElse(0);
             topTrafficLabel.setText(worst<=0?"Light":worst<10?"Moderate":"Delayed");
-            if(detail!=null)detail.setText(worst<=0?"No major delays":"Worst route +"+worst+" min");
+            if(detail!=null)
+                detail.setText(worst<=0?"No major delays":"Worst route +"+worst+" min");
         }
+
         if(alertBadge!=null){
-            alertBadge.setText("●  "+alerts.size()+" alert"+(alerts.size()==1?"":"s"));
-            alertBadge.setForeground(alerts.isEmpty()?Theme.muted():Theme.warn());
+            int count=alerts==null?0:alerts.size();
+            WeatherAlert primary=primaryWeatherAlert();
+            if(config.liveSevereWeatherMode){
+                alertBadge.setText(count==0
+                        ?"●  SEVERE TEST"
+                        :"●  "+count+" alert"+(count==1?"":"s")+" • TEST");
+                alertBadge.setForeground(Theme.danger());
+            }else{
+                alertBadge.setText("●  "+count+" alert"+(count==1?"":"s"));
+                alertBadge.setForeground(primary==null
+                        ?Theme.muted()
+                        :weatherAlertColor(primary));
+            }
         }
+        refreshHeaderTicker();
     }
 
     private void refreshVisibleModules(){
@@ -2950,6 +3133,10 @@ public final class OperationsWorkspaceFrame extends JFrame {
         if(celebrationsModule!=null)renderCelebrations(celebrationsModule);
         if(infoStripModule!=null)renderInformationStrip(infoStripModule);
         if(operationsModule!=null)renderOperations(operationsModule);
+        if(mainShowcase!=null)
+            mainShowcase.setSevereWeatherActive(severeWeatherActive());
+        if(overlayEffects!=null)
+            overlayEffects.setSevereSuppressed(severeWeatherPriorityActive());
     }
 
     private void showDirectWorkspacePage(
@@ -3182,7 +3369,8 @@ public final class OperationsWorkspaceFrame extends JFrame {
 
     private void releaseDashboardModules(){
         finishDashboardLayoutEditing();
-        stopInformationRotation();
+        stopInformationMovement();
+        stopOperationsMovement();
 
         if(mainShowcase!=null){
             mainShowcase.disposeShowcase();
@@ -3195,6 +3383,7 @@ public final class OperationsWorkspaceFrame extends JFrame {
         }
 
         informationPageStart=0;
+        operationsPageStart=0;
         weatherModule=null;
         eventsModule=null;
         celebrationsModule=null;
@@ -3341,25 +3530,40 @@ public final class OperationsWorkspaceFrame extends JFrame {
         super.dispose();
     }
 
+    private record TickerEntry(String text,Color color){}
+
     private static final class HeaderTicker extends JPanel {
-        private final String message;
+        private List<TickerEntry> entries=List.of();
         private final javax.swing.Timer timer;
         private int offset=0;
 
-        private HeaderTicker(String text){
-            message=text.trim();
+        private HeaderTicker(){
             setOpaque(false);
-            setForeground(Theme.text());
             setFont(new Font(Font.SANS_SERIF,Font.BOLD,11));
-
             timer=new javax.swing.Timer(35,e->{
-                FontMetrics metrics=getFontMetrics(getFont());
-                int messageWidth=Math.max(1,metrics.stringWidth(message));
-                int travel=Math.max(1,getWidth()+messageWidth+240);
+                int width=Math.max(1,totalMessageWidth());
+                int travel=Math.max(1,getWidth()+width+240);
                 offset=(offset+1)%travel;
                 repaint();
             });
             timer.setCoalesce(true);
+        }
+
+        private void setEntries(List<TickerEntry> values){
+            entries=values==null?List.of():List.copyOf(values);
+            offset=0;
+            repaint();
+        }
+
+        private int totalMessageWidth(){
+            FontMetrics metrics=getFontMetrics(getFont());
+            int width=0;
+            for(int i=0;i<entries.size();i++){
+                width+=metrics.stringWidth(entries.get(i).text());
+                if(i<entries.size()-1)
+                    width+=metrics.stringWidth("     •     ");
+            }
+            return width;
         }
 
         @Override public void addNotify(){
@@ -3380,11 +3584,21 @@ public final class OperationsWorkspaceFrame extends JFrame {
                         RenderingHints.KEY_TEXT_ANTIALIASING,
                         RenderingHints.VALUE_TEXT_ANTIALIAS_ON);
                 g2.setFont(getFont());
-                g2.setColor(getForeground());
                 FontMetrics metrics=g2.getFontMetrics();
                 int baseline=(getHeight()+metrics.getAscent()-metrics.getDescent())/2;
                 int x=getWidth()+80-offset;
-                g2.drawString(message,x,baseline);
+                for(int i=0;i<entries.size();i++){
+                    TickerEntry entry=entries.get(i);
+                    g2.setColor(entry.color());
+                    g2.drawString(entry.text(),x,baseline);
+                    x+=metrics.stringWidth(entry.text());
+                    if(i<entries.size()-1){
+                        String separator="     •     ";
+                        g2.setColor(Theme.muted());
+                        g2.drawString(separator,x,baseline);
+                        x+=metrics.stringWidth(separator);
+                    }
+                }
             }finally{
                 g2.dispose();
             }

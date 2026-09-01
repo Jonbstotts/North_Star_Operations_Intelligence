@@ -38,24 +38,32 @@ public final class DashboardGridPanel extends JPanel {
 
     private void migrateLegacyLayout(){
         if(GRID_VERSION.equals(layout.get(GRID_VERSION_KEY)))return;
-        Map<String,String> migrated=new LinkedHashMap<>();
+
+        Map<String,GridSpec> parsed=new LinkedHashMap<>();
         for(Map.Entry<String,String> entry:layout.entrySet()){
             if(entry.getKey().startsWith("_"))continue;
-            GridSpec old=GridSpec.parse0(entry.getValue());
-            if(old==null)continue;
-            // RC3 and earlier persisted a 12-column horizontal grid. Doubling
-            // x/width retains the visual placement while the new 24-column grid
-            // provides half-column sizing precision. Vertical units are kept,
-            // but each row is intentionally much shorter so the dashboard fits.
-            if(old.x+old.w<=12)old=new GridSpec(old.x*2,old.y,old.w*2,old.h);
-            migrated.put(entry.getKey(),old.clamped().encode());
+            GridSpec spec=GridSpec.parse0(entry.getValue());
+            if(spec!=null)parsed.put(entry.getKey(),spec);
         }
-        layout.putAll(migrated);
-        layout.put(GRID_VERSION_KEY,GRID_VERSION);
 
-        // Persist the migration marker immediately. Otherwise an installation
-        // that launches and closes without moving a tile can re-enter the legacy
-        // migration path on its next start.
+        /*
+         * Grid width is a property of the entire persisted layout. If every
+         * valid tile fits inside twelve columns, the map is legacy and every
+         * tile is migrated together. If any tile extends beyond column twelve,
+         * the whole unversioned map is already 24-column geometry and must not
+         * be partially doubled.
+         */
+        boolean legacyTwelveColumn=!parsed.isEmpty()
+                &&parsed.values().stream().allMatch(spec->spec.x+spec.w<=12);
+
+        for(Map.Entry<String,GridSpec> entry:parsed.entrySet()){
+            GridSpec spec=entry.getValue();
+            if(legacyTwelveColumn)
+                spec=new GridSpec(spec.x*2,spec.y,spec.w*2,spec.h);
+            layout.put(entry.getKey(),spec.clamped().encode());
+        }
+
+        layout.put(GRID_VERSION_KEY,GRID_VERSION);
         persist.run();
     }
 
