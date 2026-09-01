@@ -90,6 +90,16 @@ public final class AppConfig {
     /** Continuous ticker speed in pixels per second. */
     public int workspaceInfoTickerPixelsPerSecond = 28;
 
+    /**
+     * Operations Snapshot movement behavior. This is intentionally independent
+     * from the Information row because each is now its own dashboard-grid tile.
+     * STATIC = fixed first viewport, PAGED = timed pages, TICKER = continuous.
+     */
+    public String workspaceKpiMovementMode = "STATIC";
+    public int workspaceKpiVisibleCount = 8;
+    public int workspaceKpiScrollSeconds = 10;
+    public int workspaceKpiTickerPixelsPerSecond = 28;
+
     /** Configurable KPI cards for the Operations Snapshot module. */
     public final List<OperationsKpiConfig> operationsKpis = new ArrayList<>(List.of(
             new OperationsKpiConfig("lhy","LHY Performance",0,17500,"",true,true,"MANUAL"),
@@ -267,9 +277,10 @@ public final class AppConfig {
     public int visibleWidgetCount = 10;
 
     /**
-     * Percentage of the main dashboard width reserved for the map.
-     * The remaining width is used by the information-card grid.
+     * Legacy compatibility value from the pre-grid dashboard. The current
+     * dashboard uses workspaceDashboardLayout geometry instead.
      */
+    @Deprecated
     public int mapWidthPercent = 63;
 
     public Location primary = new Location("Vance", 33.1743, -87.2336);

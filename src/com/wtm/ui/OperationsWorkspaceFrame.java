@@ -61,6 +61,13 @@ public final class OperationsWorkspaceFrame extends JFrame {
     private int informationTickerCycleWidth=0;
     private int informationPageStart=0;
 
+    private javax.swing.Timer operationsRotationTimer;
+    private javax.swing.Timer operationsTickerTimer;
+    private JViewport operationsTickerViewport;
+    private JPanel operationsTickerTrack;
+    private int operationsTickerCycleWidth=0;
+    private int operationsPageStart=0;
+
     private volatile WeatherSnapshot weather;
     private volatile List<WeatherAlert> alerts=List.of();
     private final Map<Integer,RouteStatus> routeStatuses=
@@ -136,6 +143,7 @@ public final class OperationsWorkspaceFrame extends JFrame {
         }
 
         stopInformationMovement();
+        stopOperationsMovement();
 
         /*
          * Workspace branding and decorative holiday animation are independent.
@@ -1839,7 +1847,7 @@ public final class OperationsWorkspaceFrame extends JFrame {
 
         stopInformationTicker();
 
-        int columns=workspaceMetricColumnCount();
+        int columns=informationMetricColumnCount();
         int visible=Math.max(
                 1,
                 Math.min(
@@ -1910,7 +1918,7 @@ public final class OperationsWorkspaceFrame extends JFrame {
 
         int visibleSlots=Math.max(
                 1,
-                Math.min(config.workspaceInfoBlockCount,workspaceMetricColumnCount())
+                Math.min(config.workspaceInfoBlockCount,informationMetricColumnCount())
         );
         int availableWidth=Math.max(
                 1,
@@ -2501,33 +2509,225 @@ public final class OperationsWorkspaceFrame extends JFrame {
 
     private JPanel operationsSnapshotCard(){
         JPanel card=card("Operations Snapshot");
-        renderOperations(card);return card;
+        renderOperations(card);
+        return card;
     }
 
-    /**
-     * One shared horizontal grid for Information and Operations Snapshot.
-     * Keeping this calculation in one place prevents the two rows from
-     * drifting apart as modules/KPIs are customized.
-     */
-    private int workspaceMetricColumnCount(){
-        long enabled=config.operationsKpis.stream()
-                .filter(OperationsKpiConfig::enabled)
-                .limit(8)
-                .count();
-        return Math.max(1,(int)enabled);
+    /** Information and KPI tiles own independent viewports in the grid layout. */
+    private int informationMetricColumnCount(){
+        return Math.max(1,Math.min(8,config.workspaceInfoBlockCount));
     }
 
     private void renderOperations(JPanel card){
-        Component north=((BorderLayout)card.getLayout()).getLayoutComponent(BorderLayout.NORTH);
-        card.removeAll();if(north!=null)card.add(north,BorderLayout.NORTH);
+        Component north=((BorderLayout)card.getLayout())
+                .getLayoutComponent(BorderLayout.NORTH);
+        card.removeAll();
+        if(north!=null)card.add(north,BorderLayout.NORTH);
+
         List<OperationsKpiConfig> enabled=config.operationsKpis.stream()
-                .filter(OperationsKpiConfig::enabled).limit(8).toList();
-        int columns=workspaceMetricColumnCount();
-        JPanel metrics=new JPanel(new GridLayout(1,columns,10,0));
+                .filter(OperationsKpiConfig::enabled)
+                .toList();
+
+        if(enabled.isEmpty()){
+            stopOperationsMovement();
+            card.add(
+                    empty("Configure KPI cards in Settings → Operations Workspace"),
+                    BorderLayout.CENTER
+            );
+            card.revalidate();
+            card.repaint();
+            return;
+        }
+
+        String movement=config.workspaceKpiMovementMode==null
+                ?"STATIC"
+                :config.workspaceKpiMovementMode.trim().toUpperCase();
+
+        if("TICKER".equals(movement)){
+            renderOperationsTicker(card,enabled);
+            card.revalidate();
+            card.repaint();
+            return;
+        }
+
+        stopOperationsTicker();
+
+        int visible=Math.max(
+                1,
+                Math.min(config.workspaceKpiVisibleCount,enabled.size())
+        );
+        boolean paged="PAGED".equals(movement);
+        if(operationsPageStart>=enabled.size())operationsPageStart=0;
+
+        JPanel metrics=new JPanel(new GridLayout(1,visible,10,0));
         metrics.setOpaque(false);
-        if(enabled.isEmpty())metrics.add(empty("Configure KPI cards in Settings → Operations Workspace"));
-        for(OperationsKpiConfig kpi:enabled)metrics.add(kpiCard(kpi));
-        card.add(metrics,BorderLayout.CENTER);card.revalidate();card.repaint();
+        for(int slot=0;slot<visible;slot++){
+            int absolute=operationsPageStart+slot;
+            if(!paged&&absolute>=enabled.size())break;
+            metrics.add(kpiCard(enabled.get(absolute%enabled.size())));
+        }
+        card.add(metrics,BorderLayout.CENTER);
+
+        if(paged&&enabled.size()>visible){
+            JLabel page=new JLabel(
+                    operationsPageLabel(
+                            operationsPageStart,visible,enabled.size()),
+                    SwingConstants.RIGHT
+            );
+            page.setForeground(Theme.muted());
+            page.setFont(new Font(Font.SANS_SERIF,Font.PLAIN,8));
+            card.add(page,BorderLayout.SOUTH);
+        }
+
+        configureOperationsRotation(enabled.size(),visible,paged);
+        card.revalidate();
+        card.repaint();
+    }
+
+    private void renderOperationsTicker(
+            JPanel card,
+            List<OperationsKpiConfig> enabled
+    ){
+        stopOperationsRotation();
+        stopOperationsTicker();
+
+        int visibleSlots=Math.max(
+                1,
+                Math.min(config.workspaceKpiVisibleCount,8)
+        );
+        int availableWidth=Math.max(
+                1,
+                card.getWidth()>0
+                        ?card.getWidth()
+                        :Math.max(900,getContentPane().getWidth()-260)
+        );
+        int slotWidth=Math.max(150,availableWidth/visibleSlots);
+
+        operationsTickerTrack=new JPanel();
+        operationsTickerTrack.setOpaque(false);
+        operationsTickerTrack.setLayout(
+                new BoxLayout(operationsTickerTrack,BoxLayout.X_AXIS));
+
+        for(OperationsKpiConfig kpi:enabled){
+            JComponent metric=kpiCard(kpi);
+            metric.setPreferredSize(new Dimension(slotWidth,76));
+            metric.setMinimumSize(new Dimension(slotWidth,76));
+            metric.setMaximumSize(new Dimension(slotWidth,76));
+            operationsTickerTrack.add(metric);
+        }
+        operationsTickerTrack.add(Box.createHorizontalStrut(slotWidth/2));
+        operationsTickerCycleWidth=enabled.size()*slotWidth+(slotWidth/2);
+
+        for(OperationsKpiConfig kpi:enabled){
+            JComponent metric=kpiCard(kpi);
+            metric.setPreferredSize(new Dimension(slotWidth,76));
+            metric.setMinimumSize(new Dimension(slotWidth,76));
+            metric.setMaximumSize(new Dimension(slotWidth,76));
+            operationsTickerTrack.add(metric);
+        }
+        operationsTickerTrack.setPreferredSize(
+                new Dimension(operationsTickerCycleWidth*2,76));
+
+        operationsTickerViewport=new JViewport();
+        operationsTickerViewport.setOpaque(false);
+        operationsTickerViewport.setView(operationsTickerTrack);
+        operationsTickerViewport.setPreferredSize(new Dimension(100,76));
+        card.add(operationsTickerViewport,BorderLayout.CENTER);
+
+        JLabel mode=new JLabel("CONTINUOUS",SwingConstants.RIGHT);
+        mode.setForeground(Theme.muted());
+        mode.setFont(new Font(Font.SANS_SERIF,Font.PLAIN,8));
+        card.add(mode,BorderLayout.SOUTH);
+        startOperationsTicker();
+    }
+
+    private void startOperationsTicker(){
+        if(operationsTickerViewport==null
+                ||operationsTickerTrack==null
+                ||operationsTickerCycleWidth<=0)return;
+
+        final int delay=33;
+        final double pixelsPerTick=Math.max(
+                8,
+                Math.min(120,config.workspaceKpiTickerPixelsPerSecond)
+        )*(delay/1000.0);
+        final double[] x={0.0};
+
+        operationsTickerTimer=new javax.swing.Timer(delay,e->{
+            if(operationsTickerViewport==null
+                    ||!operationsTickerViewport.isShowing())return;
+            x[0]+=pixelsPerTick;
+            if(x[0]>=operationsTickerCycleWidth)
+                x[0]-=operationsTickerCycleWidth;
+            operationsTickerViewport.setViewPosition(
+                    new Point((int)Math.round(x[0]),0));
+        });
+        operationsTickerTimer.setCoalesce(true);
+        operationsTickerTimer.start();
+    }
+
+    private void configureOperationsRotation(
+            int total,
+            int visible,
+            boolean paged
+    ){
+        boolean shouldRotate=paged&&total>visible&&operationsModule!=null;
+        if(!shouldRotate){
+            stopOperationsRotation();
+            return;
+        }
+
+        int delay=Math.max(
+                5,
+                Math.min(60,config.workspaceKpiScrollSeconds)
+        )*1000;
+        if(operationsRotationTimer!=null
+                &&operationsRotationTimer.getDelay()==delay
+                &&operationsRotationTimer.isRunning())return;
+
+        stopOperationsRotation();
+        operationsRotationTimer=new javax.swing.Timer(delay,e->{
+            if(operationsModule==null)return;
+            List<OperationsKpiConfig> items=config.operationsKpis.stream()
+                    .filter(OperationsKpiConfig::enabled)
+                    .toList();
+            if(items.size()<=visible){
+                stopOperationsRotation();
+                return;
+            }
+            operationsPageStart=(operationsPageStart+visible)%items.size();
+            renderOperations(operationsModule);
+        });
+        operationsRotationTimer.setRepeats(true);
+        operationsRotationTimer.start();
+    }
+
+    private void stopOperationsRotation(){
+        if(operationsRotationTimer!=null){
+            operationsRotationTimer.stop();
+            operationsRotationTimer=null;
+        }
+    }
+
+    private void stopOperationsTicker(){
+        if(operationsTickerTimer!=null){
+            operationsTickerTimer.stop();
+            operationsTickerTimer=null;
+        }
+        operationsTickerViewport=null;
+        operationsTickerTrack=null;
+        operationsTickerCycleWidth=0;
+    }
+
+    private void stopOperationsMovement(){
+        stopOperationsRotation();
+        stopOperationsTicker();
+    }
+
+    private String operationsPageLabel(int start,int visible,int total){
+        int first=Math.min(total,start+1);
+        int last=Math.min(total,start+visible);
+        return first+"–"+last+" of "+total+" • PAGED";
     }
 
     private JComponent kpiCard(OperationsKpiConfig source){
@@ -2583,6 +2783,7 @@ public final class OperationsWorkspaceFrame extends JFrame {
             refreshExecutor=null;
         }
         stopInformationMovement();
+        stopOperationsMovement();
     }
 
     private void refreshWeather(){

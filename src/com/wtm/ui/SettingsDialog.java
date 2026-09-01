@@ -216,6 +216,19 @@ public final class SettingsDialog extends JDialog {
     private final JComboBox<Integer> workspaceInfoTickerSpeed=
             new JComboBox<>(new Integer[]{12,18,24,28,36,48,60,80});
 
+    private final JComboBox<Integer> workspaceKpiVisibleCount=
+            new JComboBox<>(new Integer[]{2,3,4,5,6,7,8});
+    private final JComboBox<String> workspaceKpiMovementMode=
+            new JComboBox<>(new String[]{
+                    "Static",
+                    "Paged Rotation",
+                    "Continuous Ticker"
+            });
+    private final JComboBox<Integer> workspaceKpiScrollSeconds=
+            new JComboBox<>(new Integer[]{5,8,10,15,20,30,45,60});
+    private final JComboBox<Integer> workspaceKpiTickerSpeed=
+            new JComboBox<>(new Integer[]{12,18,24,28,36,48,60,80});
+
     private final DefaultTableModel workspaceKpiModel=new DefaultTableModel(
             new Object[]{
                     "Metric","Current","Target","Unit","Target Direction",
@@ -234,12 +247,6 @@ public final class SettingsDialog extends JDialog {
     private final JComboBox<Integer> blockCount =
             new JComboBox<>(new Integer[]{6,8,10,12});
 
-    /**
-     * Controlled map/card resizing. Unlike a draggable split pane, this value
-     * changes only through Settings and remains locked during normal display.
-     */
-    private final JSlider mapWidthSlider = new JSlider(55,75,63);
-    private final JLabel mapWidthValue = new JLabel("63% map / 37% information");
     private final JPanel widgetRows = new JPanel(new GridBagLayout());
     private final List<JComboBox<WidgetChoice>> widgetBoxes = new ArrayList<>();
 
@@ -1501,10 +1508,10 @@ public final class SettingsDialog extends JDialog {
 
         JLabel infoHelp=new JLabel(
                 "<html><b>Information is now configured in one place.</b> "
-              + "Use the <b>Information Row & Dashboard Layout</b> section directly below "
-              + "to choose the 6/8/10/12 items, how many are visible at once, and "
-              + "whether the row is Static, Paged Rotation, or a Continuous Ticker. "
-              + "This checkbox controls whether that Information row appears on the dashboard.</html>"
+              + "Use the <b>Information Row</b> section directly below to choose the "
+              + "configured items, how many are visible at once, and whether the row is "
+              + "Static, Paged Rotation, or a Continuous Ticker. Dashboard tile size and "
+              + "position are controlled separately by the dashboard grid editor.</html>"
         );
 
         infoStrip.add(infoTop,BorderLayout.NORTH);
@@ -1513,8 +1520,49 @@ public final class SettingsDialog extends JDialog {
 
         JPanel informationSetup=widgets();
         informationSetup.setBorder(BorderFactory.createTitledBorder(
-                "Information Row & Dashboard Layout"));
+                "Information Row"));
         addFull(p,y++,informationSetup);
+
+        RoundedPanel kpiMovement=new RoundedPanel(14);
+        kpiMovement.setLayout(new BorderLayout(10,8));
+        kpiMovement.setBorder(BorderFactory.createEmptyBorder(12,14,12,14));
+
+        JPanel kpiCountRow=new JPanel(new FlowLayout(FlowLayout.LEFT,10,4));
+        kpiCountRow.setOpaque(false);
+        kpiCountRow.add(new JLabel("Visible at once:"));
+        kpiCountRow.add(workspaceKpiVisibleCount);
+        kpiCountRow.add(Box.createHorizontalStrut(12));
+        kpiCountRow.add(new JLabel("Movement:"));
+        kpiCountRow.add(workspaceKpiMovementMode);
+
+        JPanel kpiMotionRow=new JPanel(new FlowLayout(FlowLayout.LEFT,10,4));
+        kpiMotionRow.setOpaque(false);
+        kpiMotionRow.add(new JLabel("Page interval:"));
+        kpiMotionRow.add(workspaceKpiScrollSeconds);
+        kpiMotionRow.add(new JLabel("sec"));
+        kpiMotionRow.add(Box.createHorizontalStrut(12));
+        kpiMotionRow.add(new JLabel("Ticker speed:"));
+        kpiMotionRow.add(workspaceKpiTickerSpeed);
+        kpiMotionRow.add(new JLabel("px/sec"));
+
+        JPanel kpiRows=new JPanel();
+        kpiRows.setOpaque(false);
+        kpiRows.setLayout(new BoxLayout(kpiRows,BoxLayout.Y_AXIS));
+        kpiRows.add(kpiCountRow);
+        kpiRows.add(kpiMotionRow);
+
+        JLabel kpiMovementHelp=new JLabel(
+                "<html><b>Operations Snapshot movement:</b> Static holds the first viewport, "
+              + "Paged Rotation advances by the visible count, and Continuous Ticker moves "
+              + "all enabled KPI cards through the fixed viewport and loops continuously.</html>"
+        );
+        kpiMovement.add(kpiRows,BorderLayout.NORTH);
+        kpiMovement.add(kpiMovementHelp,BorderLayout.CENTER);
+        kpiMovement.setBorder(BorderFactory.createCompoundBorder(
+                BorderFactory.createTitledBorder("Operations Snapshot movement"),
+                BorderFactory.createEmptyBorder(8,10,10,10)
+        ));
+        addFull(p,y++,kpiMovement);
 
         workspaceKpiTable.setRowHeight(30);
         workspaceKpiTable.setSelectionMode(ListSelectionModel.SINGLE_SELECTION);
@@ -1660,53 +1708,6 @@ public final class SettingsDialog extends JDialog {
         controls.add(informationControls);
         controls.add(Box.createVerticalStrut(14));
 
-        RoundedPanel layoutCard=new RoundedPanel(16);
-        layoutCard.setLayout(new BorderLayout(10,10));
-        layoutCard.setBorder(BorderFactory.createEmptyBorder(12,14,12,14));
-
-        JPanel ratioTop=new JPanel(new BorderLayout());
-        ratioTop.setOpaque(false);
-        JLabel ratioTitle=new JLabel("Map / Information Layout");
-        ratioTitle.setFont(ratioTitle.getFont().deriveFont(Font.BOLD,14f));
-        ratioTop.add(ratioTitle,BorderLayout.WEST);
-        ratioTop.add(mapWidthValue,BorderLayout.EAST);
-
-        mapWidthSlider.setMajorTickSpacing(5);
-        mapWidthSlider.setMinorTickSpacing(1);
-        mapWidthSlider.setPaintTicks(true);
-        mapWidthSlider.setSnapToTicks(true);
-        mapWidthSlider.addChangeListener(e->updateMapWidthLabel());
-
-        JPanel presets=new JPanel(new FlowLayout(FlowLayout.LEFT,8,0));
-        presets.setOpaque(false);
-        JButton infoFocused=new JButton("Information Focused 55/45");
-        infoFocused.addActionListener(e->mapWidthSlider.setValue(55));
-        JButton balanced=new JButton("Balanced 63/37");
-        balanced.addActionListener(e->mapWidthSlider.setValue(63));
-        JButton mapFocused=new JButton("Map Focused 70/30");
-        mapFocused.addActionListener(e->mapWidthSlider.setValue(70));
-        presets.add(infoFocused);
-        presets.add(balanced);
-        presets.add(mapFocused);
-
-        JLabel ratioNote=new JLabel(
-                "<html>The selected ratio stays locked during normal operation. "
-              + "Change it here and choose <b>Save & Apply</b> to resize intentionally.</html>");
-
-        layoutCard.add(ratioTop,BorderLayout.NORTH);
-        layoutCard.add(mapWidthSlider,BorderLayout.CENTER);
-
-        JPanel layoutBottom=new JPanel();
-        layoutBottom.setOpaque(false);
-        layoutBottom.setLayout(new BoxLayout(layoutBottom,BoxLayout.Y_AXIS));
-        layoutBottom.add(presets);
-        layoutBottom.add(Box.createVerticalStrut(7));
-        layoutBottom.add(ratioNote);
-        layoutCard.add(layoutBottom,BorderLayout.SOUTH);
-
-        layoutCard.setAlignmentX(Component.LEFT_ALIGNMENT);
-        controls.add(layoutCard);
-
         outer.add(controls,BorderLayout.NORTH);
 
         /*
@@ -1733,11 +1734,6 @@ public final class SettingsDialog extends JDialog {
 
         blockCount.addActionListener(e->rebuildWidgetRows());
         return outer;
-    }
-
-    private void updateMapWidthLabel(){
-        int map=mapWidthSlider.getValue();
-        mapWidthValue.setText(map+"% map / "+(100-map)+"% information");
     }
 
     private JPanel showcase(){
@@ -2057,6 +2053,19 @@ public final class SettingsDialog extends JDialog {
                         )
                 ));
 
+        workspaceKpiVisibleCount.setSelectedItem(
+                Math.max(2,Math.min(8,cfg.workspaceKpiVisibleCount)));
+        workspaceKpiMovementMode.setSelectedItem(
+                switch(cfg.workspaceKpiMovementMode){
+                    case "PAGED"->"Paged Rotation";
+                    case "TICKER"->"Continuous Ticker";
+                    default->"Static";
+                });
+        workspaceKpiScrollSeconds.setSelectedItem(
+                Math.max(5,Math.min(60,cfg.workspaceKpiScrollSeconds)));
+        workspaceKpiTickerSpeed.setSelectedItem(
+                Math.max(12,Math.min(80,cfg.workspaceKpiTickerPixelsPerSecond)));
+
         workspaceKpiModel.setRowCount(0);
         for(OperationsKpiConfig kpi:cfg.operationsKpis){
             workspaceKpiModel.addRow(new Object[]{
@@ -2070,9 +2079,6 @@ public final class SettingsDialog extends JDialog {
                     kpi.enabled()
             });
         }
-
-        mapWidthSlider.setValue(Math.max(55,Math.min(75,cfg.mapWidthPercent)));
-        updateMapWidthLabel();
 
         int count=Math.max(6,Math.min(12,cfg.visibleWidgetCount));
         if(count!=6&&count!=8&&count!=10&&count!=12) count=10;
@@ -2541,6 +2547,26 @@ public final class SettingsDialog extends JDialog {
                             ?Math.max(8,Math.min(120,speed))
                             :28;
 
+            Object kpiVisible=workspaceKpiVisibleCount.getSelectedItem();
+            cfg.workspaceKpiVisibleCount=kpiVisible instanceof Integer count
+                    ?Math.max(2,Math.min(8,count))
+                    :8;
+            String kpiMovement=Objects.toString(
+                    workspaceKpiMovementMode.getSelectedItem(),"Static");
+            cfg.workspaceKpiMovementMode=switch(kpiMovement){
+                case "Paged Rotation"->"PAGED";
+                case "Continuous Ticker"->"TICKER";
+                default->"STATIC";
+            };
+            Object kpiScroll=workspaceKpiScrollSeconds.getSelectedItem();
+            cfg.workspaceKpiScrollSeconds=kpiScroll instanceof Integer seconds
+                    ?Math.max(5,Math.min(60,seconds))
+                    :10;
+            Object kpiTicker=workspaceKpiTickerSpeed.getSelectedItem();
+            cfg.workspaceKpiTickerPixelsPerSecond=kpiTicker instanceof Integer speed
+                    ?Math.max(8,Math.min(120,speed))
+                    :28;
+
             cfg.operationsKpis.clear();
             for(int i=0;i<workspaceKpiModel.getRowCount();i++){
                 String label=cell(workspaceKpiModel,i,0).trim();
@@ -2566,7 +2592,6 @@ public final class SettingsDialog extends JDialog {
             }
 
             cfg.visibleWidgetCount=(Integer)blockCount.getSelectedItem();
-            cfg.mapWidthPercent=mapWidthSlider.getValue();
             cfg.widgetTypes.clear();
             for(JComboBox<WidgetChoice> box:widgetBoxes){
                 WidgetChoice choice=(WidgetChoice)box.getSelectedItem();

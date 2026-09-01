@@ -179,7 +179,7 @@ public final class ConfigService {
             cfg.workspaceInfoBlockCount=Math.max(
                     2,
                     Math.min(
-                            6,
+                            8,
                             integer(p,"workspace.infoStrip.count",4)
                     )
             );
@@ -213,6 +213,28 @@ public final class ConfigService {
                                     "workspace.infoStrip.tickerPixelsPerSecond",
                                     28
                             )
+                    )
+            );
+
+            cfg.workspaceKpiVisibleCount=Math.max(
+                    2,
+                    Math.min(8,integer(p,"workspace.kpis.visibleCount",8))
+            );
+            cfg.workspaceKpiMovementMode=p.getProperty(
+                    "workspace.kpis.movementMode","STATIC"
+            ).trim().toUpperCase();
+            if(!java.util.Set.of("STATIC","PAGED","TICKER")
+                    .contains(cfg.workspaceKpiMovementMode))
+                cfg.workspaceKpiMovementMode="STATIC";
+            cfg.workspaceKpiScrollSeconds=Math.max(
+                    5,
+                    Math.min(60,integer(p,"workspace.kpis.scrollSeconds",10))
+            );
+            cfg.workspaceKpiTickerPixelsPerSecond=Math.max(
+                    8,
+                    Math.min(
+                            120,
+                            integer(p,"workspace.kpis.tickerPixelsPerSecond",28)
                     )
             );
 
@@ -533,6 +555,18 @@ public final class ConfigService {
                     "workspace.infoStrip.tickerPixelsPerSecond",
                     Integer.toString(
                             cfg.workspaceInfoTickerPixelsPerSecond));
+            p.setProperty(
+                    "workspace.kpis.visibleCount",
+                    Integer.toString(cfg.workspaceKpiVisibleCount));
+            p.setProperty(
+                    "workspace.kpis.movementMode",
+                    cfg.workspaceKpiMovementMode);
+            p.setProperty(
+                    "workspace.kpis.scrollSeconds",
+                    Integer.toString(cfg.workspaceKpiScrollSeconds));
+            p.setProperty(
+                    "workspace.kpis.tickerPixelsPerSecond",
+                    Integer.toString(cfg.workspaceKpiTickerPixelsPerSecond));
             p.setProperty("workspace.kpis.count",Integer.toString(cfg.operationsKpis.size()));
             for(int i=0;i<cfg.operationsKpis.size();i++){
                 OperationsKpiConfig kpi=cfg.operationsKpis.get(i);
