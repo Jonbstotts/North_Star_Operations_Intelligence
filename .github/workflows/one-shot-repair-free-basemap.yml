@@ -1,0 +1,349 @@
+name: Repair free basemap architecture
+
+on:
+  push:
+    branches: [ master ]
+    paths:
+      - '.github/workflows/one-shot-repair-free-basemap.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  repair:
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Checkout master
+        uses: actions/checkout@v4
+        with:
+          ref: master
+          fetch-depth: 0
+
+      - name: Set up Java 21
+        uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '21'
+
+      - name: Apply basemap provider repair
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+
+          def replace_once(path, old, new, label):
+              p=Path(path)
+              text=p.read_text()
+              if old not in text:
+                  raise SystemExit(f'{label} anchor not found in {path}')
+              p.write_text(text.replace(old,new,1))
+
+          Path('src/com/wtm/map/BasemapProvider.java').write_text(r'''package com.wtm.map;
+
+import java.awt.image.BufferedImage;
+import java.util.Locale;
+
+/**
+ * Owns base-map provider identity, endpoint construction, attribution, and the
+ * optional local presentation transform. TileMapPanel composes layers; it does
+ * not know vendor URLs or vendor-specific styling rules.
+ *
+ * OpenStreetMap Standard is the zero-cost development default. It is a
+ * best-effort community tile service rather than a commercial SLA. Adding a
+ * production provider later is an adapter change here, not a renderer rewrite.
+ */
+public enum BasemapProvider {
+    OPENSTREETMAP(
+            "OPENSTREETMAP",
+            "OpenStreetMap Standard (no key)",
+            "© OpenStreetMap contributors",
+            "osm-standard-v1"
+    );
+
+    private final String id;
+    private final String displayName;
+    private final String attribution;
+    private final String cacheNamespace;
+
+    BasemapProvider(
+            String id,
+            String displayName,
+            String attribution,
+            String cacheNamespace
+    ){
+        this.id=id;
+        this.displayName=displayName;
+        this.attribution=attribution;
+        this.cacheNamespace=cacheNamespace;
+    }
+
+    public String id(){return id;}
+    public String displayName(){return displayName;}
+    public String attribution(){return attribution;}
+    public String cacheNamespace(){return cacheNamespace;}
+
+    public String tileUrl(int zoom,int x,int y){
+        return switch(this){
+            case OPENSTREETMAP -> "https://tile.openstreetmap.org/"
+                    +zoom+"/"+x+"/"+y+".png";
+        };
+    }
+
+    /**
+     * OSM publishes one standard raster style. North Star derives its dark
+     * dashboard appearance locally so dark mode does not depend on a second
+     * unauthenticated tile vendor. The raw OSM tile remains the cached source.
+     */
+    public BufferedImage renderTile(BufferedImage source,boolean darkMode){
+        if(source==null||!darkMode)return source;
+
+        BufferedImage out=new BufferedImage(
+                source.getWidth(),source.getHeight(),BufferedImage.TYPE_INT_ARGB);
+
+        for(int y=0;y<source.getHeight();y++){
+            for(int x=0;x<source.getWidth();x++){
+                int argb=source.getRGB(x,y);
+                int alpha=(argb>>>24)&0xff;
+                int red=(argb>>>16)&0xff;
+                int green=(argb>>>8)&0xff;
+                int blue=argb&0xff;
+
+                double luminance=(0.2126*red+0.7152*green+0.0722*blue)/255.0;
+                int gray=(int)Math.round(luminance*255.0);
+                int base=(int)Math.round(20.0+(1.0-luminance)*145.0);
+
+                int r=clamp(base+(int)Math.round((red-gray)*0.18));
+                int g=clamp(base+3+(int)Math.round((green-gray)*0.18));
+                int b=clamp(base+8+(int)Math.round((blue-gray)*0.22));
+
+                out.setRGB(x,y,(alpha<<24)|(r<<16)|(g<<8)|b);
+            }
+        }
+        return out;
+    }
+
+    public static BasemapProvider fromId(String value){
+        String normalized=value==null?"":value.trim().toUpperCase(Locale.ROOT);
+        for(BasemapProvider provider:values())
+            if(provider.id.equals(normalized))return provider;
+        return OPENSTREETMAP;
+    }
+
+    @Override public String toString(){return displayName;}
+
+    private static int clamp(int value){
+        return Math.max(0,Math.min(255,value));
+    }
+}
+''')
+
+          Path('ci/BasemapProviderSmokeTest.java').write_text(r'''import com.wtm.config.AppConfig;
+import com.wtm.map.BasemapProvider;
+
+import java.awt.image.BufferedImage;
+
+public final class BasemapProviderSmokeTest {
+    private static void require(boolean condition,String message){
+        if(!condition)throw new AssertionError(message);
+    }
+
+    private static int luminance(int argb){
+        int r=(argb>>>16)&0xff;
+        int g=(argb>>>8)&0xff;
+        int b=argb&0xff;
+        return (int)Math.round(0.2126*r+0.7152*g+0.0722*b);
+    }
+
+    public static void main(String[] args){
+        AppConfig defaults=new AppConfig();
+        require("OPENSTREETMAP".equals(defaults.basemapProvider),
+                "OpenStreetMap must remain the zero-cost development default");
+
+        BasemapProvider provider=BasemapProvider.fromId(defaults.basemapProvider);
+        require(provider==BasemapProvider.OPENSTREETMAP,
+                "default provider did not resolve to OpenStreetMap");
+        require("https://tile.openstreetmap.org/9/123/456.png".equals(
+                        provider.tileUrl(9,123,456)),
+                "OpenStreetMap endpoint does not match the canonical tile URL");
+        require(provider.attribution().contains("OpenStreetMap contributors"),
+                "visible OpenStreetMap attribution is missing");
+        require(BasemapProvider.fromId("unknown")==BasemapProvider.OPENSTREETMAP,
+                "unknown provider IDs must fail safely to the free default");
+
+        BufferedImage sample=new BufferedImage(2,1,BufferedImage.TYPE_INT_ARGB);
+        sample.setRGB(0,0,0xffffffff);
+        sample.setRGB(1,0,0xff000000);
+        BufferedImage dark=provider.renderTile(sample,true);
+        require(dark!=sample,"dark rendering must not mutate the cached source tile");
+        require(dark.getWidth()==2&&dark.getHeight()==1,
+                "dark rendering changed tile dimensions");
+        require(luminance(dark.getRGB(0,0))<70,
+                "light map background did not become dark enough");
+        require(luminance(dark.getRGB(1,0))>luminance(dark.getRGB(0,0))+70,
+                "dark source labels/features did not become legible on dark background");
+        require(provider.renderTile(sample,false)==sample,
+                "light mode should preserve the raw provider tile");
+
+        System.out.println("BASEMAP_PROVIDER_SMOKE_OK");
+    }
+}
+''')
+
+          replace_once(
+              'src/com/wtm/config/AppConfig.java',
+              '''    /** Supported weather adapter: OPEN_METEO_FREE or OPEN_METEO_CUSTOMER. */\n    public String weatherProvider = "OPEN_METEO_FREE";''',
+              '''    /** Base-map adapter. OpenStreetMap Standard is the no-key development default. */\n    public String basemapProvider = "OPENSTREETMAP";\n\n    /** Supported weather adapter: OPEN_METEO_FREE or OPEN_METEO_CUSTOMER. */\n    public String weatherProvider = "OPEN_METEO_FREE";''',
+              'AppConfig basemap field'
+          )
+
+          replace_once(
+              'src/com/wtm/config/ConfigService.java',
+              '''import com.wtm.ui.OrientedImageLoader;\nimport com.wtm.media.MediaCategory;''',
+              '''import com.wtm.ui.OrientedImageLoader;\nimport com.wtm.map.BasemapProvider;\nimport com.wtm.media.MediaCategory;''',
+              'ConfigService import'
+          )
+          replace_once(
+              'src/com/wtm/config/ConfigService.java',
+              '''            cfg.weatherProvider = p.getProperty("weatherProvider", cfg.weatherProvider).trim();''',
+              '''            cfg.basemapProvider=BasemapProvider.fromId(\n                    p.getProperty("basemapProvider",cfg.basemapProvider)).id();\n            cfg.weatherProvider = p.getProperty("weatherProvider", cfg.weatherProvider).trim();''',
+              'ConfigService load provider'
+          )
+          replace_once(
+              'src/com/wtm/config/ConfigService.java',
+              '''            p.setProperty("weatherProvider", cfg.weatherProvider);''',
+              '''            p.setProperty("basemapProvider",\n                    BasemapProvider.fromId(cfg.basemapProvider).id());\n            p.setProperty("weatherProvider", cfg.weatherProvider);''',
+              'ConfigService save provider'
+          )
+
+          replace_once(
+              'src/com/wtm/ui/SettingsDialog.java',
+              '''import com.wtm.media.*;\nimport com.wtm.modular.ui.WorkspaceLifecycleV3;''',
+              '''import com.wtm.media.*;\nimport com.wtm.map.BasemapProvider;\nimport com.wtm.modular.ui.WorkspaceLifecycleV3;''',
+              'SettingsDialog import'
+          )
+          replace_once(
+              'src/com/wtm/ui/SettingsDialog.java',
+              '''    private final JPasswordField tomTom=new JPasswordField();\n    private final JPasswordField weatherKey=new JPasswordField();''',
+              '''    private final JComboBox<BasemapProvider> basemapProvider=\n            new JComboBox<>(BasemapProvider.values());\n    private final JPasswordField tomTom=new JPasswordField();\n    private final JPasswordField weatherKey=new JPasswordField();''',
+              'SettingsDialog basemap field'
+          )
+          replace_once(
+              'src/com/wtm/ui/SettingsDialog.java',
+              '''                "Choose the installed provider adapter for each data type and manage its credentials. "\n              + "Open-Meteo Free, NWS, and RainViewer do not require API keys. Open-Meteo Customer "\n              + "and TomTom use credentials. A different future vendor will require a provider adapter "\n              + "for that vendor's response format, but this Settings structure will remain the same.");''',
+              '''                "Choose the installed provider adapter for each data type and manage its credentials. "\n              + "OpenStreetMap Standard is the no-key development basemap; Open-Meteo Free, NWS, "\n              + "and RainViewer also require no API keys. Open-Meteo Customer and TomTom use credentials. "\n              + "The basemap is provider-owned so a contracted or self-hosted production tile service can "\n              + "replace the development provider later without rewriting the map renderer.");''',
+              'SettingsDialog provider intro'
+          )
+          replace_once(
+              'src/com/wtm/ui/SettingsDialog.java',
+              '''        addRow(p,y++,"Weather provider",weatherProvider);''',
+              '''        addRow(p,y++,"Basemap provider",basemapProvider);\n        addRow(p,y++,"Weather provider",weatherProvider);''',
+              'SettingsDialog provider row'
+          )
+          replace_once(
+              'src/com/wtm/ui/SettingsDialog.java',
+              '''        tomTom.setText(cfg.tomTomApiKey);\n        weatherKey.setText(cfg.weatherApiKey);''',
+              '''        basemapProvider.setSelectedItem(\n                BasemapProvider.fromId(cfg.basemapProvider));\n        tomTom.setText(cfg.tomTomApiKey);\n        weatherKey.setText(cfg.weatherApiKey);''',
+              'SettingsDialog load provider'
+          )
+          replace_once(
+              'src/com/wtm/ui/SettingsDialog.java',
+              '''            cfg.weatherProvider=weatherProvider.getSelectedIndex()==1?"OPEN_METEO_CUSTOMER":"OPEN_METEO_FREE";''',
+              '''            BasemapProvider selectedBasemap=\n                    (BasemapProvider)basemapProvider.getSelectedItem();\n            cfg.basemapProvider=(selectedBasemap==null\n                    ?BasemapProvider.OPENSTREETMAP:selectedBasemap).id();\n            cfg.weatherProvider=weatherProvider.getSelectedIndex()==1?"OPEN_METEO_CUSTOMER":"OPEN_METEO_FREE";''',
+              'SettingsDialog save provider'
+          )
+
+          replace_once(
+              'src/com/wtm/map/TileMapPanel.java',
+              '''    private final Path cacheDir = ConfigService.appDataDir().resolve("cache");''',
+              '''    /*\n     * map-v2 intentionally starts a new cache namespace. Older releases stored\n     * CARTO error-watermark PNGs in the legacy cache after CARTO began requiring\n     * authentication. They can never be replayed into the repaired renderer.\n     */\n    private final Path cacheDir = ConfigService.appDataDir()\n            .resolve("cache").resolve("map-v2");''',
+              'TileMapPanel cache namespace'
+          )
+          replace_once(
+              'src/com/wtm/map/TileMapPanel.java',
+              '''        int max=1<<zoom;\n        for(int ty=ty0;ty<=ty1;ty++) for(int tx=tx0;tx<=tx1;tx++) {\n            if(ty<0||ty>=max)continue; int wrapped=((tx%max)+max)%max;\n            int sx=tx*TILE-left, sy=ty*TILE-top;\n            String base=config.darkMode ? "https://a.basemaps.cartocdn.com/dark_all/"+zoom+"/"+wrapped+"/"+ty+".png" : "https://tile.openstreetmap.org/"+zoom+"/"+wrapped+"/"+ty+".png";\n            drawTile(g,base,sx,sy,"base");''',
+              '''        int max=1<<zoom;\n        BasemapProvider basemap=BasemapProvider.fromId(config.basemapProvider);\n        for(int ty=ty0;ty<=ty1;ty++) for(int tx=tx0;tx<=tx1;tx++) {\n            if(ty<0||ty>=max)continue; int wrapped=((tx%max)+max)%max;\n            int sx=tx*TILE-left, sy=ty*TILE-top;\n            String base=basemap.tileUrl(zoom,wrapped,ty);\n            drawBaseTile(g,basemap,base,sx,sy);''',
+              'TileMapPanel provider routing'
+          )
+
+          old_draw='''    private void drawTile(Graphics2D g,String url,int x,int y,String namespace){\n        String key=namespace+":"+url;\n        BufferedImage img=memory.get(key);\n        if(img==null){\n            Path file=cacheFile(key);\n            if(Files.exists(file)){ try{img=ImageIO.read(file.toFile()); if(img!=null)putMemory(key,img);}catch(Exception ignored){} }\n            if(img==null && loading.add(key)) loader.submit(() -> { try { byte[] data=http.getBytes(url); BufferedImage bi=ImageIO.read(new ByteArrayInputStream(data)); if(bi!=null){putMemory(key,bi); try{ImageIO.write(bi,"png",file.toFile());}catch(Exception ignored){} SwingUtilities.invokeLater(this::repaint);} } catch(Exception ignored){} finally{loading.remove(key);} });\n        }\n        if(img!=null) g.drawImage(img,x,y,TILE,TILE,null); else { g.setColor(config.darkMode?new Color(28,33,40):new Color(225,228,232)); g.fillRect(x,y,TILE,TILE); }\n    }'''
+          new_draw='''    private void drawBaseTile(\n            Graphics2D g,BasemapProvider provider,String url,int x,int y\n    ){\n        BufferedImage img=getOrLoadBaseTile(provider,url,config.darkMode);\n        if(img!=null){\n            g.drawImage(img,x,y,TILE,TILE,null);\n            return;\n        }\n\n        g.setColor(config.darkMode\n                ?new Color(28,33,40)\n                :new Color(225,228,232));\n        g.fillRect(x,y,TILE,TILE);\n    }\n\n    /**\n     * The provider tile is cached once in its original form. Light and dark\n     * presentation are memory-only views of that same source tile, preventing\n     * theme changes from doubling remote requests or mutating cached imagery.\n     */\n    private BufferedImage getOrLoadBaseTile(\n            BasemapProvider provider,String url,boolean darkMode\n    ){\n        String rawKey="basemap:"+provider.cacheNamespace()+":"+url;\n        String styledKey=rawKey+(darkMode?":dark":":light");\n        BufferedImage styled=memory.get(styledKey);\n        if(styled!=null)return styled;\n\n        Path file=cacheFile(rawKey);\n        if(Files.exists(file)){\n            try{\n                BufferedImage raw=ImageIO.read(file.toFile());\n                if(raw!=null){\n                    styled=provider.renderTile(raw,darkMode);\n                    putMemory(styledKey,styled);\n                    return styled;\n                }\n            }catch(Exception ignored){}\n        }\n\n        if(loading.add(rawKey)){\n            final String targetKey=styledKey;\n            loader.submit(()->{\n                try{\n                    byte[] data=http.getBytes(url);\n                    BufferedImage raw=ImageIO.read(new ByteArrayInputStream(data));\n                    if(raw!=null){\n                        try{ImageIO.write(raw,"png",file.toFile());}\n                        catch(Exception ignored){}\n                        BufferedImage rendered=provider.renderTile(raw,darkMode);\n                        putMemory(targetKey,rendered);\n                        SwingUtilities.invokeLater(this::repaint);\n                    }\n                }catch(Exception ignored){\n                    // Base map remains a neutral tile until the next viewport repaint retries.\n                }finally{\n                    loading.remove(rawKey);\n                }\n            });\n        }\n        return null;\n    }'''
+          replace_once('src/com/wtm/map/TileMapPanel.java',old_draw,new_draw,'TileMapPanel base loader')
+
+          replace_once(
+              'src/com/wtm/map/TileMapPanel.java',
+              '''    private void drawLegend(Graphics2D g){\n        String radar=radarFrame==null?"Radar: waiting":"Radar: "+Instant.ofEpochSecond(radarFrame.unixTime()).atZone(ZoneId.systemDefault()).toLocalTime().withSecond(0).withNano(0);\n        String traffic=(config.tomTomApiKey==null||config.tomTomApiKey.isBlank())?"Traffic: add TomTom key in Settings":"Traffic: live layer enabled";\n        String text=radar+"   •   "+traffic+"   •   Mouse wheel = zoom, drag = pan";\n        g.setFont(getFont().deriveFont(12f)); int sw=g.getFontMetrics().stringWidth(text); int x=Math.max(10,getWidth()-sw-18), y=getHeight()-18;\n        g.setColor(new Color(10,13,18,190)); g.fillRoundRect(x-8,y-16,sw+16,23,10,10); g.setColor(new Color(225,230,236)); g.drawString(text,x,y);\n        g.setFont(getFont().deriveFont(10f)); String attr="© OpenStreetMap contributors • CARTO • RainViewer • TomTom"; g.drawString(attr,10,getHeight()-8);\n    }''',
+              '''    private void drawLegend(Graphics2D g){\n        BasemapProvider basemap=BasemapProvider.fromId(config.basemapProvider);\n        String radar=!config.showRadar\n                ?"Radar: hidden"\n                :(radarFrame==null\n                        ?"Radar: waiting"\n                        :"Radar: "+Instant.ofEpochSecond(radarFrame.unixTime())\n                                .atZone(ZoneId.systemDefault()).toLocalTime()\n                                .withSecond(0).withNano(0));\n        String traffic=!config.showTraffic\n                ?"Traffic: hidden"\n                :((config.tomTomApiKey==null||config.tomTomApiKey.isBlank())\n                        ?"Traffic: add TomTom key in Settings"\n                        :"Traffic: live layer enabled");\n        String text=radar+"   •   "+traffic\n                +"   •   Mouse wheel = zoom, drag = pan";\n        g.setFont(getFont().deriveFont(12f));\n        int sw=g.getFontMetrics().stringWidth(text);\n        int x=Math.max(10,getWidth()-sw-18), y=getHeight()-18;\n        g.setColor(new Color(10,13,18,190));\n        g.fillRoundRect(x-8,y-16,sw+16,23,10,10);\n        g.setColor(new Color(225,230,236));\n        g.drawString(text,x,y);\n\n        List<String> attribution=new ArrayList<>();\n        attribution.add(basemap.attribution());\n        if(config.showRadar)attribution.add("RainViewer");\n        if(config.showTraffic&&config.tomTomApiKey!=null\n                &&!config.tomTomApiKey.isBlank())\n            attribution.add("TomTom");\n        g.setFont(getFont().deriveFont(10f));\n        g.drawString(String.join(" • ",attribution),10,getHeight()-8);\n    }''',
+              'TileMapPanel legend'
+          )
+
+          replace_once(
+              'ci/ConfigRoundTripSmokeTest.java',
+              '''            source.workspaceInfoBlockCount = 8;''',
+              '''            source.basemapProvider = "OPENSTREETMAP";\n            source.workspaceInfoBlockCount = 8;''',
+              'Config smoke source provider'
+          )
+          replace_once(
+              'ci/ConfigRoundTripSmokeTest.java',
+              '''            require(loaded.workspaceInfoBlockCount == 8,''',
+              '''            require("OPENSTREETMAP".equals(loaded.basemapProvider),\n                    "basemap provider did not round-trip");\n            require(loaded.workspaceInfoBlockCount == 8,''',
+              'Config smoke provider assertion'
+          )
+
+          guide=Path('CODEBASE_GUIDE.md')
+          text=guide.read_text()
+          old='''- `HttpService` — HTTPS-only bounded HTTP client.\n- `OpenMeteoService`, `NwsAlertService`, `RainViewerService`, `TomTomService`, `TheSportsDbService` — provider adapters.\n\nProvider code should translate remote responses into model records. UI code should not parse provider JSON directly.'''
+          new='''- `HttpService` — HTTPS-only bounded HTTP client.\n- `BasemapProvider` — base-map endpoint, attribution, cache identity, and local theme presentation ownership.\n- `OpenMeteoService`, `NwsAlertService`, `RainViewerService`, `TomTomService`, `TheSportsDbService` — provider adapters.\n\nProvider code should translate remote responses into model records or provider-owned map tiles. UI/rendering code must not hard-code vendor endpoints, credentials, or provider-specific response rules.'''
+          if old not in text:
+              raise SystemExit('CODEBASE_GUIDE provider anchor not found')
+          guide.write_text(text.replace(old,new,1))
+
+          build=Path('build.sh')
+          text=build.read_text()
+          guard_anchor='''# Dashboard layout and alert behavior have one canonical owner. Obsolete ratio\n# state and duplicated severe-weather semantics must not return.\n'''
+          guard='''# Basemap endpoints and attribution belong to BasemapProvider, never to the\n# Swing renderer. CARTO's former unauthenticated raster endpoint must not return.\nif [ ! -f src/com/wtm/map/BasemapProvider.java ] || \\\n   ! grep -Fq 'BasemapProvider.fromId(config.basemapProvider)' src/com/wtm/map/TileMapPanel.java || \\\n   grep -qE 'basemaps\\.cartocdn\\.com|CARTO' src/com/wtm/map/TileMapPanel.java; then\n  echo "ERROR: basemap provider ownership regression detected." >&2\n  exit 1\nfi\n\n'''
+          if guard_anchor not in text:
+              raise SystemExit('build guard anchor not found')
+          text=text.replace(guard_anchor,guard+guard_anchor,1)
+
+          compile_old='''  ci/WeatherAlertPolicySmokeTest.java \\\n  ci/DashboardGridMigrationSmokeTest.java \\\n  ci/ConfigRoundTripSmokeTest.java\njava -Djava.awt.headless=true -cp '/tmp/ns-foundation-smoke:out:lib/*' WeatherAlertPolicySmokeTest\njava -Djava.awt.headless=true -cp '/tmp/ns-foundation-smoke:out:lib/*' DashboardGridMigrationSmokeTest\njava -Djava.awt.headless=true -cp '/tmp/ns-foundation-smoke:out:lib/*' ConfigRoundTripSmokeTest'''
+          compile_new='''  ci/WeatherAlertPolicySmokeTest.java \\\n  ci/DashboardGridMigrationSmokeTest.java \\\n  ci/ConfigRoundTripSmokeTest.java \\\n  ci/BasemapProviderSmokeTest.java\njava -Djava.awt.headless=true -cp '/tmp/ns-foundation-smoke:out:lib/*' WeatherAlertPolicySmokeTest\njava -Djava.awt.headless=true -cp '/tmp/ns-foundation-smoke:out:lib/*' DashboardGridMigrationSmokeTest\njava -Djava.awt.headless=true -cp '/tmp/ns-foundation-smoke:out:lib/*' ConfigRoundTripSmokeTest\njava -Djava.awt.headless=true -cp '/tmp/ns-foundation-smoke:out:lib/*' BasemapProviderSmokeTest'''
+          if compile_old not in text:
+              raise SystemExit('build smoke anchor not found')
+          build.write_text(text.replace(compile_old,compile_new,1))
+          PY
+
+          grep -Fq 'https://tile.openstreetmap.org/' src/com/wtm/map/BasemapProvider.java
+          ! grep -R -q 'basemaps.cartocdn.com' src
+          ! grep -q 'CARTO' src/com/wtm/map/TileMapPanel.java
+          grep -Fq 'resolve("cache").resolve("map-v2")' src/com/wtm/map/TileMapPanel.java
+          grep -Fq 'Basemap provider' src/com/wtm/ui/SettingsDialog.java
+          grep -Fq 'basemapProvider' src/com/wtm/config/ConfigService.java
+          git diff --check
+
+      - name: Build canonical source
+        run: |
+          set -euo pipefail
+          bash build.sh
+          test -f NorthStarOperations.jar
+          unzip -tq NorthStarOperations.jar >/dev/null
+          git diff --check
+
+      - name: Commit repaired source
+        run: |
+          set -euo pipefail
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add \
+            src/com/wtm/map/BasemapProvider.java \
+            src/com/wtm/map/TileMapPanel.java \
+            src/com/wtm/config/AppConfig.java \
+            src/com/wtm/config/ConfigService.java \
+            src/com/wtm/ui/SettingsDialog.java \
+            ci/BasemapProviderSmokeTest.java \
+            ci/ConfigRoundTripSmokeTest.java \
+            build.sh \
+            CODEBASE_GUIDE.md
+          git diff --cached --check
+          git commit -m 'Replace CARTO with provider-owned free basemap'
+          git push origin HEAD:master
