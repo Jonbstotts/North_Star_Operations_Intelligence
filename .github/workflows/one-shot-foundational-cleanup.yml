@@ -17,16 +17,47 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Capture patcher diagnostic
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '21'
+
+      - name: Apply and validate foundational repair
         shell: bash
         run: |
-          set +e
-          python3 ci/one_shot_foundational_cleanup.py > ci/foundation_cleanup_diagnostic.log 2>&1
-          RC=$?
-          echo "PATCH_EXIT=$RC" >> ci/foundation_cleanup_diagnostic.log
+          set -euo pipefail
+          if grep -R -n --include='*.java' --exclude='FixedRatioLayout.java' 'FixedRatioLayout' src; then
+            echo 'FixedRatioLayout still has canonical callers; refusing deletion.' >&2
+            exit 1
+          fi
+
+          python3 ci/run_foundational_cleanup.py
+          rm src/com/wtm/ui/FixedRatioLayout.java
+
+          git diff --check
+          ! grep -R -n --include='*.java' -E 'mapWidthPercent|FixedRatioLayout' src
+          ! grep -q 'Map / Information Layout' src/com/wtm/ui/SettingsDialog.java
+          ! grep -q 'setAutomaticSevereWeatherActive' src/com/wtm/ui/OperationsWorkspaceFrame.java src/com/wtm/ui/MainShowcasePanel.java
+          grep -q 'WeatherAlertPolicy' src/com/wtm/ui/OperationsWorkspaceFrame.java
+          grep -q 'setSevereWeatherActive' src/com/wtm/ui/MainShowcasePanel.java
+          grep -q 'workspaceKpiMovementMode' src/com/wtm/config/ConfigService.java
+          grep -q 'stopOperationsMovement();' src/com/wtm/ui/OperationsWorkspaceFrame.java
+          bash build.sh
+
+      - name: Commit canonical source and remove repair transport
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm -f .github/workflows/one-shot-foundational-cleanup.yml
+          rm -f .github/workflows/one-shot-foundational-audit.yml
+          rm -f ci/one_shot_foundational_cleanup.py
+          rm -f ci/run_foundational_cleanup.py
+          rm -f ci/one_shot_restore_weather_alert_ui.py
+          rm -f ci/foundation_cleanup_diagnostic.log
+
           git config user.name 'NorthStar Cleanup Bot'
           git config user.email 'actions@users.noreply.github.com'
-          git add ci/foundation_cleanup_diagnostic.log
-          git commit -m 'Capture foundational cleanup diagnostic'
+          git add -A
+          git diff --cached --check
+          git commit -m 'Harden alert, grid, and dashboard repair foundations'
           git push origin HEAD:master
-          exit 0
