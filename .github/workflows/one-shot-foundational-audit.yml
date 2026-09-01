@@ -1,0 +1,39 @@
+name: NorthStar foundational recent-fix audit
+
+on:
+  push:
+    branches: [ master ]
+    paths:
+      - '.github/workflows/one-shot-foundational-audit.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  audit:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Audit recent repair ownership and legacy severe behavior
+        shell: bash
+        run: |
+          set -euo pipefail
+          echo '=== CURRENT MASTER ==='
+          git rev-parse HEAD
+          echo '=== OBSOLETE MAP RATIO REFERENCES ==='
+          grep -RIn --exclude-dir=legacy_source_snapshot --exclude='*.class' 'mapWidthPercent\|FixedRatioLayout\|Map / Information Layout' src || true
+          echo '=== CURRENT SEVERE WEATHER REFERENCES ==='
+          grep -RIn --exclude-dir=legacy_source_snapshot 'liveSevereWeatherMode\|automaticSevereWeatherMode\|severeWeatherMapPriority\|automaticSevereWeatherActive\|hasSevereAutomaticPriority' src/com/wtm | head -200 || true
+          echo '=== CURRENT DASHBOARD MOVEMENT LIFECYCLE ==='
+          grep -n 'releaseDashboardModules\|stopInformationMovement\|stopOperationsMovement\|stopInformationRotation' src/com/wtm/ui/OperationsWorkspaceFrame.java || true
+          echo '=== CURRENT GRID MIGRATION ==='
+          grep -n 'migrateLegacyLayout\|GRID_VERSION' src/com/wtm/ui/DashboardGridPanel.java || true
+          echo '=== LEGACY ALERT UI METHODS ==='
+          grep -n 'toggleActiveAlertsPopup\|updateHeaderTickerMessage\|HeaderTickerPanel\|alertBadge' legacy_source_snapshot/ui/OperationsWorkspaceFrame.java || true
+          echo '=== LEGACY SEVERE REFRESH REFERENCES ==='
+          grep -n -E 'startRefreshers|scheduleAtFixedRate|liveSevereWeatherMode|automaticSevereWeatherMode|refreshAlerts|severeWeather' legacy_source_snapshot/ui/OperationsWorkspaceFrame.java | tail -160 || true
+          echo '=== TEMP REPAIR FILES ==='
+          find ci .github/workflows -maxdepth 2 -type f \( -iname '*one*shot*' -o -iname '*repair*' -o -iname '*trigger*' \) -print | sort || true
