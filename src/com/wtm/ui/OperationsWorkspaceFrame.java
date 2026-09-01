@@ -103,6 +103,8 @@ public final class OperationsWorkspaceFrame extends JFrame {
     private JLabel topWeatherLabel;
     private JLabel topTrafficLabel;
     private JButton alertBadge;
+    private JPopupMenu weatherAlertPopup;
+    private boolean weatherAlertPopupVisibleAtPress=false;
     private HeaderTicker headerTicker;
     private JButton dashboardLayoutGear;
     private boolean dashboardLayoutEditing=false;
@@ -229,7 +231,13 @@ public final class OperationsWorkspaceFrame extends JFrame {
         alertBadge.setBorder(new EmptyBorder(5,8,5,8));
         alertBadge.setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
         alertBadge.setToolTipText("Show active weather alerts");
-        alertBadge.addActionListener(e->showWeatherAlertMenu(alertBadge));
+        alertBadge.addMouseListener(new java.awt.event.MouseAdapter(){
+            @Override public void mousePressed(java.awt.event.MouseEvent e){
+                weatherAlertPopupVisibleAtPress=weatherAlertPopup!=null
+                        &&weatherAlertPopup.isVisible();
+            }
+        });
+        alertBadge.addActionListener(e->toggleWeatherAlertMenu(alertBadge));
         right.add(alertBadge);
 
         JSeparator divider=new JSeparator(SwingConstants.VERTICAL);
@@ -290,7 +298,27 @@ public final class OperationsWorkspaceFrame extends JFrame {
         return strip;
     }
 
+    private void toggleWeatherAlertMenu(Component invoker){
+        boolean closeRequested=weatherAlertPopupVisibleAtPress
+                ||(weatherAlertPopup!=null&&weatherAlertPopup.isVisible());
+        weatherAlertPopupVisibleAtPress=false;
+
+        if(closeRequested){
+            if(weatherAlertPopup!=null)
+                weatherAlertPopup.setVisible(false);
+            weatherAlertPopup=null;
+            return;
+        }
+
+        showWeatherAlertMenu(invoker);
+    }
+
     private void showWeatherAlertMenu(Component invoker){
+        if(weatherAlertPopup!=null){
+            weatherAlertPopup.setVisible(false);
+            weatherAlertPopup=null;
+        }
+
         JPanel content=new JPanel();
         content.setBackground(Theme.panel());
         content.setBorder(new EmptyBorder(4,4,4,4));
@@ -340,6 +368,20 @@ public final class OperationsWorkspaceFrame extends JFrame {
         scroll.setPreferredSize(new Dimension(520,height));
 
         JPopupMenu popup=new JPopupMenu();
+        weatherAlertPopup=popup;
+        popup.addPopupMenuListener(new javax.swing.event.PopupMenuListener(){
+            @Override public void popupMenuWillBecomeVisible(javax.swing.event.PopupMenuEvent e){}
+
+            @Override public void popupMenuWillBecomeInvisible(javax.swing.event.PopupMenuEvent e){
+                if(weatherAlertPopup==popup)
+                    weatherAlertPopup=null;
+            }
+
+            @Override public void popupMenuCanceled(javax.swing.event.PopupMenuEvent e){
+                if(weatherAlertPopup==popup)
+                    weatherAlertPopup=null;
+            }
+        });
         popup.setBorder(BorderFactory.createLineBorder(Theme.border(),1));
         popup.setLayout(new BorderLayout());
         popup.add(scroll,BorderLayout.CENTER);

@@ -79,7 +79,8 @@ public final class OperationsAnnouncementSlidePanel extends JPanel {
         JScrollPane scroll=new JScrollPane(rows);
         scroll.setOpaque(false);
         scroll.getViewport().setOpaque(false);
-        scroll.setBorder(null);
+        scroll.setBorder(BorderFactory.createEmptyBorder());
+        scroll.setViewportBorder(null);
         scroll.setHorizontalScrollBarPolicy(ScrollPaneConstants.HORIZONTAL_SCROLLBAR_NEVER);
         scroll.setVerticalScrollBarPolicy(ScrollPaneConstants.VERTICAL_SCROLLBAR_AS_NEEDED);
 
@@ -121,10 +122,8 @@ public final class OperationsAnnouncementSlidePanel extends JPanel {
             OperationEvent event,
             LocalDate day
     ){
-        RoundedPanel card=new RoundedPanel(18);
-        card.setLayout(new BorderLayout(18,0));
-        card.setBackground(Theme.panel2());
-        card.putClientProperty("outlineColor",Theme.border());
+        JPanel card=new JPanel(new BorderLayout(18,0));
+        card.setOpaque(false);
         card.setBorder(new EmptyBorder(14,18,14,18));
         card.setMaximumSize(new Dimension(Integer.MAX_VALUE,124));
 
