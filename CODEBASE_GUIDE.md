@@ -10,6 +10,22 @@
 
 When repairing an older module, port the behavior into the current lifecycle/core rather than restoring an obsolete polling launcher or delayed injector.
 
+## Foundational repair standard
+
+North Star fixes must repair the owning abstraction rather than layering symptoms on top of existing behavior.
+
+- Find the authoritative owner of state, policy, presentation, and lifecycle before changing code.
+- Prefer one reusable policy/service/component over duplicated conditionals in multiple screens.
+- Remove obsolete controls, dead branches, compatibility shims, and temporary migration code once their purpose is complete.
+- Preserve a single source of truth for persisted settings; loading, validation, application, and saving must use the same model fields.
+- Keep rendering logic deterministic and event-driven. Do not add polling, delayed reinjection, or repeated rebuild loops to make a UI appear correct.
+- A repair is not complete merely because the visible symptom disappears. Verify startup/restart behavior, settings persistence, runtime refresh behavior, lifecycle disposal, and adjacent feature paths that share the same owner.
+- Temporary repair scripts and one-shot workflows are transport mechanisms only. They must not become runtime architecture and must be removed after the canonical source change is committed and validated.
+- Comments should explain architectural intent, invariants, lifecycle/security reasoning, or non-obvious constraints. Do not accumulate chronological patch notes or comments that merely restate the code.
+- Before producing a release candidate, run the canonical validation from the cleaned source tree after temporary tooling has been removed.
+
+If a requested behavior exposes a broader ownership problem, correct the ownership problem first and implement the feature on top of that clean foundation.
+
 ## Startup and UI shell
 
 - `com.wtm.app.NorthStarMainStable` — canonical runtime-service/bootstrap entry point.
