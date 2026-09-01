@@ -1,0 +1,103 @@
+name: Fix alert toggle and announcement framing
+
+on:
+  push:
+    branches: [ master ]
+    paths:
+      - '.github/workflows/one-shot-fix-alert-announcement.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  repair:
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Checkout master
+        uses: actions/checkout@v4
+        with:
+          ref: master
+          fetch-depth: 0
+
+      - name: Set up Java 21
+        uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '21'
+
+      - name: Apply UI fixes
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+
+          workspace = Path('src/com/wtm/ui/OperationsWorkspaceFrame.java')
+          text = workspace.read_text()
+
+          old_fields = '''    private JLabel topTrafficLabel;\n    private JButton alertBadge;\n    private HeaderTicker headerTicker;'''
+          new_fields = '''    private JLabel topTrafficLabel;\n    private JButton alertBadge;\n    private JPopupMenu weatherAlertPopup;\n    private boolean weatherAlertPopupVisibleAtPress=false;\n    private HeaderTicker headerTicker;'''
+          if old_fields not in text:
+              raise SystemExit('alert popup field anchor not found')
+          text = text.replace(old_fields, new_fields, 1)
+
+          old_listener = '''        alertBadge.setToolTipText("Show active weather alerts");\n        alertBadge.addActionListener(e->showWeatherAlertMenu(alertBadge));\n        right.add(alertBadge);'''
+          new_listener = '''        alertBadge.setToolTipText("Show active weather alerts");\n        alertBadge.addMouseListener(new java.awt.event.MouseAdapter(){\n            @Override public void mousePressed(java.awt.event.MouseEvent e){\n                weatherAlertPopupVisibleAtPress=weatherAlertPopup!=null\n                        &&weatherAlertPopup.isVisible();\n            }\n        });\n        alertBadge.addActionListener(e->toggleWeatherAlertMenu(alertBadge));\n        right.add(alertBadge);'''
+          if old_listener not in text:
+              raise SystemExit('alert badge listener anchor not found')
+          text = text.replace(old_listener, new_listener, 1)
+
+          old_method = '''    private void showWeatherAlertMenu(Component invoker){\n        JPanel content=new JPanel();'''
+          new_method = '''    private void toggleWeatherAlertMenu(Component invoker){\n        boolean closeRequested=weatherAlertPopupVisibleAtPress\n                ||(weatherAlertPopup!=null&&weatherAlertPopup.isVisible());\n        weatherAlertPopupVisibleAtPress=false;\n\n        if(closeRequested){\n            if(weatherAlertPopup!=null)\n                weatherAlertPopup.setVisible(false);\n            weatherAlertPopup=null;\n            return;\n        }\n\n        showWeatherAlertMenu(invoker);\n    }\n\n    private void showWeatherAlertMenu(Component invoker){\n        if(weatherAlertPopup!=null){\n            weatherAlertPopup.setVisible(false);\n            weatherAlertPopup=null;\n        }\n\n        JPanel content=new JPanel();'''
+          if old_method not in text:
+              raise SystemExit('showWeatherAlertMenu anchor not found')
+          text = text.replace(old_method, new_method, 1)
+
+          old_popup = '''        JPopupMenu popup=new JPopupMenu();\n        popup.setBorder(BorderFactory.createLineBorder(Theme.border(),1));\n        popup.setLayout(new BorderLayout());\n        popup.add(scroll,BorderLayout.CENTER);\n        popup.show(invoker,0,invoker.getHeight()+4);'''
+          new_popup = '''        JPopupMenu popup=new JPopupMenu();\n        weatherAlertPopup=popup;\n        popup.addPopupMenuListener(new javax.swing.event.PopupMenuListener(){\n            @Override public void popupMenuWillBecomeVisible(javax.swing.event.PopupMenuEvent e){}\n\n            @Override public void popupMenuWillBecomeInvisible(javax.swing.event.PopupMenuEvent e){\n                if(weatherAlertPopup==popup)\n                    weatherAlertPopup=null;\n            }\n\n            @Override public void popupMenuCanceled(javax.swing.event.PopupMenuEvent e){\n                if(weatherAlertPopup==popup)\n                    weatherAlertPopup=null;\n            }\n        });\n        popup.setBorder(BorderFactory.createLineBorder(Theme.border(),1));\n        popup.setLayout(new BorderLayout());\n        popup.add(scroll,BorderLayout.CENTER);\n        popup.show(invoker,0,invoker.getHeight()+4);'''
+          if old_popup not in text:
+              raise SystemExit('weather alert popup anchor not found')
+          text = text.replace(old_popup, new_popup, 1)
+          workspace.write_text(text)
+
+          announcement = Path('src/com/wtm/ui/OperationsAnnouncementSlidePanel.java')
+          text = announcement.read_text()
+
+          old_scroll = '''        scroll.setOpaque(false);\n        scroll.getViewport().setOpaque(false);\n        scroll.setBorder(null);\n        scroll.setHorizontalScrollBarPolicy(ScrollPaneConstants.HORIZONTAL_SCROLLBAR_NEVER);'''
+          new_scroll = '''        scroll.setOpaque(false);\n        scroll.getViewport().setOpaque(false);\n        scroll.setBorder(BorderFactory.createEmptyBorder());\n        scroll.setViewportBorder(null);\n        scroll.setHorizontalScrollBarPolicy(ScrollPaneConstants.HORIZONTAL_SCROLLBAR_NEVER);'''
+          if old_scroll not in text:
+              raise SystemExit('announcement scroll anchor not found')
+          text = text.replace(old_scroll, new_scroll, 1)
+
+          old_card = '''        RoundedPanel card=new RoundedPanel(18);\n        card.setLayout(new BorderLayout(18,0));\n        card.setBackground(Theme.panel2());\n        card.putClientProperty("outlineColor",Theme.border());\n        card.setBorder(new EmptyBorder(14,18,14,18));'''
+          new_card = '''        JPanel card=new JPanel(new BorderLayout(18,0));\n        card.setOpaque(false);\n        card.setBorder(new EmptyBorder(14,18,14,18));'''
+          if old_card not in text:
+              raise SystemExit('announcement card anchor not found')
+          text = text.replace(old_card, new_card, 1)
+          announcement.write_text(text)
+          PY
+
+          grep -q 'toggleWeatherAlertMenu' src/com/wtm/ui/OperationsWorkspaceFrame.java
+          grep -q 'weatherAlertPopupVisibleAtPress' src/com/wtm/ui/OperationsWorkspaceFrame.java
+          grep -q 'scroll.setViewportBorder(null)' src/com/wtm/ui/OperationsAnnouncementSlidePanel.java
+          ! grep -q 'RoundedPanel card=new RoundedPanel' src/com/wtm/ui/OperationsAnnouncementSlidePanel.java
+
+      - name: Build canonical source
+        shell: bash
+        run: |
+          set -euo pipefail
+          bash build.sh
+          test -f NorthStarOperations.jar
+          unzip -tq NorthStarOperations.jar >/dev/null
+          git diff --check
+
+      - name: Commit repaired source
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add src/com/wtm/ui/OperationsWorkspaceFrame.java src/com/wtm/ui/OperationsAnnouncementSlidePanel.java
+          git diff --cached --check
+          git commit -m 'Fix alert dropdown toggle and announcement framing'
+          git push origin HEAD:master
