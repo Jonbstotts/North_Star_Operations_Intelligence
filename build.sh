@@ -299,6 +299,15 @@ if ! grep -Fq 'public boolean workspaceIntelligenceEnabled = true;' src/com/wtm/
 fi
 
 
+# Base-map endpoints and attribution belong to BasemapProvider, never to the
+# Swing renderer. Retired vendor tile hosts must not return to active source.
+if [ ! -f src/com/wtm/map/BasemapProvider.java ] || \
+   ! grep -Fq 'BasemapProvider.fromId(config.basemapProvider)' src/com/wtm/map/TileMapPanel.java || \
+   grep -R -q --include='*.java' 'basemaps\.cartocdn\.com' src; then
+  echo "ERROR: basemap provider ownership regression detected." >&2
+  exit 1
+fi
+
 # Dashboard layout and alert behavior have one canonical owner. Obsolete ratio
 # state and duplicated severe-weather semantics must not return.
 if grep -R -q --include='*.java' -E 'mapWidthPercent|FixedRatioLayout' src; then
@@ -411,10 +420,12 @@ mkdir -p /tmp/ns-foundation-smoke
 javac --release 21 -Xlint:unchecked -Werror -encoding UTF-8 -cp 'out:lib/*' -d /tmp/ns-foundation-smoke \
   ci/WeatherAlertPolicySmokeTest.java \
   ci/DashboardGridMigrationSmokeTest.java \
-  ci/ConfigRoundTripSmokeTest.java
+  ci/ConfigRoundTripSmokeTest.java \
+  ci/BasemapProviderSmokeTest.java
 java -Djava.awt.headless=true -cp '/tmp/ns-foundation-smoke:out:lib/*' WeatherAlertPolicySmokeTest
 java -Djava.awt.headless=true -cp '/tmp/ns-foundation-smoke:out:lib/*' DashboardGridMigrationSmokeTest
 java -Djava.awt.headless=true -cp '/tmp/ns-foundation-smoke:out:lib/*' ConfigRoundTripSmokeTest
+java -Djava.awt.headless=true -cp '/tmp/ns-foundation-smoke:out:lib/*' BasemapProviderSmokeTest
 
 # Runtime branding is mandatory. NorthStarBrand loads these classpath resources
 # during application startup, so a release JAR without them is not launchable.

@@ -16,6 +16,7 @@ public final class ConfigRoundTripSmokeTest {
             System.setProperty("user.home", temporaryHome.toString());
 
             AppConfig source = new AppConfig();
+            source.basemapProvider = "OPENSTREETMAP";
             source.workspaceInfoBlockCount = 8;
             source.workspaceInfoMovementMode = "TICKER";
             source.workspaceInfoScrollSeconds = 17;
@@ -35,6 +36,8 @@ public final class ConfigRoundTripSmokeTest {
             ConfigService.save(source);
             AppConfig loaded = ConfigService.load();
 
+            require("OPENSTREETMAP".equals(loaded.basemapProvider),
+                    "basemap provider did not round-trip");
             require(loaded.workspaceInfoBlockCount == 8,
                     "information visible-count did not round-trip");
             require("TICKER".equals(loaded.workspaceInfoMovementMode),

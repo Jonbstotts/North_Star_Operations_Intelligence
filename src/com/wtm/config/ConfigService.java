@@ -9,6 +9,7 @@ import com.wtm.model.OperationType;
 import com.wtm.model.OperationsKpiConfig;
 import com.wtm.ui.AppTheme;
 import com.wtm.ui.OrientedImageLoader;
+import com.wtm.map.BasemapProvider;
 import com.wtm.media.MediaCategory;
 import com.wtm.media.MediaService;
 import com.wtm.util.SecureFiles;
@@ -287,6 +288,8 @@ public final class ConfigService {
             // loaded from credentials.properties below. Keep the legacy TomTom
             // property only as a one-time migration path from releases <=1.5.1.
             String legacyTomTomKey = p.getProperty("tomTomApiKey", "").trim();
+            cfg.basemapProvider=BasemapProvider.fromId(
+                    p.getProperty("basemapProvider",cfg.basemapProvider)).id();
             cfg.weatherProvider = p.getProperty("weatherProvider", cfg.weatherProvider).trim();
             cfg.alertProvider = p.getProperty("alertProvider", cfg.alertProvider).trim();
             cfg.radarProvider = p.getProperty("radarProvider", cfg.radarProvider).trim();
@@ -625,6 +628,8 @@ public final class ConfigService {
 
             p.setProperty("headerText", cfg.headerText);
             p.setProperty("tickerText", cfg.tickerText);
+            p.setProperty("basemapProvider",
+                    BasemapProvider.fromId(cfg.basemapProvider).id());
             p.setProperty("weatherProvider", cfg.weatherProvider);
             p.setProperty("alertProvider", cfg.alertProvider);
             p.setProperty("radarProvider", cfg.radarProvider);

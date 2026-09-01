@@ -4,6 +4,7 @@ import com.wtm.config.*;
 import com.wtm.model.*;
 import com.wtm.security.*;
 import com.wtm.media.*;
+import com.wtm.map.BasemapProvider;
 import com.wtm.modular.ui.WorkspaceLifecycleV3;
 
 import javax.swing.*;
@@ -107,6 +108,8 @@ public final class SettingsDialog extends JDialog {
     private final JTextField primaryLat=new JTextField();
     private final JTextField primaryLon=new JTextField();
 
+    private final JComboBox<BasemapProvider> basemapProvider=
+            new JComboBox<>(BasemapProvider.values());
     private final JPasswordField tomTom=new JPasswordField();
     private final JPasswordField weatherKey=new JPasswordField();
     private final JComboBox<String> weatherProvider=new JComboBox<>(new String[]{
@@ -1795,12 +1798,14 @@ public final class SettingsDialog extends JDialog {
 
         JTextArea intro=new JTextArea(
                 "Choose the installed provider adapter for each data type and manage its credentials. "
-              + "Open-Meteo Free, NWS, and RainViewer do not require API keys. Open-Meteo Customer "
-              + "and TomTom use credentials. A different future vendor will require a provider adapter "
-              + "for that vendor's response format, but this Settings structure will remain the same.");
+              + "OpenStreetMap Standard is the no-key development basemap; Open-Meteo Free, NWS, "
+              + "and RainViewer also require no API keys. Open-Meteo Customer and TomTom use credentials. "
+              + "The basemap is provider-owned so a contracted or self-hosted production tile service can "
+              + "replace the development provider later without rewriting the map renderer.");
         intro.setLineWrap(true); intro.setWrapStyleWord(true); intro.setEditable(false); intro.setOpaque(false);
         addFull(p,y++,intro);
 
+        addRow(p,y++,"Basemap provider",basemapProvider);
         addRow(p,y++,"Weather provider",weatherProvider);
         addRow(p,y++,"Open-Meteo customer API key",weatherKey);
         addRow(p,y++,"Alert provider",alertProvider);
@@ -1939,6 +1944,8 @@ public final class SettingsDialog extends JDialog {
         liveSevereWeather.setSelected(cfg.liveSevereWeatherMode);
         automaticSevereWeather.setSelected(cfg.automaticSevereWeatherMode);
         autoDisableSevereWeather.setSelected(cfg.autoDisableSevereWeatherMode);
+        basemapProvider.setSelectedItem(
+                BasemapProvider.fromId(cfg.basemapProvider));
         tomTom.setText(cfg.tomTomApiKey);
         weatherKey.setText(cfg.weatherApiKey);
         weatherProvider.setSelectedIndex("OPEN_METEO_CUSTOMER".equalsIgnoreCase(cfg.weatherProvider)?1:0);
@@ -2343,6 +2350,10 @@ public final class SettingsDialog extends JDialog {
             cfg.liveSevereWeatherMode=liveSevereWeather.isSelected();
             cfg.automaticSevereWeatherMode=automaticSevereWeather.isSelected();
             cfg.autoDisableSevereWeatherMode=autoDisableSevereWeather.isSelected();
+            BasemapProvider selectedBasemap=
+                    (BasemapProvider)basemapProvider.getSelectedItem();
+            cfg.basemapProvider=(selectedBasemap==null
+                    ?BasemapProvider.OPENSTREETMAP:selectedBasemap).id();
             cfg.weatherProvider=weatherProvider.getSelectedIndex()==1?"OPEN_METEO_CUSTOMER":"OPEN_METEO_FREE";
             cfg.alertProvider="NWS";
             cfg.radarProvider="RAINVIEWER";

@@ -140,6 +140,9 @@ public final class AppConfig {
      */
     public boolean autoDisableSevereWeatherMode = true;
 
+    /** Base-map adapter. OpenStreetMap Standard is the no-key development default. */
+    public String basemapProvider = "OPENSTREETMAP";
+
     /** Supported weather adapter: OPEN_METEO_FREE or OPEN_METEO_CUSTOMER. */
     public String weatherProvider = "OPEN_METEO_FREE";
 

@@ -38,7 +38,12 @@ public final class TileMapPanel extends JPanel {
     private final ExecutorService loader = Executors.newFixedThreadPool(5, r -> { Thread t=new Thread(r,"map-tile-loader"); t.setDaemon(true); return t; });
     private final Map<String,BufferedImage> memory = new ConcurrentHashMap<>();
     private final Set<String> loading = ConcurrentHashMap.newKeySet();
-    private final Path cacheDir = ConfigService.appDataDir().resolve("cache");
+    /*
+     * map-v2 starts a fresh base-map cache schema so tiles produced by retired
+     * providers cannot be replayed after provider ownership changes.
+     */
+    private final Path cacheDir = ConfigService.appDataDir()
+            .resolve("cache").resolve("map-v2");
 
     private AppConfig config;
     private RadarFrame radarFrame;
@@ -163,11 +168,12 @@ public final class TileMapPanel extends JPanel {
         int tx0=Math.floorDiv(left,TILE), ty0=Math.floorDiv(top,TILE);
         int tx1=Math.floorDiv(left+w,TILE), ty1=Math.floorDiv(top+h,TILE);
         int max=1<<zoom;
+        BasemapProvider basemap=BasemapProvider.fromId(config.basemapProvider);
         for(int ty=ty0;ty<=ty1;ty++) for(int tx=tx0;tx<=tx1;tx++) {
             if(ty<0||ty>=max)continue; int wrapped=((tx%max)+max)%max;
             int sx=tx*TILE-left, sy=ty*TILE-top;
-            String base=config.darkMode ? "https://a.basemaps.cartocdn.com/dark_all/"+zoom+"/"+wrapped+"/"+ty+".png" : "https://tile.openstreetmap.org/"+zoom+"/"+wrapped+"/"+ty+".png";
-            drawTile(g,base,sx,sy,"base");
+            String base=basemap.tileUrl(zoom,wrapped,ty);
+            drawBaseTile(g,basemap,base,sx,sy);
             if(config.showRadar && radarFrame!=null) {
                 drawRadarTile(g, wrapped, ty, sx, sy);
             }
@@ -272,15 +278,67 @@ public final class TileMapPanel extends JPanel {
         return img;
     }
 
-    private void drawTile(Graphics2D g,String url,int x,int y,String namespace){
-        String key=namespace+":"+url;
-        BufferedImage img=memory.get(key);
-        if(img==null){
-            Path file=cacheFile(key);
-            if(Files.exists(file)){ try{img=ImageIO.read(file.toFile()); if(img!=null)putMemory(key,img);}catch(Exception ignored){} }
-            if(img==null && loading.add(key)) loader.submit(() -> { try { byte[] data=http.getBytes(url); BufferedImage bi=ImageIO.read(new ByteArrayInputStream(data)); if(bi!=null){putMemory(key,bi); try{ImageIO.write(bi,"png",file.toFile());}catch(Exception ignored){} SwingUtilities.invokeLater(this::repaint);} } catch(Exception ignored){} finally{loading.remove(key);} });
+    private void drawBaseTile(
+            Graphics2D g,BasemapProvider provider,String url,int x,int y
+    ){
+        BufferedImage img=getOrLoadBaseTile(provider,url,config.darkMode);
+        if(img!=null){
+            g.drawImage(img,x,y,TILE,TILE,null);
+            return;
         }
-        if(img!=null) g.drawImage(img,x,y,TILE,TILE,null); else { g.setColor(config.darkMode?new Color(28,33,40):new Color(225,228,232)); g.fillRect(x,y,TILE,TILE); }
+
+        g.setColor(config.darkMode
+                ?new Color(28,33,40)
+                :new Color(225,228,232));
+        g.fillRect(x,y,TILE,TILE);
+    }
+
+    /**
+     * The provider tile is persisted once in its original form. Light and dark
+     * presentation are memory-only views of the same source tile, preventing
+     * theme changes from doubling remote requests or mutating cached imagery.
+     */
+    private BufferedImage getOrLoadBaseTile(
+            BasemapProvider provider,String url,boolean darkMode
+    ){
+        String rawKey="basemap:"+provider.cacheNamespace()+":"+url;
+        String styledKey=rawKey+(darkMode?":dark":":light");
+        BufferedImage styled=memory.get(styledKey);
+        if(styled!=null)return styled;
+
+        Path file=cacheFile(rawKey);
+        if(Files.exists(file)){
+            try{
+                BufferedImage raw=ImageIO.read(file.toFile());
+                if(raw!=null){
+                    styled=provider.renderTile(raw,darkMode);
+                    putMemory(styledKey,styled);
+                    return styled;
+                }
+            }catch(Exception ignored){}
+        }
+
+        if(loading.add(rawKey)){
+            final String targetKey=styledKey;
+            loader.submit(()->{
+                try{
+                    byte[] data=http.getBytes(url);
+                    BufferedImage raw=ImageIO.read(new ByteArrayInputStream(data));
+                    if(raw!=null){
+                        try{ImageIO.write(raw,"png",file.toFile());}
+                        catch(Exception ignored){}
+                        BufferedImage rendered=provider.renderTile(raw,darkMode);
+                        putMemory(targetKey,rendered);
+                        SwingUtilities.invokeLater(this::repaint);
+                    }
+                }catch(Exception ignored){
+                    // Base map remains neutral until a later repaint retries.
+                }finally{
+                    loading.remove(rawKey);
+                }
+            });
+        }
+        return null;
     }
 
     private void drawTransientTile(Graphics2D g,String url,int x,int y,String key){
@@ -312,12 +370,37 @@ public final class TileMapPanel extends JPanel {
     }
 
     private void drawLegend(Graphics2D g){
-        String radar=radarFrame==null?"Radar: waiting":"Radar: "+Instant.ofEpochSecond(radarFrame.unixTime()).atZone(ZoneId.systemDefault()).toLocalTime().withSecond(0).withNano(0);
-        String traffic=(config.tomTomApiKey==null||config.tomTomApiKey.isBlank())?"Traffic: add TomTom key in Settings":"Traffic: live layer enabled";
-        String text=radar+"   •   "+traffic+"   •   Mouse wheel = zoom, drag = pan";
-        g.setFont(getFont().deriveFont(12f)); int sw=g.getFontMetrics().stringWidth(text); int x=Math.max(10,getWidth()-sw-18), y=getHeight()-18;
-        g.setColor(new Color(10,13,18,190)); g.fillRoundRect(x-8,y-16,sw+16,23,10,10); g.setColor(new Color(225,230,236)); g.drawString(text,x,y);
-        g.setFont(getFont().deriveFont(10f)); String attr="© OpenStreetMap contributors • CARTO • RainViewer • TomTom"; g.drawString(attr,10,getHeight()-8);
+        BasemapProvider basemap=BasemapProvider.fromId(config.basemapProvider);
+        String radar=!config.showRadar
+                ?"Radar: hidden"
+                :(radarFrame==null
+                        ?"Radar: waiting"
+                        :"Radar: "+Instant.ofEpochSecond(radarFrame.unixTime())
+                                .atZone(ZoneId.systemDefault()).toLocalTime()
+                                .withSecond(0).withNano(0));
+        String traffic=!config.showTraffic
+                ?"Traffic: hidden"
+                :((config.tomTomApiKey==null||config.tomTomApiKey.isBlank())
+                        ?"Traffic: add TomTom key in Settings"
+                        :"Traffic: live layer enabled");
+        String text=radar+"   •   "+traffic
+                +"   •   Mouse wheel = zoom, drag = pan";
+        g.setFont(getFont().deriveFont(12f));
+        int sw=g.getFontMetrics().stringWidth(text);
+        int x=Math.max(10,getWidth()-sw-18), y=getHeight()-18;
+        g.setColor(new Color(10,13,18,190));
+        g.fillRoundRect(x-8,y-16,sw+16,23,10,10);
+        g.setColor(new Color(225,230,236));
+        g.drawString(text,x,y);
+
+        List<String> attribution=new ArrayList<>();
+        attribution.add(basemap.attribution());
+        if(config.showRadar)attribution.add("RainViewer");
+        if(config.showTraffic&&config.tomTomApiKey!=null
+                &&!config.tomTomApiKey.isBlank())
+            attribution.add("TomTom");
+        g.setFont(getFont().deriveFont(10f));
+        g.drawString(String.join(" • ",attribution),10,getHeight()-8);
     }
 
     private static Color severityColor(String s){ if("Extreme".equalsIgnoreCase(s))return new Color(220,45,45); if("Severe".equalsIgnoreCase(s))return new Color(245,110,30); if("Moderate".equalsIgnoreCase(s))return new Color(245,190,40); return new Color(70,150,255); }

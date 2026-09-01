@@ -57,9 +57,10 @@ Any new privileged workflow must call `AuthorizationService.require(...)` in the
 ## Provider layer
 
 - `HttpService` — HTTPS-only bounded HTTP client.
+- `BasemapProvider` — base-map endpoint, attribution, cache identity, and local theme-presentation ownership.
 - `OpenMeteoService`, `NwsAlertService`, `RainViewerService`, `TomTomService`, `TheSportsDbService` — provider adapters.
 
-Provider code should translate remote responses into model records. UI code should not parse provider JSON directly.
+Provider code should translate remote responses into model records or provider-owned map tiles. UI/rendering code must not hard-code vendor endpoints, credentials, or provider-specific response rules.
 
 ## Dashboard/data domains
 
