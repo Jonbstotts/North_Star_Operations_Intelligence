@@ -25,20 +25,18 @@ jobs:
       - name: Apply foundational repair
         shell: bash
         run: |
-          set -euo pipefail
+          set -uo pipefail
 
-          # The pre-grid ratio layout is dead only if no canonical source uses it.
           if grep -R -n --include='*.java' --exclude='FixedRatioLayout.java' 'FixedRatioLayout' src; then
-            echo 'FixedRatioLayout still has canonical callers; refusing deletion.' >&2
-            exit 1
+            echo 'FixedRatioLayout still has canonical callers; refusing deletion.' > /tmp/foundation-cleanup.log
+            RC=1
+          else
+            python3 ci/one_shot_foundational_cleanup.py > /tmp/foundation-cleanup.log 2>&1
+            RC=$?
           fi
 
-          python3 ci/one_shot_foundational_cleanup.py
-
-          # The staged patcher intentionally replaces the old scheduler method
-          # before replacing its old stop method. Normalize the resulting single
-          # stopRefreshers owner before compiling.
-          python3 - <<'PY'
+          if [ "$RC" -eq 0 ]; then
+            python3 - <<'PY' >> /tmp/foundation-cleanup.log 2>&1
           from pathlib import Path
           p=Path('src/com/wtm/ui/OperationsWorkspaceFrame.java')
           text=p.read_text()
@@ -52,7 +50,6 @@ jobs:
               pos+=len(signature)
           if len(starts)!=2:
               raise SystemExit(f'expected two staged stopRefreshers copies, found {len(starts)}')
-
           def method_end(source,start):
               brace=source.find('{',start)
               depth=0
@@ -62,22 +59,39 @@ jobs:
                       depth-=1
                       if depth==0: return i+1
               raise SystemExit('unterminated stopRefreshers')
-
           end=method_end(text,starts[0])
           text=text[:starts[0]]+text[end:]
           p.write_text(text)
           PY
+            RC=$?
+          fi
 
-          rm src/com/wtm/ui/FixedRatioLayout.java
+          if [ "$RC" -eq 0 ]; then
+            rm src/com/wtm/ui/FixedRatioLayout.java
+            {
+              git diff --check &&
+              ! grep -R -n --include='*.java' -E 'mapWidthPercent|FixedRatioLayout' src &&
+              ! grep -q 'Map / Information Layout' src/com/wtm/ui/SettingsDialog.java &&
+              grep -q 'WeatherAlertPolicy' src/com/wtm/ui/OperationsWorkspaceFrame.java &&
+              grep -q 'setSevereWeatherActive' src/com/wtm/ui/MainShowcasePanel.java &&
+              grep -q 'workspaceKpiMovementMode' src/com/wtm/config/ConfigService.java &&
+              grep -q 'stopOperationsMovement();' src/com/wtm/ui/OperationsWorkspaceFrame.java &&
+              bash build.sh
+            } >> /tmp/foundation-cleanup.log 2>&1
+            RC=$?
+          fi
 
-          git diff --check
-          ! grep -R -n --include='*.java' -E 'mapWidthPercent|FixedRatioLayout' src
-          ! grep -q 'Map / Information Layout' src/com/wtm/ui/SettingsDialog.java
-          grep -q 'WeatherAlertPolicy' src/com/wtm/ui/OperationsWorkspaceFrame.java
-          grep -q 'setSevereWeatherActive' src/com/wtm/ui/MainShowcasePanel.java
-          grep -q 'workspaceKpiMovementMode' src/com/wtm/config/ConfigService.java
-          grep -q 'stopOperationsMovement();' src/com/wtm/ui/OperationsWorkspaceFrame.java
-          bash build.sh
+          cat /tmp/foundation-cleanup.log
+
+          if [ "$RC" -ne 0 ]; then
+            cp /tmp/foundation-cleanup.log ci/foundation_cleanup_diagnostic.log
+            git config user.name 'NorthStar Cleanup Bot'
+            git config user.email 'actions@users.noreply.github.com'
+            git add ci/foundation_cleanup_diagnostic.log
+            git commit -m 'Capture foundational cleanup diagnostic'
+            git push origin HEAD:master
+            exit "$RC"
+          fi
 
       - name: Commit canonical source and remove repair transport
         shell: bash
@@ -87,6 +101,7 @@ jobs:
           rm -f .github/workflows/one-shot-foundational-audit.yml
           rm -f ci/one_shot_foundational_cleanup.py
           rm -f ci/one_shot_restore_weather_alert_ui.py
+          rm -f ci/foundation_cleanup_diagnostic.log
 
           git config user.name 'NorthStar Cleanup Bot'
           git config user.email 'actions@users.noreply.github.com'
