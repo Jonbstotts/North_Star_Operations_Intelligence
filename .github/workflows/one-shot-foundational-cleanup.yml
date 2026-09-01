@@ -55,6 +55,10 @@ jobs:
           rm -f ci/one_shot_restore_weather_alert_ui.py
           rm -f ci/foundation_cleanup_diagnostic.log
 
+          # build.sh intentionally creates an exploded dependency tree and JAR.
+          # They are validation products, not source, so never stage them.
+          git clean -fdx -- out NorthStarOperations.jar
+
           git config user.name 'NorthStar Cleanup Bot'
           git config user.email 'actions@users.noreply.github.com'
           git add -A
