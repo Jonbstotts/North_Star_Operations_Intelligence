@@ -65,9 +65,9 @@ public final class AppConfig {
     ));
 
     /**
-     * Compact Information row placed between the primary workspace modules and
-     * Operations Snapshot. Information Blocks is the single configuration
-     * surface for item count, selected content, viewport size and movement.
+     * Compatibility flag for the core Information row. The row is always active
+     * in current builds; the field remains true so older extensions/configuration
+     * readers can migrate without a breaking schema change.
      */
     public boolean workspaceInfoStripEnabled = true;
     public int workspaceInfoBlockCount = 4;

@@ -946,10 +946,10 @@ public final class OperationsWorkspaceFrame extends JFrame {
             celebrationsModule=celebrationsCard();
             dashboardGrid.addTile("TEAM_CELEBRATIONS","Team Celebrations",celebrationsModule,"18,4,6,4");
         }
-        if(config.workspaceInfoStripEnabled){
-            infoStripModule=informationStripCard();
-            dashboardGrid.addTile("INFORMATION","Information",infoStripModule,"0,8,24,2");
-        }
+        // Information is a core dashboard row. Visibility is no longer a
+        // separate setting; content/movement are configured in Workspace Setup.
+        infoStripModule=informationStripCard();
+        dashboardGrid.addTile("INFORMATION","Information",infoStripModule,"0,8,24,2");
         if(moduleEnabled("OPERATIONS_SNAPSHOT")){
             operationsModule=operationsSnapshotCard();
             dashboardGrid.addTile("OPERATIONS_SNAPSHOT","Operations Snapshot",operationsModule,"0,10,24,2");

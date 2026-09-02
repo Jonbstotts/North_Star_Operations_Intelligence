@@ -87,34 +87,52 @@ public final class DataCollectionPanel extends JPanel {
         page.setBorder(new EmptyBorder(12, 4, 4, 4));
 
         JPanel controls = card();
-        controls.setLayout(new BoxLayout(controls, BoxLayout.Y_AXIS));
+        controls.setLayout(new BorderLayout());
+
+        JPanel controlContent = new JPanel();
+        controlContent.setOpaque(false);
+        controlContent.setLayout(new BoxLayout(controlContent, BoxLayout.Y_AXIS));
+
         JLabel heading = sectionTitle("FILE & DVIEW EXPORT INGESTION");
-        controls.add(heading);
-        controls.add(Box.createVerticalStrut(6));
+        heading.setAlignmentX(Component.LEFT_ALIGNMENT);
+        controlContent.add(heading);
+        controlContent.add(Box.createVerticalStrut(6));
+
         JLabel copy = new JLabel(
                 "<html>Import recognized CSV exports directly or place files in the managed incoming folder. " +
                 "Unknown schemas are held for review instead of being guessed.</html>");
-        controls.add(copy);
-        controls.add(Box.createVerticalStrut(10));
+        copy.setAlignmentX(Component.LEFT_ALIGNMENT);
+        controlContent.add(copy);
+        controlContent.add(Box.createVerticalStrut(10));
 
         JPanel actions = new JPanel(new FlowLayout(FlowLayout.LEFT, 8, 0));
         actions.setOpaque(false);
+        actions.setAlignmentX(Component.LEFT_ALIGNMENT);
         JButton importCsv = new JButton("Import CSV");
         JButton openIncoming = new JButton("Open Incoming Folder");
         JButton scan = new JButton("Scan Folder Now");
         actions.add(importCsv);
         actions.add(openIncoming);
         actions.add(scan);
-        controls.add(actions);
-        controls.add(Box.createVerticalStrut(8));
+        actions.setMaximumSize(new Dimension(
+                Integer.MAX_VALUE, actions.getPreferredSize().height));
+        controlContent.add(actions);
+        controlContent.add(Box.createVerticalStrut(8));
 
         JPanel options = new JPanel(new FlowLayout(FlowLayout.LEFT, 8, 0));
         options.setOpaque(false);
+        options.setAlignmentX(Component.LEFT_ALIGNMENT);
         JCheckBox watch = new JCheckBox("Watch incoming folder", ingestion.watchEnabled());
         JCheckBox autoImport = new JCheckBox("Validated auto-import", ingestion.autoImport());
         options.add(watch);
         options.add(autoImport);
-        controls.add(options);
+        options.setMaximumSize(new Dimension(
+                Integer.MAX_VALUE, options.getPreferredSize().height));
+        controlContent.add(options);
+
+        // BorderLayout.NORTH deliberately owns the vertical anchor. The card may
+        // grow with the surrounding workspace, but its controls stay at the top.
+        controls.add(controlContent, BorderLayout.NORTH);
 
         importCsv.addActionListener(e -> chooseAndImportCsv());
         openIncoming.addActionListener(e -> openIncomingFolder());

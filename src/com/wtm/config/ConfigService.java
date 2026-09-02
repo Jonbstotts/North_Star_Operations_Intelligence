@@ -180,8 +180,9 @@ public final class ConfigService {
                 cfg.workspaceDashboardLayout.putAll(savedLayout);
             }
 
-            cfg.workspaceInfoStripEnabled=bool(
-                    p,"workspace.infoStrip.enabled",true);
+            // The Information row is a core dashboard surface. Ignore legacy
+            // false values while keeping the property readable by older builds.
+            cfg.workspaceInfoStripEnabled=true;
             cfg.workspaceInfoBlockCount=Math.max(
                     2,
                     Math.min(
@@ -543,7 +544,7 @@ public final class ConfigService {
                 p.setProperty("workspace.layout."+entry.getKey(),entry.getValue());
             p.setProperty(
                     "workspace.infoStrip.enabled",
-                    Boolean.toString(cfg.workspaceInfoStripEnabled));
+                    "true");
             p.setProperty(
                     "workspace.infoStrip.count",
                     Integer.toString(cfg.workspaceInfoBlockCount));

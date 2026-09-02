@@ -203,8 +203,6 @@ public final class SettingsDialog extends JDialog {
     private final JCheckBox workspaceEvents=new JCheckBox("Upcoming Events");
     private final JCheckBox workspaceCelebrations=new JCheckBox("Team Celebrations");
     private final JCheckBox workspaceOperationsSnapshot=new JCheckBox("Operations Snapshot");
-    private final JCheckBox workspaceInfoStrip=
-            new JCheckBox("Custom Information Blocks");
     private JPanel workspaceModulesPanel;
     private final JComboBox<Integer> workspaceInfoBlockCount=
             new JComboBox<>(new Integer[]{2,3,4,5,6,7,8});
@@ -1488,9 +1486,12 @@ public final class SettingsDialog extends JDialog {
         addFull(p,y++,title);
 
         JLabel help=new JLabel(
-                "<html>The Operations Workspace is modular. Disable any module that should not "
-              + "appear on the home dashboard. KPI values are editable directly below; "
-              + "the Data Source field is the integration hook for future SQL/report feeds.</html>");
+                "<html>The Operations Workspace combines optional dashboard modules with two core "
+              + "operational rows. Use the module choices below for the main cards. Configure the "
+              + "always-available <b>Information Row</b> and the Operations Snapshot behavior in "
+              + "their sections below; tile size and position remain controlled by the dashboard "
+              + "grid editor. KPI Data Source values remain the integration hook for future "
+              + "SQL/report feeds.</html>");
         addFull(p,y++,help);
 
         workspaceModulesPanel=new JPanel(new GridLayout(0,2,10,8));
@@ -1501,26 +1502,6 @@ public final class SettingsDialog extends JDialog {
         workspaceModulesPanel.add(workspaceCelebrations);
         workspaceModulesPanel.add(workspaceOperationsSnapshot);
         addFull(p,y++,workspaceModulesPanel);
-
-        RoundedPanel infoStrip=new RoundedPanel(14);
-        infoStrip.setLayout(new BorderLayout(12,8));
-        infoStrip.setBorder(BorderFactory.createEmptyBorder(12,14,12,14));
-
-        JPanel infoTop=new JPanel(new FlowLayout(FlowLayout.LEFT,10,0));
-        infoTop.setOpaque(false);
-        infoTop.add(workspaceInfoStrip);
-
-        JLabel infoHelp=new JLabel(
-                "<html><b>Information is now configured in one place.</b> "
-              + "Use the <b>Information Row</b> section directly below to choose the "
-              + "configured items, how many are visible at once, and whether the row is "
-              + "Static, Paged Rotation, or a Continuous Ticker. Dashboard tile size and "
-              + "position are controlled separately by the dashboard grid editor.</html>"
-        );
-
-        infoStrip.add(infoTop,BorderLayout.NORTH);
-        infoStrip.add(infoHelp,BorderLayout.CENTER);
-        addFull(p,y++,infoStrip);
 
         JPanel informationSetup=widgets();
         informationSetup.setBorder(BorderFactory.createTitledBorder(
@@ -1694,11 +1675,12 @@ public final class SettingsDialog extends JDialog {
         motionRow.add(new JLabel("px/sec"));
 
         JLabel unifiedHelp=new JLabel(
-                "<html>This page is the single source of truth for the dashboard "
-              + "<b>Information</b> row. <b>Configured items</b> determines how many "
-              + "selectors appear below. <b>Visible at once</b> controls the fixed viewport. "
-              + "If 12 items are configured and Continuous Ticker is selected, all 12 travel "
-              + "through that viewport and loop continuously.</html>"
+                "<html><b>Information Row:</b> this core dashboard tile stays available and is "
+              + "configured entirely here. <b>Configured items</b> determines how many selectors "
+              + "appear below, while <b>Visible at once</b> controls the fixed viewport. Choose "
+              + "Static, Paged Rotation, or Continuous Ticker for movement. In ticker mode every "
+              + "configured item travels through the viewport and loops continuously. Tile size "
+              + "and position are managed separately with the dashboard grid editor.</html>"
         );
 
         JPanel rows=new JPanel();
@@ -2039,7 +2021,6 @@ public final class SettingsDialog extends JDialog {
         workspaceEvents.setSelected(cfg.workspaceModules.contains("UPCOMING_EVENTS"));
         workspaceCelebrations.setSelected(cfg.workspaceModules.contains("TEAM_CELEBRATIONS"));
         workspaceOperationsSnapshot.setSelected(cfg.workspaceModules.contains("OPERATIONS_SNAPSHOT"));
-        workspaceInfoStrip.setSelected(cfg.workspaceInfoStripEnabled);
         workspaceInfoBlockCount.setSelectedItem(
                 Math.max(2,Math.min(8,cfg.workspaceInfoBlockCount)));
         workspaceInfoMovementMode.setSelectedItem(
@@ -2532,7 +2513,9 @@ public final class SettingsDialog extends JDialog {
             if(workspaceCelebrations.isSelected())cfg.workspaceModules.add("TEAM_CELEBRATIONS");
             if(workspaceOperationsSnapshot.isSelected())cfg.workspaceModules.add("OPERATIONS_SNAPSHOT");
 
-            cfg.workspaceInfoStripEnabled=workspaceInfoStrip.isSelected();
+            // Information is a core dashboard row; keep the legacy flag true for
+            // compatibility with older configuration files and extension code.
+            cfg.workspaceInfoStripEnabled=true;
             Object infoCount=workspaceInfoBlockCount.getSelectedItem();
             cfg.workspaceInfoBlockCount=infoCount instanceof Integer value
                     ?Math.max(2,Math.min(8,value))

@@ -18,6 +18,7 @@ public final class ConfigRoundTripSmokeTest {
             AppConfig source = new AppConfig();
             source.themeId = "FLATLAF_LIGHT";
             source.automaticHolidayThemes = false;
+            source.workspaceInfoStripEnabled = false;
             source.workspaceInfoBlockCount = 8;
             source.basemapProvider = "OPENSTREETMAP";
             source.workspaceInfoMovementMode = "TICKER";
@@ -36,12 +37,27 @@ public final class ConfigRoundTripSmokeTest {
             source.workspaceDashboardLayout.put("CUSTOM_TEST_TILE", "8,3,5,2");
 
             ConfigService.save(source);
+
+            Path configFile = ConfigService.appDataDir().resolve("config.properties");
+            String canonical = Files.readString(configFile);
+            require(canonical.contains("workspace.infoStrip.enabled=true"),
+                    "core Information row was not canonicalized active on save");
+
+            // Simulate an older installation where the retired checkbox was off.
+            Files.writeString(
+                    configFile,
+                    canonical.replace(
+                            "workspace.infoStrip.enabled=true",
+                            "workspace.infoStrip.enabled=false"));
+
             AppConfig loaded = ConfigService.load();
 
             require("FLATLAF_LIGHT".equals(loaded.themeId),
                     "selected FlatLaf theme did not round-trip");
             require(!loaded.automaticHolidayThemes,
                     "automatic holiday-theme choice did not round-trip");
+            require(loaded.workspaceInfoStripEnabled,
+                    "legacy disabled Information row was not migrated active");
             require(loaded.workspaceInfoBlockCount == 8,
                     "information visible-count did not round-trip");
             require("OPENSTREETMAP".equals(loaded.basemapProvider),
