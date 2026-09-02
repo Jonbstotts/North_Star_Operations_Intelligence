@@ -29,7 +29,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          python3 tmp/repair_ticker_theme_v2.py
+          python3 tmp/repair_ticker_theme_v3.py
           test -f src/com/wtm/ui/ContinuousTickerGeometry.java
           test -f ci/TickerGeometrySmokeTest.java
           ! grep -Fq 'informationTickerTrack.add(Box.createHorizontalStrut' src/com/wtm/ui/OperationsWorkspaceFrame.java
