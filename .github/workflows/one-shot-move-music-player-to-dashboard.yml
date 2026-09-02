@@ -1,0 +1,63 @@
+name: Move Music Player to Dashboard Grid
+
+on:
+  push:
+    branches: [ master ]
+    paths:
+      - '.github/workflows/one-shot-move-music-player-to-dashboard.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  migrate:
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Checkout master
+        uses: actions/checkout@v4
+        with:
+          ref: master
+          fetch-depth: 0
+
+      - name: Set up Java 21
+        uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '21'
+
+      - name: Apply music dashboard migration
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 tmp/move_music_player_to_dashboard.py
+          grep -Fq 'PLAYER_MARK="northstar.music.player"' src/com/wtm/modular/ui/MusicWorkspaceModule.java
+          grep -Fq 'new DashboardPlayer(workspace)' src/com/wtm/modular/ui/MusicWorkspaceModule.java
+          ! grep -Fq 'MiniPlayer' src/com/wtm/modular/ui/MusicWorkspaceModule.java
+          ! grep -Fq 'northstar.music.mini' src/com/wtm/modular/ui/WorkspaceLifecycleV3.java
+          grep -Fq 'MUSIC_CHECK,"Music Player"' src/com/wtm/modular/ui/WorkspaceLifecycleV3.java
+          grep -Fq 'music?"0,15,8,3"' src/com/wtm/ui/OperationsWorkspaceFrame.java
+          grep -Fq 'summaryExtensionsHost.setVisible(false)' src/com/wtm/ui/OperationsWorkspaceFrame.java
+          git diff --check
+
+      - name: Build canonical source
+        shell: bash
+        run: |
+          set -euo pipefail
+          bash build.sh
+          test -f NorthStarOperations.jar
+          unzip -tq NorthStarOperations.jar >/dev/null
+          git diff --check
+
+      - name: Commit migrated source
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add \
+            src/com/wtm/modular/ui/MusicWorkspaceModule.java \
+            src/com/wtm/modular/ui/WorkspaceLifecycleV3.java \
+            src/com/wtm/ui/OperationsWorkspaceFrame.java
+          git diff --cached --check
+          git commit -m 'Move music player into dashboard grid'
+          git push origin HEAD:master
