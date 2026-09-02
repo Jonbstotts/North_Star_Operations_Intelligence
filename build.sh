@@ -328,6 +328,15 @@ if grep -q 'setAutomaticSevereWeatherActive' src/com/wtm/ui/OperationsWorkspaceF
   exit 1
 fi
 
+# Continuous dashboard tickers share one geometry owner. A cycle contains
+# equal item slots only; artificial end spacers recreate the visible reset gap.
+if [ ! -f src/com/wtm/ui/ContinuousTickerGeometry.java ] || \
+   grep -Fq 'informationTickerTrack.add(Box.createHorizontalStrut' src/com/wtm/ui/OperationsWorkspaceFrame.java || \
+   grep -Fq 'operationsTickerTrack.add(Box.createHorizontalStrut' src/com/wtm/ui/OperationsWorkspaceFrame.java; then
+  echo "ERROR: seamless continuous-ticker geometry regression detected." >&2
+  exit 1
+fi
+
 # Dashboard layout editing is owned by the top-right dashboard gear; the old
 # in-content Customize/Reset button strip must not return. The configured
 # scrolling ticker is rendered by the source-owned HeaderTicker.
@@ -343,6 +352,7 @@ fi
 # but custom ComboBox/TabbedPane look-and-feel delegates must not return.
 if [ ! -f src/com/wtm/ui/ThemeManager.java ] || \
    ! grep -Fq 'FlatDarkLaf.setup()' src/com/wtm/ui/ThemeManager.java || \
+   ! grep -Fq 'UIManager.getLookAndFeelDefaults()' src/com/wtm/ui/ThemeManager.java || \
    grep -qE 'ThemedComboBoxUI|BasicTabbedPaneUI' src/com/wtm/ui/ThemeStyler.java || \
    [ -f src/com/wtm/ui/ThemedComboBoxUI.java ]; then
   echo "ERROR: canonical theme ownership is not delegated to real FlatLaf." >&2
@@ -421,10 +431,12 @@ javac --release 21 -Xlint:unchecked -Werror -encoding UTF-8 -cp 'out:lib/*' -d /
   ci/WeatherAlertPolicySmokeTest.java \
   ci/DashboardGridMigrationSmokeTest.java \
   ci/ConfigRoundTripSmokeTest.java \
+  ci/TickerGeometrySmokeTest.java \
   ci/BasemapProviderSmokeTest.java
 java -Djava.awt.headless=true -cp '/tmp/ns-foundation-smoke:out:lib/*' WeatherAlertPolicySmokeTest
 java -Djava.awt.headless=true -cp '/tmp/ns-foundation-smoke:out:lib/*' DashboardGridMigrationSmokeTest
 java -Djava.awt.headless=true -cp '/tmp/ns-foundation-smoke:out:lib/*' ConfigRoundTripSmokeTest
+java -Djava.awt.headless=true -cp '/tmp/ns-foundation-smoke:out:lib/*' TickerGeometrySmokeTest
 java -Djava.awt.headless=true -cp '/tmp/ns-foundation-smoke:out:lib/*' BasemapProviderSmokeTest
 
 # Runtime branding is mandatory. NorthStarBrand loads these classpath resources

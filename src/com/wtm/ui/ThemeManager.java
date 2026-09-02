@@ -10,8 +10,29 @@ import java.awt.*;
 public final class ThemeManager {
     private ThemeManager(){}
 
+    /*
+     * Older builds wrote the North Star overlay through UIManager.put(). Those
+     * values live in Swing's developer-default table and survive subsequent
+     * look-and-feel installs, which caused North Star colors to leak into every
+     * FlatLaf theme. Clear only the keys North Star historically owned before
+     * each install, then apply branded values to the current LAF defaults.
+     */
+    private static final String[] BRAND_KEYS={
+            "Component.accentColor",
+            "Component.focusColor",
+            "TabbedPane.underlineColor",
+            "ProgressBar.foreground",
+            "TextComponent.selectionBackground",
+            "Table.selectionBackground",
+            "List.selectionBackground",
+            "Panel.background",
+            "Label.foreground"
+    };
+
     public static void install(AppTheme theme){
         AppTheme resolved=theme==null?AppTheme.NORTH_STAR:theme;
+        clearLegacyBrandOverrides();
+
         boolean installed=switch(resolved){
             case FLATLAF_LIGHT->FlatLightLaf.setup();
             case FLATLAF_DARK->FlatDarkLaf.setup();
@@ -39,7 +60,11 @@ public final class ThemeManager {
             case WINTER_FROST->FlatCyanLightIJTheme.setup();
             case NORTH_STAR->FlatDarculaLaf.setup();
         };
-        if(!installed)FlatDarkLaf.setup();
+
+        if(!installed){
+            clearLegacyBrandOverrides();
+            FlatDarkLaf.setup();
+        }
         if(resolved.branded())applyBrandOverlay(resolved);
     }
 
@@ -54,15 +79,26 @@ public final class ThemeManager {
         return value==null?fallback:value;
     }
 
+    private static void clearLegacyBrandOverrides(){
+        for(String key:BRAND_KEYS)
+            UIManager.put(key,null);
+    }
+
+    /**
+     * Brand/holiday overlays belong to the currently installed look-and-feel.
+     * Writing directly to its defaults makes the override disappear naturally
+     * when another FlatLaf is installed instead of contaminating future themes.
+     */
     private static void applyBrandOverlay(AppTheme theme){
-        UIManager.put("Component.accentColor",theme.accent());
-        UIManager.put("Component.focusColor",theme.accent());
-        UIManager.put("TabbedPane.underlineColor",theme.accent());
-        UIManager.put("ProgressBar.foreground",theme.accent());
-        UIManager.put("TextComponent.selectionBackground",theme.accent());
-        UIManager.put("Table.selectionBackground",theme.accent());
-        UIManager.put("List.selectionBackground",theme.accent());
-        UIManager.put("Panel.background",theme.bg());
-        UIManager.put("Label.foreground",theme.text());
+        UIDefaults defaults=UIManager.getLookAndFeelDefaults();
+        defaults.put("Component.accentColor",theme.accent());
+        defaults.put("Component.focusColor",theme.accent());
+        defaults.put("TabbedPane.underlineColor",theme.accent());
+        defaults.put("ProgressBar.foreground",theme.accent());
+        defaults.put("TextComponent.selectionBackground",theme.accent());
+        defaults.put("Table.selectionBackground",theme.accent());
+        defaults.put("List.selectionBackground",theme.accent());
+        defaults.put("Panel.background",theme.bg());
+        defaults.put("Label.foreground",theme.text());
     }
 }

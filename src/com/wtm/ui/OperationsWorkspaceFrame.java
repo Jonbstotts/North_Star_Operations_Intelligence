@@ -2140,47 +2140,31 @@ public final class OperationsWorkspaceFrame extends JFrame {
                         ?card.getWidth()
                         :Math.max(900,getContentPane().getWidth()-260)
         );
-        int slotWidth=Math.max(
-                150,
-                availableWidth/visibleSlots
-        );
+        ContinuousTickerGeometry.Layout geometry=
+                ContinuousTickerGeometry.calculate(
+                        availableWidth,
+                        visibleSlots,
+                        configured.size(),
+                        150
+                );
+        int slotWidth=geometry.slotWidth();
 
         informationTickerTrack=new JPanel();
         informationTickerTrack.setOpaque(false);
         informationTickerTrack.setLayout(
                 new BoxLayout(informationTickerTrack,BoxLayout.X_AXIS));
 
-        for(String type:configured){
-            JComponent metric=workspaceInfoMetric(type);
-            metric.setPreferredSize(new Dimension(slotWidth,76));
-            metric.setMinimumSize(new Dimension(slotWidth,76));
-            metric.setMaximumSize(new Dimension(slotWidth,76));
-            informationTickerTrack.add(metric);
+        for(int copy=0;copy<geometry.copies();copy++){
+            for(String type:configured){
+                JComponent metric=workspaceInfoMetric(type);
+                sizeTickerMetric(metric,slotWidth);
+                informationTickerTrack.add(metric);
+            }
         }
 
-        informationTickerTrack.add(Box.createHorizontalStrut(slotWidth/2));
-
-        informationTickerCycleWidth=
-                configured.size()*slotWidth+(slotWidth/2);
-
-        /*
-         * Duplicate one complete cycle so resetting the viewport position is
-         * visually seamless rather than snapping the Information row.
-         */
-        for(String type:configured){
-            JComponent metric=workspaceInfoMetric(type);
-            metric.setPreferredSize(new Dimension(slotWidth,76));
-            metric.setMinimumSize(new Dimension(slotWidth,76));
-            metric.setMaximumSize(new Dimension(slotWidth,76));
-            informationTickerTrack.add(metric);
-        }
-
+        informationTickerCycleWidth=geometry.cycleWidth();
         informationTickerTrack.setPreferredSize(
-                new Dimension(
-                        informationTickerCycleWidth*2,
-                        76
-                )
-        );
+                new Dimension(geometry.trackWidth(),76));
 
         informationTickerViewport=new JViewport();
         informationTickerViewport.setOpaque(false);
@@ -2198,6 +2182,13 @@ public final class OperationsWorkspaceFrame extends JFrame {
         card.add(mode,BorderLayout.SOUTH);
 
         startInformationTicker();
+    }
+
+    private static void sizeTickerMetric(JComponent metric,int slotWidth){
+        Dimension size=new Dimension(slotWidth,76);
+        metric.setPreferredSize(size);
+        metric.setMinimumSize(size);
+        metric.setMaximumSize(size);
     }
 
     private void startInformationTicker(){
@@ -2750,32 +2741,30 @@ public final class OperationsWorkspaceFrame extends JFrame {
                         ?card.getWidth()
                         :Math.max(900,getContentPane().getWidth()-260)
         );
-        int slotWidth=Math.max(150,availableWidth/visibleSlots);
+        ContinuousTickerGeometry.Layout geometry=
+                ContinuousTickerGeometry.calculate(
+                        availableWidth,
+                        visibleSlots,
+                        enabled.size(),
+                        150
+                );
+        int slotWidth=geometry.slotWidth();
 
         operationsTickerTrack=new JPanel();
         operationsTickerTrack.setOpaque(false);
         operationsTickerTrack.setLayout(
                 new BoxLayout(operationsTickerTrack,BoxLayout.X_AXIS));
 
-        for(OperationsKpiConfig kpi:enabled){
-            JComponent metric=kpiCard(kpi);
-            metric.setPreferredSize(new Dimension(slotWidth,76));
-            metric.setMinimumSize(new Dimension(slotWidth,76));
-            metric.setMaximumSize(new Dimension(slotWidth,76));
-            operationsTickerTrack.add(metric);
+        for(int copy=0;copy<geometry.copies();copy++){
+            for(OperationsKpiConfig kpi:enabled){
+                JComponent metric=kpiCard(kpi);
+                sizeTickerMetric(metric,slotWidth);
+                operationsTickerTrack.add(metric);
+            }
         }
-        operationsTickerTrack.add(Box.createHorizontalStrut(slotWidth/2));
-        operationsTickerCycleWidth=enabled.size()*slotWidth+(slotWidth/2);
-
-        for(OperationsKpiConfig kpi:enabled){
-            JComponent metric=kpiCard(kpi);
-            metric.setPreferredSize(new Dimension(slotWidth,76));
-            metric.setMinimumSize(new Dimension(slotWidth,76));
-            metric.setMaximumSize(new Dimension(slotWidth,76));
-            operationsTickerTrack.add(metric);
-        }
+        operationsTickerCycleWidth=geometry.cycleWidth();
         operationsTickerTrack.setPreferredSize(
-                new Dimension(operationsTickerCycleWidth*2,76));
+                new Dimension(geometry.trackWidth(),76));
 
         operationsTickerViewport=new JViewport();
         operationsTickerViewport.setOpaque(false);
@@ -3486,6 +3475,7 @@ public final class OperationsWorkspaceFrame extends JFrame {
         embeddedSettingsSession=null;
         config=updated;
         buildUi();
+        ThemeStyler.apply(this,Theme.active());
         startRefreshers();
     }
 

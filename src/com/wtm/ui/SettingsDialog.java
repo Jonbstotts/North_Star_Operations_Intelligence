@@ -348,11 +348,7 @@ public final class SettingsDialog extends JDialog {
         applyResponsiveWindowSize(owner,tabs);
 
         automaticSevereWeather.addActionListener(e->updateAutomaticSevereControls());
-        themeSelector.addActionListener(e->{
-            updateThemePreview();
-            AppTheme selected=(AppTheme)themeSelector.getSelectedItem();
-            if(selected!=null)applySettingsTheme(selected);
-        });
+        themeSelector.addActionListener(e->updateThemePreview());
 
         loadValues();
         installEmployeeOfMonthSelectionGuard();
@@ -816,6 +812,9 @@ public final class SettingsDialog extends JDialog {
         themePreview.setMinimumSize(new Dimension(300,42));
         themePreview.setBorder(BorderFactory.createTitledBorder("Theme preview"));
         addFull(p,y++,themePreview);
+        addFull(p,y++,new JLabel(
+                "<html>Theme choices are previewed here without partially recoloring the live workspace. "
+              + "Choose <b>Save & Apply</b> to install the selected FlatLaf across North Star.</html>"));
 
         addFull(p,y++,automaticHolidayThemes);
 
@@ -846,8 +845,10 @@ public final class SettingsDialog extends JDialog {
     }
 
     /**
-     * Live-preview the chosen theme across the entire Settings window.
-     * Nothing is persisted until Save & Apply.
+     * Applies the already-selected application theme to this Settings session.
+     * Alternative choices are previewed by swatches until Save & Apply because
+     * Swing look-and-feel is process-wide and cannot safely preview only one
+     * detached workspace page.
      */
     private void applySettingsTheme(AppTheme theme){
         if(theme==null)theme=originalTheme;

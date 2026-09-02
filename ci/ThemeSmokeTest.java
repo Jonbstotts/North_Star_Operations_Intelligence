@@ -4,6 +4,7 @@ import com.wtm.ui.Theme;
 import javax.swing.*;
 import java.awt.*;
 import java.awt.image.BufferedImage;
+import java.util.Objects;
 
 public final class ThemeSmokeTest {
     private ThemeSmokeTest() {}
@@ -28,6 +29,20 @@ public final class ThemeSmokeTest {
                 || Theme.border() == null || Theme.text() == null || Theme.muted() == null
                 || Theme.accent() == null)
             throw new IllegalStateException(theme.id() + ": unresolved semantic color");
+
+        for (String key : new String[]{
+                "Component.accentColor",
+                "Panel.background",
+                "Label.foreground",
+                "Table.selectionBackground",
+                "List.selectionBackground"
+        }) {
+            Object effective = UIManager.get(key);
+            Object lafDefault = UIManager.getLookAndFeelDefaults().get(key);
+            if (!Objects.equals(effective, lafDefault))
+                throw new IllegalStateException(
+                        theme.id() + ": stale developer override for " + key);
+        }
     }
 
     private static void verifyControls(AppTheme theme) {

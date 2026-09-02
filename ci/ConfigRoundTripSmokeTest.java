@@ -16,8 +16,10 @@ public final class ConfigRoundTripSmokeTest {
             System.setProperty("user.home", temporaryHome.toString());
 
             AppConfig source = new AppConfig();
-            source.basemapProvider = "OPENSTREETMAP";
+            source.themeId = "FLATLAF_LIGHT";
+            source.automaticHolidayThemes = false;
             source.workspaceInfoBlockCount = 8;
+            source.basemapProvider = "OPENSTREETMAP";
             source.workspaceInfoMovementMode = "TICKER";
             source.workspaceInfoScrollSeconds = 17;
             source.workspaceInfoTickerPixelsPerSecond = 41;
@@ -36,10 +38,14 @@ public final class ConfigRoundTripSmokeTest {
             ConfigService.save(source);
             AppConfig loaded = ConfigService.load();
 
-            require("OPENSTREETMAP".equals(loaded.basemapProvider),
-                    "basemap provider did not round-trip");
+            require("FLATLAF_LIGHT".equals(loaded.themeId),
+                    "selected FlatLaf theme did not round-trip");
+            require(!loaded.automaticHolidayThemes,
+                    "automatic holiday-theme choice did not round-trip");
             require(loaded.workspaceInfoBlockCount == 8,
                     "information visible-count did not round-trip");
+            require("OPENSTREETMAP".equals(loaded.basemapProvider),
+                    "basemap provider did not round-trip");
             require("TICKER".equals(loaded.workspaceInfoMovementMode),
                     "information movement mode did not round-trip");
             require(loaded.workspaceInfoScrollSeconds == 17,
