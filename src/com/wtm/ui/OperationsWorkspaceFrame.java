@@ -811,12 +811,14 @@ public final class OperationsWorkspaceFrame extends JFrame {
         if(id==null||id.isBlank()||component==null||dashboardGrid==null)return false;
         JComponent existing=dashboardExtensions.get(id);
         if(existing!=null&&existing.getParent()!=null)return true;
-        String label="northstar.ai.compact".equalsIgnoreCase(id)
+        boolean intelligence="northstar.ai.compact".equalsIgnoreCase(id);
+        boolean music="northstar.music.player".equalsIgnoreCase(id);
+        String label=intelligence
                 ?"NorthStar Intelligence"
-                :id;
-        String defaultSpec="northstar.ai.compact".equalsIgnoreCase(id)
+                :music?"Music Player":id;
+        String defaultSpec=intelligence
                 ?"0,12,24,3"
-                :"0,12,24,2";
+                :music?"0,15,8,3":"0,12,24,2";
         dashboardGrid.addTile(id,label,component,defaultSpec);
         dashboardExtensions.put(id,component);
         dashboardGrid.revalidate();
@@ -838,6 +840,7 @@ public final class OperationsWorkspaceFrame extends JFrame {
         if(existing!=null&&existing.getParent()==summaryExtensionsHost)return true;
         summaryExtensionsHost.removeAll();
         summaryExtensionsHost.add(component,BorderLayout.CENTER);
+        summaryExtensionsHost.setVisible(true);
         summaryExtensions.put(id,component);
         summaryExtensionsHost.revalidate();
         summaryExtensionsHost.repaint();
@@ -848,6 +851,8 @@ public final class OperationsWorkspaceFrame extends JFrame {
         JComponent component=summaryExtensions.remove(id);
         if(component==null||summaryExtensionsHost==null)return false;
         summaryExtensionsHost.remove(component);
+        if(summaryExtensionsHost.getComponentCount()==0)
+            summaryExtensionsHost.setVisible(false);
         summaryExtensionsHost.revalidate();
         summaryExtensionsHost.repaint();
         return true;
@@ -891,7 +896,9 @@ public final class OperationsWorkspaceFrame extends JFrame {
 
         summaryExtensionsHost=new JPanel(new BorderLayout());
         summaryExtensionsHost.setOpaque(false);
-        summaryExtensionsHost.setPreferredSize(new Dimension(330,54));
+        // Summary extensions are collapsed when empty. The former music player
+        // now lives in the dashboard grid, so the header gives that space back.
+        summaryExtensionsHost.setVisible(false);
 
         JPanel rightSummary=new JPanel(new FlowLayout(FlowLayout.RIGHT,12,0));
         rightSummary.setOpaque(false);

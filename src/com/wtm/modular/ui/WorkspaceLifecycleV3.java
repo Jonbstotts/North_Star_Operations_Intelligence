@@ -17,7 +17,7 @@ import javax.swing.*;
  * boundaries.</p>
  */
 public final class WorkspaceLifecycleV3 {
-    private static final String MUSIC_MINI_MARKER = "northstar.music.mini";
+    private static final String MUSIC_PLAYER_MARKER = "northstar.music.player";
     private static final String INTELLIGENCE_CHECK = "northstar.intelligence.workspace.checkbox";
     private static final String MUSIC_CHECK = "northstar.music.workspace.checkbox";
     private static boolean bootstrapped;
@@ -73,7 +73,7 @@ public final class WorkspaceLifecycleV3 {
         else workspace.removeDashboardExtension("northstar.ai.compact");
 
         MusicWorkspaceModule.installWorkspace(workspace);
-        if (!musicDashboardEnabled()) workspace.removeSummaryExtension(MUSIC_MINI_MARKER);
+        if (!musicDashboardEnabled()) workspace.removeDashboardExtension(MUSIC_PLAYER_MARKER);
 
         workspace.getRootPane().revalidate();
         workspace.validate();
@@ -92,7 +92,7 @@ public final class WorkspaceLifecycleV3 {
                 cfg==null||cfg.workspaceIntelligenceEnabled);
 
         owner.registerWorkspaceModuleToggle(
-                MUSIC_CHECK,"Music Compact Player",musicDashboardEnabled());
+                MUSIC_CHECK,"Music Player",musicDashboardEnabled());
     }
 
     private static void persistWorkspaceToggles(SettingsDialog owner) {

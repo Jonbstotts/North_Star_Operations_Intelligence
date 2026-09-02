@@ -47,7 +47,7 @@ import java.util.concurrent.atomic.AtomicReference;
 public final class MusicWorkspaceModule {
     private static final String ROUTE="Music & Audio";
     private static final String ROUTE_LABEL="♫  Music & Audio";
-    private static final String MINI_MARK="northstar.music.mini";
+    private static final String PLAYER_MARK="northstar.music.player";
 
     private MusicWorkspaceModule(){}
 
@@ -88,12 +88,16 @@ public final class MusicWorkspaceModule {
     }
 
     private static void injectDashboardPlayer(Window w){
-        if(!MusicService.instance().settings.dashboardPlayer
-                ||!(w instanceof OperationsWorkspaceFrame workspace))return;
-        MiniPlayer mini=new MiniPlayer(workspace);
-        mini.setPreferredSize(new Dimension(320,52));
-        mini.setMaximumSize(new Dimension(340,54));
-        workspace.mountSummaryExtension(MINI_MARK,mini);
+        if(!(w instanceof OperationsWorkspaceFrame workspace))return;
+        if(!MusicService.instance().settings.dashboardPlayer){
+            workspace.removeDashboardExtension(PLAYER_MARK);
+            return;
+        }
+        workspace.mountDashboardExtension(
+                PLAYER_MARK,
+                new DashboardPlayer(workspace),
+                0
+        );
     }
 
     // Provider-neutral model ------------------------------------------------
@@ -225,17 +229,108 @@ document.getElementById('auth').onclick=auth;document.getElementById('sync').onc
         private void refresh(){playlistModel.removeAllElements();for(MusicPlaylist x:service.playlists())playlistModel.addElement(x);PlaybackState ps=service.playback();state.setText((service.connected()?"Connected":"Not connected")+" • "+ps.title()+("".equals(ps.artist())?"":" — "+ps.artist()));repaint();}
     }
 
-    private static final class MiniPlayer extends JPanel{
-        private final MusicService service=MusicService.instance();private final JLabel now=new JLabel();private final Window owner;
-        MiniPlayer(Window owner){
-            super(new BorderLayout(7,0));this.owner=owner;setOpaque(false);setBorder(new EmptyBorder(1,4,1,4));
-            JPanel left=new JPanel();left.setOpaque(false);left.setLayout(new BoxLayout(left,BoxLayout.Y_AXIS));
-            JButton open=new JButton("Music");open.setMargin(new Insets(2,8,2,8));open.addActionListener(e->showMusic(owner));
-            now.setForeground(Theme.text());now.setFont(now.getFont().deriveFont(11f));left.add(open);left.add(now);
-            JPanel buttons=new JPanel(new GridLayout(2,2,4,3));buttons.setOpaque(false);
-            for(String[] x:new String[][]{{"◀","prev"},{"▶","play"},{"❚❚","pause"},{"▶▶","next"}}){JButton b=new JButton(x[0]);b.setMargin(new Insets(1,6,1,6));b.addActionListener(e->service.command(x[1]));buttons.add(b);}
-            add(left,BorderLayout.CENTER);add(buttons,BorderLayout.EAST);refresh();
+    private static final class DashboardPlayer extends JPanel{
+        private final MusicService service=MusicService.instance();
+        private final Window owner;
+        private final JLabel now=new JLabel("Nothing Playing");
+        private final JLabel detail=new JLabel("Open Music & Audio to connect Apple Music");
+        private final JLabel connection=new JLabel();
+        private final JProgressBar progress=new JProgressBar(0,1000);
+        private final javax.swing.Timer refreshTimer;
+
+        DashboardPlayer(Window owner){
+            super(new BorderLayout(10,8));
+            this.owner=owner;
+            setBackground(Theme.panel());
+            setBorder(BorderFactory.createCompoundBorder(
+                    BorderFactory.createLineBorder(Theme.border(),1,true),
+                    new EmptyBorder(10,12,10,12)
+            ));
+
+            JButton open=new JButton("Music & Audio");
+            open.setMargin(new Insets(3,9,3,9));
+            open.setToolTipText("Open the full Music & Audio workspace");
+            open.addActionListener(e->showMusic(owner));
+
+            connection.setForeground(Theme.muted());
+            connection.setFont(connection.getFont().deriveFont(Font.BOLD,9f));
+            connection.setHorizontalAlignment(SwingConstants.RIGHT);
+
+            JPanel top=new JPanel(new BorderLayout(8,0));
+            top.setOpaque(false);
+            top.add(open,BorderLayout.WEST);
+            top.add(connection,BorderLayout.EAST);
+            add(top,BorderLayout.NORTH);
+
+            now.setForeground(Theme.text());
+            now.setFont(now.getFont().deriveFont(Font.BOLD,16f));
+            detail.setForeground(Theme.muted());
+            detail.setFont(detail.getFont().deriveFont(10f));
+
+            progress.setOpaque(false);
+            progress.setBorderPainted(false);
+            progress.setStringPainted(false);
+            progress.setPreferredSize(new Dimension(120,5));
+            progress.setMaximumSize(new Dimension(Integer.MAX_VALUE,5));
+
+            JPanel track=new JPanel();
+            track.setOpaque(false);
+            track.setLayout(new BoxLayout(track,BoxLayout.Y_AXIS));
+            track.add(now);
+            track.add(Box.createVerticalStrut(2));
+            track.add(detail);
+            track.add(Box.createVerticalStrut(5));
+            track.add(progress);
+            add(track,BorderLayout.CENTER);
+
+            JPanel buttons=new JPanel(new FlowLayout(FlowLayout.LEFT,5,0));
+            buttons.setOpaque(false);
+            for(String[] control:new String[][]{
+                    {"◀","prev"},{"▶","play"},{"❚❚","pause"},{"▶▶","next"}
+            }){
+                JButton button=new JButton(control[0]);
+                button.setMargin(new Insets(2,8,2,8));
+                button.addActionListener(e->service.command(control[1]));
+                buttons.add(button);
+            }
+            add(buttons,BorderLayout.SOUTH);
+
+            refreshTimer=new javax.swing.Timer(1000,e->refresh());
+            refreshTimer.setCoalesce(true);
+            refresh();
         }
-        private void refresh(){PlaybackState p=service.playback();now.setText("♫  "+p.title()+("".equals(p.artist())?"":" — "+p.artist()));}
+
+        @Override public void addNotify(){
+            super.addNotify();
+            refreshTimer.start();
+        }
+
+        @Override public void removeNotify(){
+            refreshTimer.stop();
+            super.removeNotify();
+        }
+
+        private void refresh(){
+            PlaybackState state=service.playback();
+            String title=state.title()==null||state.title().isBlank()
+                    ?"Nothing Playing":state.title();
+            now.setText(title);
+
+            String artist=state.artist()==null?"":state.artist().trim();
+            String album=state.album()==null?"":state.album().trim();
+            String secondary=artist;
+            if(!album.isBlank())secondary=secondary.isBlank()?album:secondary+" • "+album;
+            if(secondary.isBlank())secondary="Open Music & Audio to choose a playlist";
+            detail.setText(secondary);
+
+            boolean connected=service.connected();
+            connection.setText(connected?"● APPLE MUSIC CONNECTED":"○ APPLE MUSIC OFFLINE");
+            connection.setForeground(connected?Theme.good():Theme.muted());
+
+            double duration=Math.max(0,state.duration());
+            double current=Math.max(0,state.current());
+            int value=duration<=0?0:(int)Math.round(Math.min(1,current/duration)*1000);
+            progress.setValue(Math.max(0,Math.min(1000,value)));
+        }
     }
 }
