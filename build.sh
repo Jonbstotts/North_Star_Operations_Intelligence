@@ -367,8 +367,20 @@ if [ ! -f lib/jcodec-0.2.5.jar ] || [ ! -f lib/jcodec-javase-0.2.5.jar ]; then
   echo "ERROR: required JCodec 0.2.5 startup-video libraries are missing from lib/." >&2
   exit 1
 fi
-if [ ! -f src/com/wtm/ui/StartupExperienceManager.java ] || ! grep -Fq 'peekStartupExperience' src/com/wtm/config/ConfigService.java; then
-  echo "ERROR: canonical optional startup-experience ownership is missing." >&2
+if [ ! -f src/com/wtm/ui/StartupExperienceManager.java ] || \
+   [ ! -f src/com/wtm/ui/StartupPresentationLayout.java ] || \
+   [ ! -f src/com/wtm/ui/StartupLoginDialog.java ] || \
+   [ ! -f src/com/wtm/ui/LoginFormPanel.java ] || \
+   ! grep -Fq 'peekStartupExperience' src/com/wtm/config/ConfigService.java || \
+   ! grep -Fq 'StartupLoginDialog.authenticate' src/com/wtm/app/Main.java; then
+  echo "ERROR: canonical startup presentation/login ownership is missing." >&2
+  exit 1
+fi
+if grep -Fq 'SwingUtilities.invokeAndWait' src/com/wtm/ui/StartupExperienceManager.java || \
+   grep -Fq '33_333_333' src/com/wtm/ui/StartupExperienceManager.java || \
+   ! grep -Fq 'getNativeFrameWithMetadata' src/com/wtm/ui/StartupExperienceManager.java || \
+   ! grep -Fq 'ArrayBlockingQueue' src/com/wtm/ui/StartupExperienceManager.java; then
+  echo "ERROR: blocking/fixed-rate startup video playback regression detected." >&2
   exit 1
 fi
 if grep -Fq 'Theme.setActive(resolved.id())' src/com/wtm/ui/ThemeStyler.java; then
@@ -432,12 +444,14 @@ javac --release 21 -Xlint:unchecked -Werror -encoding UTF-8 -cp 'out:lib/*' -d /
   ci/DashboardGridMigrationSmokeTest.java \
   ci/ConfigRoundTripSmokeTest.java \
   ci/TickerGeometrySmokeTest.java \
-  ci/BasemapProviderSmokeTest.java
+  ci/BasemapProviderSmokeTest.java \
+  ci/StartupPresentationLayoutSmokeTest.java
 java -Djava.awt.headless=true -cp '/tmp/ns-foundation-smoke:out:lib/*' WeatherAlertPolicySmokeTest
 java -Djava.awt.headless=true -cp '/tmp/ns-foundation-smoke:out:lib/*' DashboardGridMigrationSmokeTest
 java -Djava.awt.headless=true -cp '/tmp/ns-foundation-smoke:out:lib/*' ConfigRoundTripSmokeTest
 java -Djava.awt.headless=true -cp '/tmp/ns-foundation-smoke:out:lib/*' TickerGeometrySmokeTest
 java -Djava.awt.headless=true -cp '/tmp/ns-foundation-smoke:out:lib/*' BasemapProviderSmokeTest
+java -Djava.awt.headless=true -cp '/tmp/ns-foundation-smoke:out:lib/*' StartupPresentationLayoutSmokeTest
 
 # Runtime branding is mandatory. NorthStarBrand loads these classpath resources
 # during application startup, so a release JAR without them is not launchable.
