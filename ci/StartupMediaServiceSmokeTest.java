@@ -35,7 +35,7 @@ public final class StartupMediaServiceSmokeTest {
                 throw new AssertionError("PNG writer unavailable");
             Files.setLastModifiedTime(poster,FileTime.fromMillis(base+5_000L));
 
-            BufferedImage loaded=StartupMediaService.posterFor(video);
+            BufferedImage loaded=StartupMediaService.cachedPosterFor(video);
             require(loaded!=null,"fresh poster cache was not loaded");
             require(loaded.getWidth()==3&&loaded.getHeight()==2,
                     "cached poster dimensions changed");
@@ -44,20 +44,27 @@ public final class StartupMediaServiceSmokeTest {
                             &&loaded.getRGB(2,1)==expected.getRGB(2,1),
                     "cached poster pixels changed");
 
+            // Startup cache reads must never decode stale legacy video bytes.
+            // Invalid source bytes therefore return null immediately here rather
+            // than throwing from JCodec on the application-launch path.
             Files.setLastModifiedTime(video,FileTime.fromMillis(base+10_000L));
-            boolean staleRejected=false;
+            BufferedImage stale=StartupMediaService.cachedPosterFor(video);
+            require(stale==null,"stale poster cache was treated as fresh");
+
+            boolean migrationDecodeAttempted=false;
             try{
-                StartupMediaService.posterFor(video);
+                StartupMediaService.ensurePosterFor(video);
             }catch(Exception expectedFailure){
-                staleRejected=true;
+                migrationDecodeAttempted=true;
             }
-            require(staleRejected,"stale poster cache did not force source revalidation");
+            require(migrationDecodeAttempted,
+                    "background/import poster generation did not revalidate source media");
 
             Path outside=home.resolve("outside.mp4");
             Files.write(outside,new byte[]{1,2,3});
             boolean outsideRejected=false;
             try{
-                StartupMediaService.posterFor(outside);
+                StartupMediaService.cachedPosterFor(outside);
             }catch(Exception expectedFailure){
                 outsideRejected=true;
             }
