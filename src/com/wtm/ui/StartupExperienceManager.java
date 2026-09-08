@@ -25,10 +25,10 @@ import java.util.function.Consumer;
  * Source-owned startup movie presentation.
  *
  * Frames are decoded off the Swing event thread, buffered, and presented from
- * their container timestamps. The EDT never blocks on video decoding and no
- * fixed frame-rate assumption is made. The selected movie's final full-quality
- * frame is loaded from StartupMediaService's lossless cache so movie playback,
- * Skip Intro, and the resting login identity all share one source of truth.
+ * their container timestamps. Startup never blocks while extracting a resting
+ * frame from legacy media: cached posters are read immediately and any missing
+ * poster is migrated on a low-priority background thread. A complete intro
+ * playback also refreshes that same lossless final-frame cache.
  */
 public final class StartupExperienceManager {
     private static final int FRAME_BUFFER_CAPACITY=36;
@@ -37,6 +37,7 @@ public final class StartupExperienceManager {
 
     private static volatile BufferedImage preparedPoster;
     private static volatile Path preparedVideo;
+    private static volatile Path posterMigrationVideo;
 
     private StartupExperienceManager(){}
 
@@ -49,28 +50,29 @@ public final class StartupExperienceManager {
     ){}
 
     /**
-     * Loads the cached final movie frame while normal application loading is
-     * already occurring. Older imported movies are upgraded to the cache once;
-     * subsequent startups only decode the lossless PNG poster.
+     * Prepares startup identity without putting movie decoding on the launch
+     * critical path. New imports already have a poster. Older imports are read
+     * cache-only here and upgraded asynchronously if necessary.
      */
     public static void preparePoster(AppConfig config){
         Path video=resolveVideo(config);
         if(video==null){
             preparedPoster=null;
             preparedVideo=null;
+            posterMigrationVideo=null;
             return;
         }
         if(video.equals(preparedVideo)&&preparedPoster!=null)return;
 
+        preparedVideo=video;
         try{
-            BufferedImage poster=StartupMediaService.posterFor(video);
-            preparedPoster=poster;
-            preparedVideo=video;
+            BufferedImage cached=StartupMediaService.cachedPosterFor(video);
+            preparedPoster=cached;
+            if(cached==null)startPosterMigration(video);
         }catch(Throwable ex){
             preparedPoster=null;
-            preparedVideo=video;
             AuditService.record(
-                    "Startup poster preparation failed: "+ex.getClass().getSimpleName());
+                    "Startup poster cache read failed: "+ex.getClass().getSimpleName());
         }
     }
 
@@ -98,6 +100,26 @@ public final class StartupExperienceManager {
         return true;
     }
 
+    private static void startPosterMigration(Path video){
+        if(video==null||video.equals(posterMigrationVideo))return;
+        posterMigrationVideo=video;
+        Thread worker=new Thread(()->{
+            try{
+                BufferedImage generated=StartupMediaService.ensurePosterFor(video);
+                if(generated!=null&&video.equals(preparedVideo))
+                    preparedPoster=generated;
+            }catch(Throwable ex){
+                AuditService.record(
+                        "Startup poster background migration failed: "+ex.getClass().getSimpleName());
+            }finally{
+                if(video.equals(posterMigrationVideo))posterMigrationVideo=null;
+            }
+        },"northstar-startup-poster-migration");
+        worker.setDaemon(true);
+        worker.setPriority(Thread.MIN_PRIORITY);
+        worker.start();
+    }
+
     private static Path resolveVideo(AppConfig config){
         if(config==null||config.startupVideoAsset==null||config.startupVideoAsset.isBlank())return null;
         return MediaService.resolve(MediaCategory.STARTUP_MEDIA,config.startupVideoAsset);
@@ -117,6 +139,7 @@ public final class StartupExperienceManager {
 
         private volatile boolean stopRequested;
         private volatile boolean decodingComplete;
+        private volatile boolean reachedEndOfStream;
         private volatile Throwable decodeFailure;
         private volatile double firstTimestamp=Double.NaN;
         private volatile double lastPresentedEnd=Double.NaN;
@@ -183,7 +206,10 @@ public final class StartupExperienceManager {
                 FrameGrab grab=FrameGrab.createFrameGrab(channel);
                 while(!stopRequested){
                     PictureWithMetadata decoded=grab.getNativeFrameWithMetadata();
-                    if(decoded==null)break;
+                    if(decoded==null){
+                        reachedEndOfStream=true;
+                        break;
+                    }
                     BufferedImage full=AWTUtil.toBufferedImage(decoded.getPicture());
                     lastFullFrame=full;
                     BufferedImage display=scaleContained(full,targetSize.width,targetSize.height);
@@ -209,10 +235,11 @@ public final class StartupExperienceManager {
             }finally{
                 NIOUtils.closeQuietly(channel);
                 decodingComplete=true;
-                if(lastFullFrame!=null){
+                if(reachedEndOfStream&&lastFullFrame!=null&&decodeFailure==null){
                     poster=lastFullFrame;
                     preparedPoster=lastFullFrame;
                     preparedVideo=video;
+                    StartupMediaService.cachePoster(video,lastFullFrame);
                 }
                 SwingUtilities.invokeLater(this::startPlaybackIfReady);
             }
@@ -273,9 +300,18 @@ public final class StartupExperienceManager {
             if(!finished.compareAndSet(false,true))return;
             stopRequested=true;
             displayTimer.stop();
+
+            BufferedImage resting=poster;
+            if(resting==null&&video.equals(preparedVideo))resting=preparedPoster;
+            if(resting==null){
+                try{resting=StartupMediaService.cachedPosterFor(video);}
+                catch(Exception ignored){}
+            }
+            if(resting==null&&exit==Exit.COMPLETED)resting=lastFullFrame;
+
             setVisible(false);
             dispose();
-            completion.accept(new IntroResult(exit,poster,new Rectangle(loginBounds)));
+            completion.accept(new IntroResult(exit,resting,new Rectangle(loginBounds)));
         }
     }
 

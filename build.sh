@@ -374,13 +374,19 @@ if [ ! -f src/com/wtm/ui/StartupExperienceManager.java ] || \
    [ ! -f src/com/wtm/media/StartupMediaService.java ] || \
    ! grep -Fq 'peekStartupExperience' src/com/wtm/config/ConfigService.java || \
    ! grep -Fq 'StartupLoginDialog.authenticate' src/com/wtm/app/Main.java || \
-   ! grep -Fq 'StartupMediaService.posterFor(video)' src/com/wtm/ui/StartupExperienceManager.java || \
+   ! grep -Fq 'StartupMediaService.cachedPosterFor(video)' src/com/wtm/ui/StartupExperienceManager.java || \
    ! grep -Fq 'StartupMediaService.importVideo' src/com/wtm/ui/SettingsDialog.java; then
   echo "ERROR: canonical startup presentation/media ownership is missing." >&2
   exit 1
 fi
 if grep -Fq 'MediaService.importStartupVideo' src/com/wtm/ui/SettingsDialog.java; then
   echo "ERROR: Settings bypassed StartupMediaService final-frame validation/cache ownership." >&2
+  exit 1
+fi
+if grep -Fq 'seekToFramePrecise' src/com/wtm/media/StartupMediaService.java || \
+   grep -Fq 'seekToSecondPrecise' src/com/wtm/media/StartupMediaService.java || \
+   ! grep -Fq 'startPosterMigration(video)' src/com/wtm/ui/StartupExperienceManager.java; then
+  echo "ERROR: startup resting-frame migration can block or regress launch responsiveness." >&2
   exit 1
 fi
 if grep -Fq 'SwingUtilities.invokeAndWait' src/com/wtm/ui/StartupExperienceManager.java || \
@@ -453,7 +459,8 @@ javac --release 21 -Xlint:unchecked -Werror -encoding UTF-8 -cp 'out:lib/*' -d /
   ci/TickerGeometrySmokeTest.java \
   ci/BasemapProviderSmokeTest.java \
   ci/StartupPresentationLayoutSmokeTest.java \
-  ci/StartupMediaServiceSmokeTest.java
+  ci/StartupMediaServiceSmokeTest.java \
+  ci/StartupLaunchResponsivenessSmokeTest.java
 java -Djava.awt.headless=true -cp '/tmp/ns-foundation-smoke:out:lib/*' WeatherAlertPolicySmokeTest
 java -Djava.awt.headless=true -cp '/tmp/ns-foundation-smoke:out:lib/*' DashboardGridMigrationSmokeTest
 java -Djava.awt.headless=true -cp '/tmp/ns-foundation-smoke:out:lib/*' ConfigRoundTripSmokeTest
@@ -461,6 +468,7 @@ java -Djava.awt.headless=true -cp '/tmp/ns-foundation-smoke:out:lib/*' TickerGeo
 java -Djava.awt.headless=true -cp '/tmp/ns-foundation-smoke:out:lib/*' BasemapProviderSmokeTest
 java -Djava.awt.headless=true -cp '/tmp/ns-foundation-smoke:out:lib/*' StartupPresentationLayoutSmokeTest
 java -Djava.awt.headless=true -cp '/tmp/ns-foundation-smoke:out:lib/*' StartupMediaServiceSmokeTest
+java -Djava.awt.headless=true -cp '/tmp/ns-foundation-smoke:out:lib/*' StartupLaunchResponsivenessSmokeTest
 
 # Runtime branding is mandatory. NorthStarBrand loads these classpath resources
 # during application startup, so a release JAR without them is not launchable.

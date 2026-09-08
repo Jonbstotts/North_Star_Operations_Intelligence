@@ -18,13 +18,16 @@ import java.util.Objects;
 /**
  * Owns startup-video validation and the lossless resting-frame cache.
  *
- * The selected intro movie is the single source of truth for startup identity:
- * its final decodable frame is cached as PNG once at import time and reused by
- * the login screen, Skip Intro, and future startups. Startup therefore never
- * needs to seek through the movie merely to reconstruct the resting artwork.
+ * Newly imported intro movies create their final-frame PNG before Settings
+ * accepts them. Startup itself never decodes a legacy movie merely to discover
+ * that poster: it reads the cache only and, when needed, lets a background
+ * migration prepare it. This keeps application launch responsive even when an
+ * existing high-resolution intro predates the poster cache.
  */
 public final class StartupMediaService {
     private static final String POSTER_CACHE_DIR=".poster-cache";
+    private static final double FINAL_FRAME_LOOKBACK_SECONDS=2.0;
+    private static final int FINAL_FRAME_LOOKBACK_FRAMES=90;
 
     private StartupMediaService(){}
 
@@ -36,7 +39,7 @@ public final class StartupMediaService {
     public static Path importVideo(Path source) throws IOException {
         Path managed=MediaService.importStartupVideo(source);
         try{
-            BufferedImage poster=posterFor(managed);
+            BufferedImage poster=ensurePosterFor(managed);
             if(poster==null)
                 throw new IOException("The startup video did not contain a readable video frame.");
             return managed;
@@ -47,8 +50,24 @@ public final class StartupMediaService {
         }
     }
 
-    /** Returns the cached final frame, generating it once for pre-cache imports. */
-    public static BufferedImage posterFor(Path managedVideo) throws IOException {
+    /**
+     * Reads a fresh cached final frame without decoding the movie.
+     *
+     * Returning {@code null} means the cache is missing or stale. This method is
+     * intentionally safe for the application-launch path.
+     */
+    public static BufferedImage cachedPosterFor(Path managedVideo) throws IOException {
+        Path video=validatedManagedVideo(managedVideo);
+        if(video==null)return null;
+        return readFreshPoster(video,posterPath(video));
+    }
+
+    /**
+     * Returns the final-frame poster, decoding only when the cache is absent.
+     * Use this for user-initiated import or background migration, not inline on
+     * the startup critical path.
+     */
+    public static BufferedImage ensurePosterFor(Path managedVideo) throws IOException {
         Path video=validatedManagedVideo(managedVideo);
         if(video==null)return null;
 
@@ -64,8 +83,8 @@ public final class StartupMediaService {
     }
 
     /**
-     * Saves the exact final frame observed during normal playback. This is a
-     * repair path for older media whose poster cache was missing or stale.
+     * Saves the exact final frame observed during a complete normal playback.
+     * Incomplete/skipped playback must not call this method with an early frame.
      */
     public static void cachePoster(Path managedVideo,BufferedImage image){
         if(image==null)return;
@@ -79,10 +98,10 @@ public final class StartupMediaService {
         }
     }
 
-    /** Resolves and returns the cached poster for one managed asset name. */
+    /** Resolves and ensures the poster for one managed startup asset name. */
     public static BufferedImage posterForAsset(String assetName) throws IOException {
         Path video=MediaService.resolve(MediaCategory.STARTUP_MEDIA,assetName);
-        return video==null?null:posterFor(video);
+        return video==null?null:ensurePosterFor(video);
     }
 
     private static BufferedImage readFreshPoster(Path video,Path poster){
@@ -97,6 +116,11 @@ public final class StartupMediaService {
         }
     }
 
+    /**
+     * Extracts the actual final decodable frame without a precise full-stream
+     * seek. Sloppy seek positions at a nearby key frame and only decodes the
+     * short tail, which is dramatically cheaper for large legacy intro videos.
+     */
     private static BufferedImage decodeFinalFrame(Path video) throws IOException {
         SeekableByteChannel channel=null;
         try{
@@ -104,10 +128,12 @@ public final class StartupMediaService {
             FrameGrab grab=FrameGrab.createFrameGrab(channel);
             DemuxerTrackMeta meta=grab.getVideoTrack().getMeta();
 
-            if(meta!=null&&meta.getTotalFrames()>1){
-                grab.seekToFramePrecise(Math.max(0,meta.getTotalFrames()-1));
-            }else if(meta!=null&&meta.getTotalDuration()>0){
-                grab.seekToSecondPrecise(Math.max(0,meta.getTotalDuration()-.25));
+            if(meta!=null&&meta.getTotalDuration()>0){
+                grab.seekToSecondSloppy(Math.max(
+                        0,meta.getTotalDuration()-FINAL_FRAME_LOOKBACK_SECONDS));
+            }else if(meta!=null&&meta.getTotalFrames()>1){
+                grab.seekToFrameSloppy(Math.max(
+                        0,meta.getTotalFrames()-FINAL_FRAME_LOOKBACK_FRAMES));
             }
 
             BufferedImage last=null;
