@@ -3,13 +3,12 @@ package com.wtm.ui;
 import com.wtm.config.AppConfig;
 import com.wtm.media.MediaCategory;
 import com.wtm.media.MediaService;
+import com.wtm.media.StartupMediaService;
 import com.wtm.security.AuditService;
 import org.jcodec.api.FrameGrab;
 import org.jcodec.api.PictureWithMetadata;
-import org.jcodec.common.DemuxerTrackMeta;
 import org.jcodec.common.io.NIOUtils;
 import org.jcodec.common.io.SeekableByteChannel;
-import org.jcodec.common.model.Picture;
 import org.jcodec.scale.AWTUtil;
 
 import javax.swing.*;
@@ -28,9 +27,8 @@ import java.util.function.Consumer;
  * Frames are decoded off the Swing event thread, buffered, and presented from
  * their container timestamps. The EDT never blocks on video decoding and no
  * fixed frame-rate assumption is made. The selected movie's final full-quality
- * frame is also prepared as the startup-login poster, guaranteeing a seamless
- * movie-to-logo handoff without maintaining a second manually synchronized
- * still image.
+ * frame is loaded from StartupMediaService's lossless cache so movie playback,
+ * Skip Intro, and the resting login identity all share one source of truth.
  */
 public final class StartupExperienceManager {
     private static final int FRAME_BUFFER_CAPACITY=36;
@@ -51,8 +49,9 @@ public final class StartupExperienceManager {
     ){}
 
     /**
-     * Prepares the exact final movie frame while normal application loading is
-     * already occurring. This keeps Skip Intro and no-intro startup immediate.
+     * Loads the cached final movie frame while normal application loading is
+     * already occurring. Older imported movies are upgraded to the cache once;
+     * subsequent startups only decode the lossless PNG poster.
      */
     public static void preparePoster(AppConfig config){
         Path video=resolveVideo(config);
@@ -64,11 +63,9 @@ public final class StartupExperienceManager {
         if(video.equals(preparedVideo)&&preparedPoster!=null)return;
 
         try{
-            BufferedImage poster=decodeFinalFrame(video);
-            if(poster!=null){
-                preparedPoster=poster;
-                preparedVideo=video;
-            }
+            BufferedImage poster=StartupMediaService.posterFor(video);
+            preparedPoster=poster;
+            preparedVideo=video;
         }catch(Throwable ex){
             preparedPoster=null;
             preparedVideo=video;
@@ -104,23 +101,6 @@ public final class StartupExperienceManager {
     private static Path resolveVideo(AppConfig config){
         if(config==null||config.startupVideoAsset==null||config.startupVideoAsset.isBlank())return null;
         return MediaService.resolve(MediaCategory.STARTUP_MEDIA,config.startupVideoAsset);
-    }
-
-    private static BufferedImage decodeFinalFrame(Path video)throws Exception{
-        SeekableByteChannel channel=null;
-        try{
-            channel=NIOUtils.readableChannel(video.toFile());
-            FrameGrab grab=FrameGrab.createFrameGrab(channel);
-            DemuxerTrackMeta meta=grab.getVideoTrack().getMeta();
-            int total=meta==null?0:meta.getTotalFrames();
-            if(total>0)grab.seekToFramePrecise(Math.max(0,total-1));
-            else if(meta!=null&&meta.getTotalDuration()>0)
-                grab.seekToSecondPrecise(Math.max(0,meta.getTotalDuration()-.05));
-            Picture picture=grab.getNativeFrame();
-            return picture==null?null:AWTUtil.toBufferedImage(picture);
-        }finally{
-            NIOUtils.closeQuietly(channel);
-        }
     }
 
     private static final class IntroWindow extends JWindow {
