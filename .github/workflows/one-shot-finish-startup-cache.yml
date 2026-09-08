@@ -1,5 +1,6 @@
 name: Validate Startup Poster Cache Branch
 
+# Temporary branch validator; removed after the source is merged and canonical CI passes.
 on:
   push:
     branches: [ master ]
