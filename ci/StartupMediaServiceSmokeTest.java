@@ -1,4 +1,5 @@
-import com.wtm.config.ConfigService;
+import com.wtm.media.MediaCategory;
+import com.wtm.media.MediaService;
 import com.wtm.media.StartupMediaService;
 
 import javax.imageio.ImageIO;
@@ -15,9 +16,7 @@ public final class StartupMediaServiceSmokeTest {
         Path home=Files.createTempDirectory("northstar-startup-media-smoke-");
         try{
             System.setProperty("user.home",home.toString());
-            Path startup=ConfigService.appDataDir()
-                    .resolve("media-library")
-                    .resolve("startup-media");
+            Path startup=MediaService.directory(MediaCategory.STARTUP_MEDIA);
             Files.createDirectories(startup);
 
             Path video=startup.resolve("intro.mp4");
