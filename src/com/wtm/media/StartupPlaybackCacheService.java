@@ -340,6 +340,7 @@ public final class StartupPlaybackCacheService {
         private Reader(Cache cache) throws IOException {
             zip=new ZipFile(cache.path().toFile());
             List<ZipEntry> frames=zip.stream()
+                    .map(ZipEntry.class::cast)
                     .filter(entry->!entry.isDirectory()&&entry.getName().startsWith(FRAME_PREFIX))
                     .sorted(Comparator.comparing(ZipEntry::getName))
                     .toList();

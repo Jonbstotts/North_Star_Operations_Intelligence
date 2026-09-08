@@ -371,7 +371,9 @@ if [ ! -f src/com/wtm/ui/StartupExperienceManager.java ] || \
    [ ! -f src/com/wtm/ui/StartupPresentationLayout.java ] || \
    [ ! -f src/com/wtm/ui/StartupLoginDialog.java ] || \
    [ ! -f src/com/wtm/ui/LoginFormPanel.java ] || \
+   [ ! -f src/com/wtm/ui/StartupTransitionPolicy.java ] || \
    [ ! -f src/com/wtm/media/StartupMediaService.java ] || \
+   [ ! -f src/com/wtm/media/StartupPlaybackCacheService.java ] || \
    ! grep -Fq 'peekStartupExperience' src/com/wtm/config/ConfigService.java || \
    ! grep -Fq 'StartupLoginDialog.authenticate' src/com/wtm/app/Main.java || \
    ! grep -Fq 'StartupMediaService.cachedPosterFor(video)' src/com/wtm/ui/StartupExperienceManager.java || \
@@ -387,6 +389,19 @@ if grep -Fq 'seekToFramePrecise' src/com/wtm/media/StartupMediaService.java || \
    grep -Fq 'seekToSecondPrecise' src/com/wtm/media/StartupMediaService.java || \
    ! grep -Fq 'startPosterMigration(video)' src/com/wtm/ui/StartupExperienceManager.java; then
   echo "ERROR: startup resting-frame migration can block or regress launch responsiveness." >&2
+  exit 1
+fi
+if ! grep -Fq 'StartupPlaybackCacheService.openFresh' src/com/wtm/ui/StartupExperienceManager.java || \
+   ! grep -Fq 'StartupPlaybackCacheService.ensure' src/com/wtm/ui/StartupExperienceManager.java || \
+   ! grep -Fq 'StartupTransitionPolicy.revealProgress' src/com/wtm/ui/StartupLoginDialog.java; then
+  echo "ERROR: display-ready startup playback/reveal ownership is missing." >&2
+  exit 1
+fi
+if ! grep -Fq 'Theme.setActive(AppTheme.NORTH_STAR.id())' src/com/wtm/app/Main.java || \
+   ! grep -Fq 'Theme.setActive(workspaceTheme.id())' src/com/wtm/app/Main.java || \
+   ! grep -Fq 'Theme.setActive(AppTheme.NORTH_STAR.id())' src/com/wtm/ui/StartupLoginDialog.java || \
+   grep -Fq 'Theme.setActive(requestedTheme' src/com/wtm/ui/StartupLoginDialog.java; then
+  echo "ERROR: startup branding and saved workspace theme are no longer isolated." >&2
   exit 1
 fi
 if grep -Fq 'SwingUtilities.invokeAndWait' src/com/wtm/ui/StartupExperienceManager.java || \
@@ -460,7 +475,9 @@ javac --release 21 -Xlint:unchecked -Werror -encoding UTF-8 -cp 'out:lib/*' -d /
   ci/BasemapProviderSmokeTest.java \
   ci/StartupPresentationLayoutSmokeTest.java \
   ci/StartupMediaServiceSmokeTest.java \
-  ci/StartupLaunchResponsivenessSmokeTest.java
+  ci/StartupLaunchResponsivenessSmokeTest.java \
+  ci/StartupPlaybackCacheSmokeTest.java \
+  ci/StartupTransitionPolicySmokeTest.java
 java -Djava.awt.headless=true -cp '/tmp/ns-foundation-smoke:out:lib/*' WeatherAlertPolicySmokeTest
 java -Djava.awt.headless=true -cp '/tmp/ns-foundation-smoke:out:lib/*' DashboardGridMigrationSmokeTest
 java -Djava.awt.headless=true -cp '/tmp/ns-foundation-smoke:out:lib/*' ConfigRoundTripSmokeTest
@@ -469,6 +486,8 @@ java -Djava.awt.headless=true -cp '/tmp/ns-foundation-smoke:out:lib/*' BasemapPr
 java -Djava.awt.headless=true -cp '/tmp/ns-foundation-smoke:out:lib/*' StartupPresentationLayoutSmokeTest
 java -Djava.awt.headless=true -cp '/tmp/ns-foundation-smoke:out:lib/*' StartupMediaServiceSmokeTest
 java -Djava.awt.headless=true -cp '/tmp/ns-foundation-smoke:out:lib/*' StartupLaunchResponsivenessSmokeTest
+java -Djava.awt.headless=true -cp '/tmp/ns-foundation-smoke:out:lib/*' StartupPlaybackCacheSmokeTest
+java -Djava.awt.headless=true -cp '/tmp/ns-foundation-smoke:out:lib/*' StartupTransitionPolicySmokeTest
 
 # Runtime branding is mandatory. NorthStarBrand loads these classpath resources
 # during application startup, so a release JAR without them is not launchable.
