@@ -9,15 +9,14 @@ import java.awt.event.WindowEvent;
 import java.awt.image.BufferedImage;
 
 /**
- * Startup-only authentication shell. The identity artwork stays stable at the
- * top while the login form can reveal beneath it after a completed intro.
- * Protected Settings re-authentication continues to use UserLoginDialog.
+ * Startup-only authentication shell. Startup identity is intentionally always
+ * NorthStar branded; the user's saved application theme is installed only after
+ * authentication, immediately before the operations workspace is constructed.
  */
 public final class StartupLoginDialog extends JDialog {
-    private static final int REVEAL_MILLIS=480;
-
     private final LoginFormPanel form;
     private final FadingPanel reveal;
+    private final Window handoffWindow;
     private UserAccount authenticated;
     private Timer revealTimer;
 
@@ -28,10 +27,14 @@ public final class StartupLoginDialog extends JDialog {
             String suggestedUsername,
             BufferedImage artwork,
             Rectangle requestedBounds,
-            boolean animateForm
+            boolean animateForm,
+            Window handoffWindow
     ){
         super(owner,"North Star Sign In",ModalityType.APPLICATION_MODAL);
-        Theme.setActive(requestedTheme==null?AppTheme.NORTH_STAR.id():requestedTheme.id());
+        /* Startup/login presentation is brand-owned. The requested application
+         * theme is deliberately not installed here. */
+        Theme.setActive(AppTheme.NORTH_STAR.id());
+        this.handoffWindow=handoffWindow;
         setDefaultCloseOperation(DISPOSE_ON_CLOSE);
         setResizable(false);
         getRootPane().putClientProperty("apple.awt.fullWindowContent",Boolean.TRUE);
@@ -75,7 +78,7 @@ public final class StartupLoginDialog extends JDialog {
         reveal=new FadingPanel(new BorderLayout());
         reveal.setBackground(Theme.panel());
         reveal.add(formHost,BorderLayout.CENTER);
-        reveal.setAlpha(animateForm?0f:1f);
+        reveal.setProgress(animateForm?0f:1f);
         shell.add(reveal,BorderLayout.CENTER);
         setContentPane(shell);
 
@@ -90,8 +93,14 @@ public final class StartupLoginDialog extends JDialog {
 
         addWindowListener(new WindowAdapter(){
             @Override public void windowOpened(WindowEvent e){
-                if(animateForm)startReveal();
-                else SwingUtilities.invokeLater(form::focusInitial);
+                /* The login window is painted before the frozen intro handoff is
+                 * released, so the final logo frame never flashes back to the
+                 * desktop between the two startup surfaces. */
+                SwingUtilities.invokeLater(()->{
+                    StartupExperienceManager.releaseHandoff(StartupLoginDialog.this.handoffWindow);
+                    if(animateForm)startReveal();
+                    else form.focusInitial();
+                });
             }
         });
     }
@@ -105,22 +114,37 @@ public final class StartupLoginDialog extends JDialog {
             Rectangle requestedBounds,
             boolean animateForm
     ){
+        return authenticate(
+                owner,message,theme,suggestedUsername,
+                artwork,requestedBounds,animateForm,null);
+    }
+
+    public static UserAccount authenticate(
+            Window owner,
+            String message,
+            AppTheme theme,
+            String suggestedUsername,
+            BufferedImage artwork,
+            Rectangle requestedBounds,
+            boolean animateForm,
+            Window handoffWindow
+    ){
         StartupLoginDialog dialog=new StartupLoginDialog(
-                owner,message,theme,suggestedUsername,artwork,requestedBounds,animateForm);
+                owner,message,theme,suggestedUsername,
+                artwork,requestedBounds,animateForm,handoffWindow);
         dialog.setVisible(true);
         return dialog.authenticated;
     }
 
     private void startReveal(){
         final long started=System.nanoTime();
-        revealTimer=new Timer(16,e->{
+        revealTimer=new Timer(StartupTransitionPolicy.TIMER_DELAY_MILLIS,e->{
             double elapsed=(System.nanoTime()-started)/1_000_000.0;
-            float t=(float)Math.max(0,Math.min(1,elapsed/REVEAL_MILLIS));
-            float eased=t*t*(3f-2f*t);
-            reveal.setAlpha(eased);
-            if(t>=1f){
+            float progress=StartupTransitionPolicy.revealProgress(elapsed);
+            reveal.setProgress(progress);
+            if(progress>=1f){
                 ((Timer)e.getSource()).stop();
-                reveal.setAlpha(1f);
+                reveal.setProgress(1f);
                 SwingUtilities.invokeLater(form::focusInitial);
             }
         });
@@ -139,20 +163,25 @@ public final class StartupLoginDialog extends JDialog {
     @Override public void dispose(){
         if(revealTimer!=null)revealTimer.stop();
         form.stop();
+        StartupExperienceManager.releaseHandoff(handoffWindow);
         super.dispose();
     }
 
     private static final class FadingPanel extends JPanel {
-        private float alpha=1f;
-        private FadingPanel(LayoutManager layout){super(layout);}
-        private void setAlpha(float value){
-            alpha=Math.max(0f,Math.min(1f,value));
+        private float progress=1f;
+        private FadingPanel(LayoutManager layout){
+            super(layout);
+            setDoubleBuffered(true);
+        }
+        private void setProgress(float value){
+            progress=Math.max(0f,Math.min(1f,value));
             repaint();
         }
         @Override public void paint(Graphics graphics){
             Graphics2D g=(Graphics2D)graphics.create();
             try{
-                g.setComposite(AlphaComposite.SrcOver.derive(alpha));
+                g.setComposite(AlphaComposite.SrcOver.derive(progress));
+                g.translate(0,StartupTransitionPolicy.verticalOffset(progress));
                 super.paint(g);
             }finally{g.dispose();}
         }
@@ -164,6 +193,7 @@ public final class StartupLoginDialog extends JDialog {
             this.artwork=artwork;
             setBackground(Color.BLACK);
             setOpaque(true);
+            setDoubleBuffered(true);
         }
         @Override protected void paintComponent(Graphics graphics){
             super.paintComponent(graphics);
