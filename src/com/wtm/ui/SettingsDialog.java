@@ -797,8 +797,10 @@ public final class SettingsDialog extends JDialog {
         addFull(p,y++,startupMediaControls);
         addFull(p,y++,new JLabel(
                 "<html>The intro is copied into North Star managed storage instead of the application JAR. "
-              + "H.264 MP4/MOV is recommended. Press <b>Esc</b> or <b>Skip Intro</b> during playback. "
-              + "This first portable implementation plays the visual track without audio.</html>"));
+              + "Its final decodable frame is cached losslessly and becomes the stationary login artwork "
+              + "for normal completion, <b>Skip Intro</b>, and startup with the intro disabled. "
+              + "For smooth portable playback, <b>1280×720 H.264 MP4 at 30 FPS constant frame rate</b> is recommended. "
+              + "Press <b>Esc</b> or <b>Skip Intro</b> during playback. The visual track plays without audio.</html>"));
 
         JLabel identity=new JLabel(
                 "<html><b>Application identity:</b> North Star Operations Intelligence. "
@@ -1871,7 +1873,7 @@ public final class SettingsDialog extends JDialog {
         JFileChooser chooser=ThemedFileChooser.chooseVideo(this);
         if(chooser==null||chooser.getSelectedFile()==null)return;
         try{
-            Path imported=MediaService.importStartupVideo(chooser.getSelectedFile().toPath());
+            Path imported=StartupMediaService.importVideo(chooser.getSelectedFile().toPath());
             pendingStartupVideoAsset=MediaService.assetName(imported);
             startupExperience.setSelectedItem("Intro Video");
             updateStartupVideoStatus();
