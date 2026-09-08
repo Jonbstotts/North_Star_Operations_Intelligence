@@ -18,8 +18,10 @@ public final class Main {
         System.setProperty("apple.awt.application.name","North Star Operations");
         System.setProperty("apple.awt.application.appearance","system");
         SwingUtilities.invokeLater(()->{
-            AppTheme bootTheme=AppTheme.fromId(ConfigService.peekThemeId());
-            Theme.setActive(bootTheme.id());
+            /* Startup identity is always NorthStar branded. The user's saved
+             * theme is resolved during configuration load but is installed only
+             * after authentication, immediately before the workspace is built. */
+            Theme.setActive(AppTheme.NORTH_STAR.id());
             ApplicationBrand.applyApplicationIcon();
 
             String bootExperience=ConfigService.peekStartupExperience();
@@ -45,10 +47,9 @@ public final class Main {
                     try{
                         AppConfig config=get();
                         prepareConfiguration(config);
-                        AppTheme theme=HolidayThemeService.effectiveTheme(
+                        AppTheme workspaceTheme=HolidayThemeService.effectiveTheme(
                                 config,java.time.LocalDate.now());
-                        config.darkMode=theme.dark();
-                        Theme.setActive(theme.id());
+                        config.darkMode=workspaceTheme.dark();
                         CallInServerManager.apply(config);
                         if(splash!=null)
                             splash.updateProgress(72,"Preparing secure user session...");
@@ -59,22 +60,23 @@ public final class Main {
                                     config,
                                     result->continueAfterStartupPresentation(
                                             config,
-                                            theme,
+                                            workspaceTheme,
                                             result.exit()==StartupExperienceManager.Exit.COMPLETED,
                                             result.poster(),
-                                            result.loginBounds()
+                                            result.loginBounds(),
+                                            result.handoffWindow()
                                     )
                             );
                             if(!started)
                                 continueAfterStartupPresentation(
-                                        config,theme,false,
-                                        StartupExperienceManager.preparedPoster(config),null);
+                                        config,workspaceTheme,false,
+                                        StartupExperienceManager.preparedPoster(config),null,null);
                             return;
                         }
 
                         Runnable next=()->continueAfterStartupPresentation(
-                                config,theme,false,
-                                StartupExperienceManager.preparedPoster(config),null);
+                                config,workspaceTheme,false,
+                                StartupExperienceManager.preparedPoster(config),null,null);
                         if(splash!=null){
                             splash.updateProgress(100,"North Star ready.");
                             Timer timer=new Timer(650,e->{
@@ -110,42 +112,52 @@ public final class Main {
 
     private static void continueAfterStartupPresentation(
             AppConfig config,
-            AppTheme theme,
+            AppTheme workspaceTheme,
             boolean animateStartupLogin,
             BufferedImage startupPoster,
-            Rectangle loginBounds
+            Rectangle loginBounds,
+            Window startupHandoff
     ){
         if(!UserService.hasUsers()){
+            StartupExperienceManager.releaseHandoff(startupHandoff);
             UserAccount initial=AuthService.hasPassword()
-                    ?LegacyAdminMigrationDialog.migrate(null,theme)
-                    :FirstAdminDialog.create(null,theme);
+                    ?LegacyAdminMigrationDialog.migrate(null,AppTheme.NORTH_STAR)
+                    :FirstAdminDialog.create(null,AppTheme.NORTH_STAR);
             if(initial==null)return;
             SessionManager.login(initial);
+            startupHandoff=null;
         }
         continueStartup(
-                config,theme,animateStartupLogin,startupPoster,loginBounds);
+                config,workspaceTheme,animateStartupLogin,
+                startupPoster,loginBounds,startupHandoff);
     }
 
     private static void continueStartup(
             AppConfig config,
-            AppTheme theme,
+            AppTheme workspaceTheme,
             boolean animateStartupLogin,
             BufferedImage startupPoster,
-            Rectangle loginBounds
+            Rectangle loginBounds,
+            Window startupHandoff
     ){
         if(config.loginRequiredOnStartup&&!SessionManager.isAuthenticated()){
             UserAccount account=StartupLoginDialog.authenticate(
                     null,
                     "Sign in to continue to the operations dashboard.",
-                    theme,
+                    AppTheme.NORTH_STAR,
                     "",
                     startupPoster,
                     loginBounds,
-                    animateStartupLogin
+                    animateStartupLogin,
+                    startupHandoff
             );
             if(account==null)return;
             SessionManager.login(account);
+            startupHandoff=null;
         }
+
+        StartupExperienceManager.releaseHandoff(startupHandoff);
+        Theme.setActive(workspaceTheme.id());
         OperationsWorkspaceFrame frame=new OperationsWorkspaceFrame(config);
         frame.setVisible(true);
     }
