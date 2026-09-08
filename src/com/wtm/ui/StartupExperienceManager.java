@@ -4,6 +4,7 @@ import com.wtm.config.AppConfig;
 import com.wtm.media.MediaCategory;
 import com.wtm.media.MediaService;
 import com.wtm.media.StartupMediaService;
+import com.wtm.media.StartupPlaybackCacheService;
 import com.wtm.security.AuditService;
 import org.jcodec.api.FrameGrab;
 import org.jcodec.api.PictureWithMetadata;
@@ -24,16 +25,15 @@ import java.util.function.Consumer;
 /**
  * Source-owned startup movie presentation.
  *
- * Frames are decoded off the Swing event thread, buffered, and presented from
- * their container timestamps. Startup never blocks while extracting a resting
- * frame from legacy media: cached posters are read immediately and any missing
- * poster is migrated on a low-priority background thread. A complete intro
- * playback also refreshes that same lossless final-frame cache.
+ * H.264 decoding is never expected to keep pace with the presentation clock.
+ * StartupPlaybackCacheService prepares display-ready lossless frames once and
+ * normal playback reads those frames sequentially. This keeps the visible
+ * animation fluid while retaining JCodec as the portable source decoder.
  */
 public final class StartupExperienceManager {
-    private static final int FRAME_BUFFER_CAPACITY=36;
-    private static final int INITIAL_BUFFER_FRAMES=18;
-    private static final int REBUFFER_FRAMES=6;
+    private static final int FRAME_BUFFER_CAPACITY=54;
+    private static final int INITIAL_BUFFER_FRAMES=24;
+    private static final int REBUFFER_FRAMES=12;
 
     private static volatile BufferedImage preparedPoster;
     private static volatile Path preparedVideo;
@@ -46,13 +46,15 @@ public final class StartupExperienceManager {
     public record IntroResult(
             Exit exit,
             BufferedImage poster,
-            Rectangle loginBounds
+            Rectangle loginBounds,
+            Window handoffWindow
     ){}
 
     /**
-     * Prepares startup identity without putting movie decoding on the launch
-     * critical path. New imports already have a poster. Older imports are read
-     * cache-only here and upgraded asynchronously if necessary.
+     * Reads only the lossless resting-frame cache on the startup critical path.
+     * If a non-video startup uses an older imported movie without a poster, that
+     * poster can still migrate in the background. Intro playback builds both its
+     * playback cache and final poster together when either is missing.
      */
     public static void preparePoster(AppConfig config){
         Path video=resolveVideo(config);
@@ -68,7 +70,8 @@ public final class StartupExperienceManager {
         try{
             BufferedImage cached=StartupMediaService.cachedPosterFor(video);
             preparedPoster=cached;
-            if(cached==null)startPosterMigration(video);
+            boolean intro="INTRO_VIDEO".equalsIgnoreCase(config.startupExperience);
+            if(cached==null&&!intro)startPosterMigration(video);
         }catch(Throwable ex){
             preparedPoster=null;
             AuditService.record(
@@ -98,6 +101,19 @@ public final class StartupExperienceManager {
         window.setVisible(true);
         window.start();
         return true;
+    }
+
+    /** Releases the frozen final-frame window after the login shell is painted. */
+    public static void releaseHandoff(Window window){
+        if(window==null)return;
+        Runnable release=()->{
+            if(window.isDisplayable()){
+                window.setVisible(false);
+                window.dispose();
+            }
+        };
+        if(SwingUtilities.isEventDispatchThread())release.run();
+        else SwingUtilities.invokeLater(release);
     }
 
     private static void startPosterMigration(Path video){
@@ -136,6 +152,10 @@ public final class StartupExperienceManager {
         private final Rectangle loginBounds;
         private final Dimension targetSize;
         private final Timer displayTimer;
+        private final JPanel preparationPanel=new JPanel(new BorderLayout(8,0));
+        private final JLabel preparationLabel=new JLabel("Preparing startup animation…");
+        private final JProgressBar preparationProgress=new JProgressBar(0,100);
+        private final JPanel footer=new JPanel(new BorderLayout(10,0));
 
         private volatile boolean stopRequested;
         private volatile boolean decodingComplete;
@@ -144,7 +164,9 @@ public final class StartupExperienceManager {
         private volatile double firstTimestamp=Double.NaN;
         private volatile double lastPresentedEnd=Double.NaN;
         private volatile BufferedImage lastFullFrame;
+        private volatile BufferedImage lastDisplayFrame;
         private volatile BufferedImage poster;
+        private volatile Thread sourceThread;
         private long playbackBaseNanos;
         private boolean buffering;
         private long bufferStartedNanos;
@@ -173,13 +195,27 @@ public final class StartupExperienceManager {
             );
 
             videoPanel.setLayout(new BorderLayout());
-            JPanel controls=new JPanel(new FlowLayout(FlowLayout.RIGHT,12,10));
-            controls.setOpaque(false);
+            if(prepared!=null)
+                videoPanel.setFrame(scaleContained(prepared,targetSize.width,targetSize.height));
+
+            preparationPanel.setOpaque(false);
+            preparationLabel.setForeground(new Color(205,221,235));
+            preparationLabel.setFont(new Font(Font.SANS_SERIF,Font.PLAIN,11));
+            preparationProgress.setPreferredSize(new Dimension(150,7));
+            preparationProgress.setBorderPainted(false);
+            preparationProgress.setStringPainted(false);
+            preparationPanel.add(preparationLabel,BorderLayout.WEST);
+            preparationPanel.add(preparationProgress,BorderLayout.CENTER);
+            preparationPanel.setVisible(false);
+
+            footer.setOpaque(false);
+            footer.setBorder(BorderFactory.createEmptyBorder(10,12,10,12));
+            footer.add(preparationPanel,BorderLayout.CENTER);
             JButton skip=new JButton("Skip Intro");
             skip.setFocusable(false);
             skip.addActionListener(e->finish(Exit.SKIPPED));
-            controls.add(skip);
-            videoPanel.add(controls,BorderLayout.SOUTH);
+            footer.add(skip,BorderLayout.EAST);
+            videoPanel.add(footer,BorderLayout.SOUTH);
             setContentPane(videoPanel);
 
             getRootPane().registerKeyboardAction(
@@ -194,12 +230,67 @@ public final class StartupExperienceManager {
         }
 
         void start(){
-            Thread decoder=new Thread(this::decodeLoop,"northstar-startup-video-decoder");
-            decoder.setDaemon(true);
-            decoder.start();
+            sourceThread=new Thread(
+                    this::prepareAndLoadPlayback,
+                    "northstar-startup-playback-source");
+            sourceThread.setDaemon(true);
+            sourceThread.setPriority(Math.min(Thread.MAX_PRIORITY,Thread.NORM_PRIORITY+1));
+            sourceThread.start();
         }
 
-        private void decodeLoop(){
+        private void prepareAndLoadPlayback(){
+            try{
+                StartupPlaybackCacheService.Cache cache=
+                        StartupPlaybackCacheService.openFresh(video,targetSize);
+                if(cache==null){
+                    showPreparation(true);
+                    cache=StartupPlaybackCacheService.ensure(
+                            video,targetSize,this::updatePreparationProgress);
+                    if(stopRequested)return;
+                    try{
+                        BufferedImage cachedPoster=StartupMediaService.cachedPosterFor(video);
+                        if(cachedPoster!=null){
+                            poster=cachedPoster;
+                            preparedPoster=cachedPoster;
+                            preparedVideo=video;
+                        }
+                    }catch(Exception ignored){}
+                    showPreparation(false);
+                }
+                if(stopRequested)return;
+                loadCachedFrames(cache);
+            }catch(InterruptedException ex){
+                Thread.currentThread().interrupt();
+            }catch(Throwable cacheFailure){
+                if(stopRequested)return;
+                AuditService.record(
+                        "Startup playback cache unavailable; using direct decoder: "
+                                +cacheFailure.getClass().getSimpleName());
+                showPreparation(false);
+                decodeDirectly();
+            }
+        }
+
+        private void loadCachedFrames(StartupPlaybackCacheService.Cache cache)
+                throws Exception {
+            try(StartupPlaybackCacheService.Reader reader=
+                        StartupPlaybackCacheService.openReader(cache)){
+                StartupPlaybackCacheService.Frame cached;
+                while(!stopRequested&&(cached=reader.next())!=null){
+                    BufferedImage image=cached.image();
+                    lastDisplayFrame=image;
+                    enqueueFrame(new VideoFrame(
+                            image,cached.timestamp(),cached.duration()));
+                }
+                if(!stopRequested)reachedEndOfStream=true;
+            }finally{
+                decodingComplete=true;
+                SwingUtilities.invokeLater(this::startPlaybackIfReady);
+            }
+        }
+
+        /** Fallback only; normal playback should use the display-ready cache. */
+        private void decodeDirectly(){
             SeekableByteChannel channel=null;
             try{
                 channel=NIOUtils.readableChannel(video.toFile());
@@ -213,18 +304,10 @@ public final class StartupExperienceManager {
                     BufferedImage full=AWTUtil.toBufferedImage(decoded.getPicture());
                     lastFullFrame=full;
                     BufferedImage display=scaleContained(full,targetSize.width,targetSize.height);
+                    lastDisplayFrame=display;
                     double timestamp=Math.max(0,decoded.getTimestamp());
                     double duration=Math.max(.001,decoded.getDuration());
-                    if(Double.isNaN(firstTimestamp))firstTimestamp=timestamp;
-                    frames.put(new VideoFrame(display,timestamp,duration));
-
-                    if(frames.size()==1)
-                        SwingUtilities.invokeLater(()->{
-                            VideoFrame first=frames.peek();
-                            if(first!=null)videoPanel.setFrame(first.image());
-                        });
-                    if(frames.size()>=INITIAL_BUFFER_FRAMES)
-                        SwingUtilities.invokeLater(this::startPlaybackIfReady);
+                    enqueueFrame(new VideoFrame(display,timestamp,duration));
                 }
             }catch(InterruptedException ex){
                 Thread.currentThread().interrupt();
@@ -243,6 +326,18 @@ public final class StartupExperienceManager {
                 }
                 SwingUtilities.invokeLater(this::startPlaybackIfReady);
             }
+        }
+
+        private void enqueueFrame(VideoFrame frame) throws InterruptedException {
+            if(Double.isNaN(firstTimestamp))firstTimestamp=frame.timestamp();
+            frames.put(frame);
+            if(frames.size()==1)
+                SwingUtilities.invokeLater(()->{
+                    VideoFrame first=frames.peek();
+                    if(first!=null)videoPanel.setFrame(first.image());
+                });
+            if(frames.size()>=INITIAL_BUFFER_FRAMES)
+                SwingUtilities.invokeLater(this::startPlaybackIfReady);
         }
 
         private void startPlaybackIfReady(){
@@ -278,6 +373,7 @@ public final class StartupExperienceManager {
             }
             if(due!=null){
                 videoPanel.setFrame(due.image());
+                lastDisplayFrame=due.image();
                 lastPresentedEnd=due.timestamp()+due.duration();
             }
 
@@ -300,6 +396,8 @@ public final class StartupExperienceManager {
             if(!finished.compareAndSet(false,true))return;
             stopRequested=true;
             displayTimer.stop();
+            Thread active=sourceThread;
+            if(active!=null)active.interrupt();
 
             BufferedImage resting=poster;
             if(resting==null&&video.equals(preparedVideo))resting=preparedPoster;
@@ -309,9 +407,42 @@ public final class StartupExperienceManager {
             }
             if(resting==null&&exit==Exit.COMPLETED)resting=lastFullFrame;
 
-            setVisible(false);
-            dispose();
-            completion.accept(new IntroResult(exit,resting,new Rectangle(loginBounds)));
+            if(exit==Exit.FAILED){
+                setVisible(false);
+                dispose();
+                completion.accept(new IntroResult(
+                        exit,resting,new Rectangle(loginBounds),null));
+                return;
+            }
+
+            BufferedImage displayResting=resting==null
+                    ?lastDisplayFrame
+                    :scaleContained(resting,targetSize.width,targetSize.height);
+            if(displayResting!=null){
+                videoPanel.setFrame(displayResting);
+                videoPanel.paintImmediately(0,0,videoPanel.getWidth(),videoPanel.getHeight());
+            }
+            footer.setVisible(false);
+            setAlwaysOnTop(false);
+            completion.accept(new IntroResult(
+                    exit,resting,new Rectangle(loginBounds),this));
+        }
+
+        private void showPreparation(boolean visible){
+            SwingUtilities.invokeLater(()->{
+                if(stopRequested)return;
+                preparationPanel.setVisible(visible);
+                if(visible)preparationProgress.setValue(0);
+                footer.revalidate();
+                footer.repaint();
+            });
+        }
+
+        private void updatePreparationProgress(int value){
+            SwingUtilities.invokeLater(()->{
+                if(!stopRequested)
+                    preparationProgress.setValue(Math.max(0,Math.min(100,value)));
+            });
         }
     }
 
@@ -325,6 +456,7 @@ public final class StartupExperienceManager {
             g.fillRect(0,0,width,height);
             g.setRenderingHint(RenderingHints.KEY_RENDERING,RenderingHints.VALUE_RENDER_QUALITY);
             g.setRenderingHint(RenderingHints.KEY_INTERPOLATION,RenderingHints.VALUE_INTERPOLATION_BICUBIC);
+            g.setRenderingHint(RenderingHints.KEY_ALPHA_INTERPOLATION,RenderingHints.VALUE_ALPHA_INTERPOLATION_QUALITY);
             double scale=Math.min(width/(double)source.getWidth(),height/(double)source.getHeight());
             int w=Math.max(1,(int)Math.round(source.getWidth()*scale));
             int h=Math.max(1,(int)Math.round(source.getHeight()*scale));
@@ -335,7 +467,11 @@ public final class StartupExperienceManager {
 
     private static final class VideoPanel extends JPanel {
         private volatile BufferedImage frame;
-        VideoPanel(){setBackground(Color.BLACK);setOpaque(true);}
+        VideoPanel(){
+            setBackground(Color.BLACK);
+            setOpaque(true);
+            setDoubleBuffered(true);
+        }
         void setFrame(BufferedImage next){frame=next;repaint();}
         @Override protected void paintComponent(Graphics graphics){
             super.paintComponent(graphics);
