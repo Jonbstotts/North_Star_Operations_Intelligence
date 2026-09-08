@@ -34,7 +34,7 @@ public final class StartupMediaService {
      * it can become the configured startup source.
      */
     public static Path importVideo(Path source) throws IOException {
-        Path managed=MediaService.copyStartupVideo(source);
+        Path managed=MediaService.importStartupVideo(source);
         try{
             BufferedImage poster=posterFor(managed);
             if(poster==null)
