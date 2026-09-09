@@ -28,8 +28,6 @@ public final class NorthStarBrand {
 
     private static final BufferedImage PRIMARY_SOURCE=
             load("/brand/northstar_primary_logo_exact.png");
-    private static final BufferedImage SPLASH_SOURCE=
-            load("/brand/northstar_splash_exact.png");
     private static final BufferedImage APP_ICON_SOURCE=
             load("/brand/northstar_app_icon_exact.png");
 
@@ -68,9 +66,9 @@ public final class NorthStarBrand {
                 px,key->new ImageIcon(renderVectorIcon(key)));
     }
 
-    /** Full approved splash artwork used by the startup screen. */
-    public static BufferedImage splashArtwork(){
-        return SPLASH_SOURCE;
+    /** Full-resolution approved primary artwork used by the login splash. */
+    public static BufferedImage primaryArtwork(){
+        return PRIMARY_SOURCE;
     }
 
 
