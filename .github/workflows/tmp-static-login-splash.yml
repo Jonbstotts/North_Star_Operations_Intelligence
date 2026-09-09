@@ -30,6 +30,7 @@ jobs:
         run: |
           set -euo pipefail
           python3 tmp/patch_static_login_splash.py
+          python3 tmp/patch_static_login_followup.py
           python3 - <<'PY'
           from pathlib import Path
           p=Path('THIRD_PARTY_NOTICES.md')
@@ -78,7 +79,7 @@ jobs:
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
           git add -A
-          git reset .github/workflows/tmp-static-login-splash.yml tmp/patch_static_login_splash.py
+          git reset .github/workflows/tmp-static-login-splash.yml tmp/patch_static_login_splash.py tmp/patch_static_login_followup.py
           git diff --cached --check
           git commit -m 'Replace startup video with branded login splash'
           git push origin HEAD:fix/static-login-splash
