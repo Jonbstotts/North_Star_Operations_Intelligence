@@ -9,76 +9,68 @@ import java.awt.event.WindowEvent;
 import java.awt.image.BufferedImage;
 
 /**
- * Startup-only authentication shell. Startup identity is intentionally always
- * NorthStar branded; the user's saved application theme is installed only after
- * authentication, immediately before the operations workspace is constructed.
+ * Startup-only authentication splash. The login always uses North Star branding;
+ * the user's saved application theme is installed only after authentication.
  */
 public final class StartupLoginDialog extends JDialog {
     private final LoginFormPanel form;
     private final FadingPanel reveal;
-    private final Window handoffWindow;
     private UserAccount authenticated;
     private Timer revealTimer;
 
     private StartupLoginDialog(
             Window owner,
             String message,
-            AppTheme requestedTheme,
-            String suggestedUsername,
-            BufferedImage artwork,
-            Rectangle requestedBounds,
-            boolean animateForm,
-            Window handoffWindow
+            String suggestedUsername
     ){
         super(owner,"North Star Sign In",ModalityType.APPLICATION_MODAL);
-        /* Startup/login presentation is brand-owned. The requested application
-         * theme is deliberately not installed here. */
         Theme.setActive(AppTheme.NORTH_STAR.id());
-        this.handoffWindow=handoffWindow;
         setDefaultCloseOperation(DISPOSE_ON_CLOSE);
         setResizable(false);
-        getRootPane().putClientProperty("apple.awt.fullWindowContent",Boolean.TRUE);
-        getRootPane().putClientProperty("apple.awt.transparentTitleBar",Boolean.TRUE);
-        getRootPane().putClientProperty("apple.awt.windowTitleVisible",Boolean.FALSE);
+        setUndecorated(true);
 
-        int sourceW=artwork==null?16:artwork.getWidth();
-        int sourceH=artwork==null?9:artwork.getHeight();
-        Rectangle usable=StartupPresentationLayout.usableBounds(owner);
-        StartupPresentationLayout.Geometry geometry=StartupPresentationLayout.fit(
-                usable,sourceW,sourceH);
-        Rectangle bounds=requestedBounds==null
-                ?geometry.windowBounds()
-                :constrainBounds(requestedBounds,usable);
+        BufferedImage artwork=NorthStarBrand.primaryArtwork();
+        Rectangle usable=LoginSplashLayout.usableBounds(owner);
+        LoginSplashLayout.Geometry geometry=LoginSplashLayout.fit(
+                usable,artwork.getWidth(),artwork.getHeight());
+        Rectangle bounds=geometry.windowBounds();
 
         JPanel shell=new JPanel(new BorderLayout());
         shell.setBackground(Color.BLACK);
-        shell.setBorder(BorderFactory.createLineBorder(Theme.border(),1,true));
+        shell.setBorder(BorderFactory.createCompoundBorder(
+                BorderFactory.createLineBorder(Theme.accent(),1,true),
+                BorderFactory.createEmptyBorder(1,1,1,1)
+        ));
 
-        int artworkHeight=requestedBounds==null
-                ?geometry.artworkSize().height
-                :Math.max(1,(int)Math.round(bounds.width*(sourceH/(double)sourceW)));
-        artworkHeight=Math.min(artworkHeight,Math.max(1,bounds.height-220));
         StartupArtworkPanel artworkPanel=new StartupArtworkPanel(artwork);
-        artworkPanel.setPreferredSize(new Dimension(bounds.width,artworkHeight));
+        artworkPanel.setPreferredSize(geometry.artworkSize());
         shell.add(artworkPanel,BorderLayout.NORTH);
+
+        JSeparator separator=new JSeparator();
+        separator.setForeground(Theme.accent());
 
         JPanel formHost=new JPanel(new GridBagLayout());
         formHost.setBackground(Theme.panel());
         form=new LoginFormPanel(
                 this,message,suggestedUsername,
-                new Insets(12,22,10,22),
+                new Insets(14,24,14,24),
                 account->{authenticated=account;dispose();}
         );
         form.setPreferredSize(new Dimension(
-                Math.min(520,Math.max(420,bounds.width-100)),
-                Math.max(300,bounds.height-artworkHeight)
+                Math.min(520,Math.max(430,bounds.width-120)),
+                Math.max(270,geometry.loginHeight()-18)
         ));
         formHost.add(form);
 
+        JPanel lower=new JPanel(new BorderLayout());
+        lower.setBackground(Theme.panel());
+        lower.add(separator,BorderLayout.NORTH);
+        lower.add(formHost,BorderLayout.CENTER);
+
         reveal=new FadingPanel(new BorderLayout());
         reveal.setBackground(Theme.panel());
-        reveal.add(formHost,BorderLayout.CENTER);
-        reveal.setProgress(animateForm?0f:1f);
+        reveal.add(lower,BorderLayout.CENTER);
+        reveal.setProgress(0f);
         shell.add(reveal,BorderLayout.CENTER);
         setContentPane(shell);
 
@@ -93,14 +85,7 @@ public final class StartupLoginDialog extends JDialog {
 
         addWindowListener(new WindowAdapter(){
             @Override public void windowOpened(WindowEvent e){
-                /* The login window is painted before the frozen intro handoff is
-                 * released, so the final logo frame never flashes back to the
-                 * desktop between the two startup surfaces. */
-                SwingUtilities.invokeLater(()->{
-                    StartupExperienceManager.releaseHandoff(StartupLoginDialog.this.handoffWindow);
-                    if(animateForm)startReveal();
-                    else form.focusInitial();
-                });
+                SwingUtilities.invokeLater(StartupLoginDialog.this::startReveal);
             }
         });
     }
@@ -108,39 +93,19 @@ public final class StartupLoginDialog extends JDialog {
     public static UserAccount authenticate(
             Window owner,
             String message,
-            AppTheme theme,
-            String suggestedUsername,
-            BufferedImage artwork,
-            Rectangle requestedBounds,
-            boolean animateForm
-    ){
-        return authenticate(
-                owner,message,theme,suggestedUsername,
-                artwork,requestedBounds,animateForm,null);
-    }
-
-    public static UserAccount authenticate(
-            Window owner,
-            String message,
-            AppTheme theme,
-            String suggestedUsername,
-            BufferedImage artwork,
-            Rectangle requestedBounds,
-            boolean animateForm,
-            Window handoffWindow
+            String suggestedUsername
     ){
         StartupLoginDialog dialog=new StartupLoginDialog(
-                owner,message,theme,suggestedUsername,
-                artwork,requestedBounds,animateForm,handoffWindow);
+                owner,message,suggestedUsername);
         dialog.setVisible(true);
         return dialog.authenticated;
     }
 
     private void startReveal(){
         final long started=System.nanoTime();
-        revealTimer=new Timer(StartupTransitionPolicy.TIMER_DELAY_MILLIS,e->{
+        revealTimer=new Timer(LoginRevealPolicy.TIMER_DELAY_MILLIS,e->{
             double elapsed=(System.nanoTime()-started)/1_000_000.0;
-            float progress=StartupTransitionPolicy.revealProgress(elapsed);
+            float progress=LoginRevealPolicy.revealProgress(elapsed);
             reveal.setProgress(progress);
             if(progress>=1f){
                 ((Timer)e.getSource()).stop();
@@ -152,18 +117,9 @@ public final class StartupLoginDialog extends JDialog {
         revealTimer.start();
     }
 
-    private static Rectangle constrainBounds(Rectangle requested,Rectangle usable){
-        int width=Math.min(requested.width,usable.width);
-        int height=Math.min(requested.height,usable.height);
-        int x=Math.max(usable.x,Math.min(requested.x,usable.x+usable.width-width));
-        int y=Math.max(usable.y,Math.min(requested.y,usable.y+usable.height-height));
-        return new Rectangle(x,y,width,height);
-    }
-
     @Override public void dispose(){
         if(revealTimer!=null)revealTimer.stop();
         form.stop();
-        StartupExperienceManager.releaseHandoff(handoffWindow);
         super.dispose();
     }
 
@@ -181,7 +137,7 @@ public final class StartupLoginDialog extends JDialog {
             Graphics2D g=(Graphics2D)graphics.create();
             try{
                 g.setComposite(AlphaComposite.SrcOver.derive(progress));
-                g.translate(0,StartupTransitionPolicy.verticalOffset(progress));
+                g.translate(0,LoginRevealPolicy.verticalOffset(progress));
                 super.paint(g);
             }finally{g.dispose();}
         }
@@ -202,19 +158,7 @@ public final class StartupLoginDialog extends JDialog {
                 g.setRenderingHint(RenderingHints.KEY_RENDERING,RenderingHints.VALUE_RENDER_QUALITY);
                 g.setRenderingHint(RenderingHints.KEY_INTERPOLATION,RenderingHints.VALUE_INTERPOLATION_BICUBIC);
                 g.setRenderingHint(RenderingHints.KEY_ALPHA_INTERPOLATION,RenderingHints.VALUE_ALPHA_INTERPOLATION_QUALITY);
-                if(artwork!=null){
-                    drawContained(g,artwork,getWidth(),getHeight());
-                }else{
-                    Image fallback=NorthStarBrand.primaryLockup(
-                            Math.max(320,Math.min(600,getWidth()/2))).getImage();
-                    int iw=fallback.getWidth(null),ih=fallback.getHeight(null);
-                    if(iw>0&&ih>0){
-                        double scale=Math.min(getWidth()*.62/iw,getHeight()*.86/ih);
-                        int w=Math.max(1,(int)Math.round(iw*scale));
-                        int h=Math.max(1,(int)Math.round(ih*scale));
-                        g.drawImage(fallback,(getWidth()-w)/2,(getHeight()-h)/2,w,h,null);
-                    }
-                }
+                drawContained(g,artwork,getWidth(),getHeight());
             }finally{g.dispose();}
         }
         private static void drawContained(Graphics2D g,BufferedImage image,int width,int height){
@@ -223,7 +167,13 @@ public final class StartupLoginDialog extends JDialog {
                     height/(double)image.getHeight());
             int w=Math.max(1,(int)Math.round(image.getWidth()*scale));
             int h=Math.max(1,(int)Math.round(image.getHeight()*scale));
-            g.drawImage(image,(width-w)/2,(height-h)/2,w,h,null);
+            g.drawImage(
+                    image,
+                    (width-w)/2,(height-h)/2,
+                    (width-w)/2+w,(height-h)/2+h,
+                    0,0,image.getWidth(),image.getHeight(),
+                    null
+            );
         }
     }
 }

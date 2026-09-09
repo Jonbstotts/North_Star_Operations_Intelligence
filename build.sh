@@ -363,52 +363,40 @@ if [ ! -f lib/flatlaf-3.7.2.jar ] || [ ! -f lib/flatlaf-intellij-themes-3.7.2.ja
   echo "ERROR: required FlatLaf 3.7.2 runtime libraries are missing from lib/." >&2
   exit 1
 fi
-if [ ! -f lib/jcodec-0.2.5.jar ] || [ ! -f lib/jcodec-javase-0.2.5.jar ]; then
-  echo "ERROR: required JCodec 0.2.5 startup-video libraries are missing from lib/." >&2
-  exit 1
-fi
-if [ ! -f src/com/wtm/ui/StartupExperienceManager.java ] || \
-   [ ! -f src/com/wtm/ui/StartupPresentationLayout.java ] || \
-   [ ! -f src/com/wtm/ui/StartupLoginDialog.java ] || \
+
+# Startup is intentionally a single static authentication surface. Movie players,
+# media caches, selectable startup modes, and codec dependencies must not return.
+for retired in \
+  src/com/wtm/ui/StartupExperienceManager.java \
+  src/com/wtm/ui/StartupPresentationLayout.java \
+  src/com/wtm/ui/StartupTransitionPolicy.java \
+  src/com/wtm/ui/NorthStarSplashScreen.java \
+  src/com/wtm/media/StartupMediaService.java \
+  src/com/wtm/media/StartupPlaybackCacheService.java \
+  lib/jcodec-0.2.5.jar \
+  lib/jcodec-javase-0.2.5.jar; do
+  if [ -e "$retired" ]; then
+    echo "ERROR: retired startup-video/loading infrastructure returned: $retired" >&2
+    exit 1
+  fi
+done
+if [ ! -f src/com/wtm/ui/StartupLoginDialog.java ] || \
+   [ ! -f src/com/wtm/ui/LoginSplashLayout.java ] || \
+   [ ! -f src/com/wtm/ui/LoginRevealPolicy.java ] || \
    [ ! -f src/com/wtm/ui/LoginFormPanel.java ] || \
-   [ ! -f src/com/wtm/ui/StartupTransitionPolicy.java ] || \
-   [ ! -f src/com/wtm/media/StartupMediaService.java ] || \
-   [ ! -f src/com/wtm/media/StartupPlaybackCacheService.java ] || \
-   ! grep -Fq 'peekStartupExperience' src/com/wtm/config/ConfigService.java || \
-   ! grep -Fq 'StartupLoginDialog.authenticate' src/com/wtm/app/Main.java || \
-   ! grep -Fq 'StartupMediaService.cachedPosterFor(video)' src/com/wtm/ui/StartupExperienceManager.java || \
-   ! grep -Fq 'StartupMediaService.importVideo' src/com/wtm/ui/SettingsDialog.java; then
-  echo "ERROR: canonical startup presentation/media ownership is missing." >&2
+   ! grep -Fq 'NorthStarBrand.primaryArtwork()' src/com/wtm/ui/StartupLoginDialog.java || \
+   ! grep -Fq 'StartupLoginDialog.authenticate' src/com/wtm/app/Main.java; then
+  echo "ERROR: canonical static NorthStar login splash ownership is missing." >&2
   exit 1
 fi
-if grep -Fq 'MediaService.importStartupVideo' src/com/wtm/ui/SettingsDialog.java; then
-  echo "ERROR: Settings bypassed StartupMediaService final-frame validation/cache ownership." >&2
-  exit 1
-fi
-if grep -Fq 'seekToFramePrecise' src/com/wtm/media/StartupMediaService.java || \
-   grep -Fq 'seekToSecondPrecise' src/com/wtm/media/StartupMediaService.java || \
-   ! grep -Fq 'startPosterMigration(video)' src/com/wtm/ui/StartupExperienceManager.java; then
-  echo "ERROR: startup resting-frame migration can block or regress launch responsiveness." >&2
-  exit 1
-fi
-if ! grep -Fq 'StartupPlaybackCacheService.openFresh' src/com/wtm/ui/StartupExperienceManager.java || \
-   ! grep -Fq 'StartupPlaybackCacheService.ensure' src/com/wtm/ui/StartupExperienceManager.java || \
-   ! grep -Fq 'StartupTransitionPolicy.revealProgress' src/com/wtm/ui/StartupLoginDialog.java; then
-  echo "ERROR: display-ready startup playback/reveal ownership is missing." >&2
+if grep -R -q --include='*.java' -E 'startupVideoAsset|startupExperience|INTRO_VIDEO|StartupMediaService|StartupPlaybackCacheService|StartupExperienceManager|org\.jcodec|Choose Intro Video|Skip Intro' src; then
+  echo "ERROR: startup-video or selectable loading-screen behavior returned to active source." >&2
   exit 1
 fi
 if ! grep -Fq 'Theme.setActive(AppTheme.NORTH_STAR.id())' src/com/wtm/app/Main.java || \
    ! grep -Fq 'Theme.setActive(workspaceTheme.id())' src/com/wtm/app/Main.java || \
-   ! grep -Fq 'Theme.setActive(AppTheme.NORTH_STAR.id())' src/com/wtm/ui/StartupLoginDialog.java || \
-   grep -Fq 'Theme.setActive(requestedTheme' src/com/wtm/ui/StartupLoginDialog.java; then
+   ! grep -Fq 'Theme.setActive(AppTheme.NORTH_STAR.id())' src/com/wtm/ui/StartupLoginDialog.java; then
   echo "ERROR: startup branding and saved workspace theme are no longer isolated." >&2
-  exit 1
-fi
-if grep -Fq 'SwingUtilities.invokeAndWait' src/com/wtm/ui/StartupExperienceManager.java || \
-   grep -Fq '33_333_333' src/com/wtm/ui/StartupExperienceManager.java || \
-   ! grep -Fq 'getNativeFrameWithMetadata' src/com/wtm/ui/StartupExperienceManager.java || \
-   ! grep -Fq 'ArrayBlockingQueue' src/com/wtm/ui/StartupExperienceManager.java; then
-  echo "ERROR: blocking/fixed-rate startup video playback regression detected." >&2
   exit 1
 fi
 if grep -Fq 'Theme.setActive(resolved.id())' src/com/wtm/ui/ThemeStyler.java; then
@@ -434,7 +422,7 @@ done
 rm -rf out
 mkdir -p out
 javac --release 21 -Xlint:unchecked -Werror -encoding UTF-8 -cp 'lib/*' -d out $(find src -name '*.java')
-for dep in lib/flatlaf-3.7.2.jar lib/flatlaf-intellij-themes-3.7.2.jar lib/jcodec-0.2.5.jar lib/jcodec-javase-0.2.5.jar; do
+for dep in lib/flatlaf-3.7.2.jar lib/flatlaf-intellij-themes-3.7.2.jar; do
   (cd out && jar --extract --file "../$dep")
 done
 rm -f out/META-INF/MANIFEST.MF
@@ -473,27 +461,20 @@ javac --release 21 -Xlint:unchecked -Werror -encoding UTF-8 -cp 'out:lib/*' -d /
   ci/ConfigRoundTripSmokeTest.java \
   ci/TickerGeometrySmokeTest.java \
   ci/BasemapProviderSmokeTest.java \
-  ci/StartupPresentationLayoutSmokeTest.java \
-  ci/StartupMediaServiceSmokeTest.java \
-  ci/StartupLaunchResponsivenessSmokeTest.java \
-  ci/StartupPlaybackCacheSmokeTest.java \
-  ci/StartupTransitionPolicySmokeTest.java
+  ci/LoginSplashLayoutSmokeTest.java \
+  ci/LoginRevealPolicySmokeTest.java
 java -Djava.awt.headless=true -cp '/tmp/ns-foundation-smoke:out:lib/*' WeatherAlertPolicySmokeTest
 java -Djava.awt.headless=true -cp '/tmp/ns-foundation-smoke:out:lib/*' DashboardGridMigrationSmokeTest
 java -Djava.awt.headless=true -cp '/tmp/ns-foundation-smoke:out:lib/*' ConfigRoundTripSmokeTest
 java -Djava.awt.headless=true -cp '/tmp/ns-foundation-smoke:out:lib/*' TickerGeometrySmokeTest
 java -Djava.awt.headless=true -cp '/tmp/ns-foundation-smoke:out:lib/*' BasemapProviderSmokeTest
-java -Djava.awt.headless=true -cp '/tmp/ns-foundation-smoke:out:lib/*' StartupPresentationLayoutSmokeTest
-java -Djava.awt.headless=true -cp '/tmp/ns-foundation-smoke:out:lib/*' StartupMediaServiceSmokeTest
-java -Djava.awt.headless=true -cp '/tmp/ns-foundation-smoke:out:lib/*' StartupLaunchResponsivenessSmokeTest
-java -Djava.awt.headless=true -cp '/tmp/ns-foundation-smoke:out:lib/*' StartupPlaybackCacheSmokeTest
-java -Djava.awt.headless=true -cp '/tmp/ns-foundation-smoke:out:lib/*' StartupTransitionPolicySmokeTest
+java -Djava.awt.headless=true -cp '/tmp/ns-foundation-smoke:out:lib/*' LoginSplashLayoutSmokeTest
+java -Djava.awt.headless=true -cp '/tmp/ns-foundation-smoke:out:lib/*' LoginRevealPolicySmokeTest
 
 # Runtime branding is mandatory. NorthStarBrand loads these classpath resources
 # during application startup, so a release JAR without them is not launchable.
 for resource in \
   brand/northstar_primary_logo_exact.png \
-  brand/northstar_splash_exact.png \
   brand/northstar_app_icon_exact.png; do
   if ! jar tf NorthStarOperations.jar | grep -Fxq "$resource"; then
     echo "ERROR: packaged JAR is missing required runtime resource: $resource" >&2

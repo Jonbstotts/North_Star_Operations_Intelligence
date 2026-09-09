@@ -82,10 +82,6 @@ public final class SettingsDialog extends JDialog {
     private final JCheckBox showHeader=new JCheckBox("Show title/header");
     private final JCheckBox showTicker=new JCheckBox("Show scrolling ticker");
     private final JCheckBox fullscreen=new JCheckBox("Fullscreen on startup");
-    private final JComboBox<String> startupExperience=new JComboBox<>(new String[]{
-            "Static Splash","Intro Video","No Startup Screen"});
-    private final JLabel startupVideoStatus=new JLabel("No intro video selected");
-    private String pendingStartupVideoAsset="";
     private final JComboBox<AppTheme> themeSelector=new JComboBox<>(AppTheme.values());
     private final JPanel themePreview=new JPanel();
     private final JCheckBox automaticHolidayThemes=new JCheckBox(
@@ -785,22 +781,10 @@ public final class SettingsDialog extends JDialog {
         addFull(p,y++,showHeader);
         addFull(p,y++,showTicker);
         addFull(p,y++,fullscreen);
-        addRow(p,y++,"Startup experience",startupExperience);
-        JPanel startupMediaControls=new JPanel(new FlowLayout(FlowLayout.LEFT,8,0));
-        JButton chooseIntro=new JButton("Choose Intro Video...");
-        chooseIntro.addActionListener(e->chooseStartupVideo());
-        JButton clearIntro=new JButton("Clear Selection");
-        clearIntro.addActionListener(e->{pendingStartupVideoAsset="";updateStartupVideoStatus();});
-        startupMediaControls.add(chooseIntro);
-        startupMediaControls.add(clearIntro);
-        startupMediaControls.add(startupVideoStatus);
-        addFull(p,y++,startupMediaControls);
         addFull(p,y++,new JLabel(
-                "<html>The intro is copied into North Star managed storage instead of the application JAR. "
-              + "Its final decodable frame is cached losslessly and becomes the stationary login artwork "
-              + "for normal completion, <b>Skip Intro</b>, and startup with the intro disabled. "
-              + "For smooth portable playback, <b>1280×720 H.264 MP4 at 30 FPS constant frame rate</b> is recommended. "
-              + "Press <b>Esc</b> or <b>Skip Intro</b> during playback. The visual track plays without audio.</html>"));
+                "<html><b>Startup sign-in:</b> North Star uses the approved primary logo and "
+              + "North Star theme for the login splash. After authentication, the saved "
+              + "interface theme below is applied to the Operations Workspace.</html>"));
 
         JLabel identity=new JLabel(
                 "<html><b>Application identity:</b> North Star Operations Intelligence. "
@@ -1869,39 +1853,6 @@ public final class SettingsDialog extends JDialog {
         return p;
     }
 
-    private void chooseStartupVideo(){
-        JFileChooser chooser=ThemedFileChooser.chooseVideo(this);
-        if(chooser==null||chooser.getSelectedFile()==null)return;
-        try{
-            Path imported=StartupMediaService.importVideo(chooser.getSelectedFile().toPath());
-            pendingStartupVideoAsset=MediaService.assetName(imported);
-            startupExperience.setSelectedItem("Intro Video");
-            updateStartupVideoStatus();
-        }catch(Exception ex){
-            ThemedDialogs.message(this,ex.getMessage()==null?"The startup video could not be imported.":ex.getMessage(),
-                    "Startup Video Import Failed",ThemedDialogs.Kind.ERROR);
-        }
-    }
-
-    private void updateStartupVideoStatus(){
-        boolean blank=pendingStartupVideoAsset==null||pendingStartupVideoAsset.isBlank();
-        startupVideoStatus.setText(blank?"No intro video selected":"Selected: "+pendingStartupVideoAsset);
-        startupVideoStatus.setToolTipText(blank?null:pendingStartupVideoAsset);
-    }
-
-    private static String startupModeFromUi(Object value){
-        String text=String.valueOf(value);
-        if("Intro Video".equals(text))return "INTRO_VIDEO";
-        if("No Startup Screen".equals(text))return "NONE";
-        return "STATIC_SPLASH";
-    }
-
-    private static String startupModeToUi(String value){
-        if("INTRO_VIDEO".equalsIgnoreCase(value))return "Intro Video";
-        if("NONE".equalsIgnoreCase(value))return "No Startup Screen";
-        return "Static Splash";
-    }
-
     private void updateAutomaticSevereControls(){
         autoDisableSevereWeather.setEnabled(automaticSevereWeather.isSelected());
     }
@@ -1912,9 +1863,6 @@ public final class SettingsDialog extends JDialog {
         showHeader.setSelected(cfg.showHeader);
         showTicker.setSelected(cfg.showTicker);
         fullscreen.setSelected(cfg.fullscreen);
-        startupExperience.setSelectedItem(startupModeToUi(cfg.startupExperience));
-        pendingStartupVideoAsset=cfg.startupVideoAsset==null?"":cfg.startupVideoAsset;
-        updateStartupVideoStatus();
         loginRequiredOnStartup.setSelected(cfg.loginRequiredOnStartup);
         protectApiSettings.setSelected(cfg.protectApiSettings);
         themeSelector.setSelectedItem(AppTheme.fromId(cfg.themeId));
@@ -2315,8 +2263,6 @@ public final class SettingsDialog extends JDialog {
             cfg.showHeader=showHeader.isSelected();
             cfg.showTicker=showTicker.isSelected();
             cfg.fullscreen=fullscreen.isSelected();
-            cfg.startupExperience=startupModeFromUi(startupExperience.getSelectedItem());
-            cfg.startupVideoAsset=pendingStartupVideoAsset==null?"":pendingStartupVideoAsset.trim();
             cfg.loginRequiredOnStartup=loginRequiredOnStartup.isSelected();
             cfg.protectApiSettings=protectApiSettings.isSelected();
             AppTheme selected=(AppTheme)themeSelector.getSelectedItem();
