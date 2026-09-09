@@ -30,6 +30,11 @@ jobs:
         run: |
           set -euo pipefail
           python3 tmp/patch_static_login_splash.py
+          python3 - <<'PY'
+          from pathlib import Path
+          p=Path('THIRD_PARTY_NOTICES.md')
+          p.write_text(p.read_text().rstrip()+"\n")
+          PY
           git diff --check
           if grep -R -n --include='*.java' -E 'startupVideoAsset|startupExperience|INTRO_VIDEO|StartupMediaService|StartupPlaybackCacheService|StartupExperienceManager|org\.jcodec|Choose Intro Video|Skip Intro' src; then
             echo 'ERROR: retired startup-video source remains.' >&2
